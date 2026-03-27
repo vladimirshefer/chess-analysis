@@ -47,7 +47,7 @@ app.get('/api/message', async (req, res) => {
 });
 
 // All other GET requests not handled will return our React app
-app.get('*', (req, res) => {
+app.get('{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
 });
 
