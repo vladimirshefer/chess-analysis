@@ -1,7 +1,11 @@
 IMAGE_NAME=chess-analysis
 PORT=3001
 
-.PHONY: build-docker run-docker-dev install run-local
+.PHONY: *
+
+build:
+	cd client && npm run build
+	cd server && npm run build
 
 install:
 	cd client && npm install
