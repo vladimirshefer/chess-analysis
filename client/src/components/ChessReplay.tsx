@@ -38,6 +38,8 @@ const ChessReplay: React.FC = () => {
   const treeRef = useRef<Record<string, MoveNode>>({});
   const currentNodeIdRef = useRef<string | null>(null);
   const activeTaskNodeIdRef = useRef<string | null>(null);
+  const analysisSessionRef = useRef(0);
+  const readySessionRef = useRef(0);
 
   useEffect(() => {
     treeRef.current = tree;
@@ -88,6 +90,15 @@ const ChessReplay: React.FC = () => {
     return sanMoves;
   };
 
+  const normalizeScoreForWhite = (fen: string, cpScore?: string, mateScore?: string) => {
+    const sideToMove = fen === 'start' ? 'w' : fen.split(' ')[1];
+    const perspective = sideToMove === 'b' ? -1 : 1;
+
+    if (cpScore) return (parseInt(cpScore, 10) * perspective / 100).toFixed(1);
+    if (mateScore) return `M${parseInt(mateScore, 10) * perspective}`;
+    return '';
+  };
+
   const scheduleNextTask = () => {
     if (!engineRef.current) return;
     const currentTree = treeRef.current;
@@ -128,6 +139,12 @@ const ChessReplay: React.FC = () => {
     engineRef.current = worker;
     worker.onmessage = (e) => {
       const line = e.data;
+
+      if (line === 'readyok') {
+        if (readySessionRef.current === analysisSessionRef.current) scheduleNextTask();
+        return;
+      }
+
       const nodeId = activeTaskNodeIdRef.current;
       const currentId = currentNodeIdRef.current;
 
@@ -138,7 +155,8 @@ const ChessReplay: React.FC = () => {
         let multipvMatch = line.match(/multipv (\d+)/);
         let pvMatch = line.match(/ pv (.+)/);
 
-        let score = cpMatch ? (parseInt(cpMatch[1]) / 100).toFixed(1) : (mateMatch ? `M${mateMatch[1]}` : '');
+        const nodeFen = nodeId ? treeRef.current[nodeId]?.fen ?? 'start' : 'start';
+        let score = normalizeScoreForWhite(nodeFen, cpMatch?.[1], mateMatch?.[1]);
         let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
         let multipv = multipvMatch ? parseInt(multipvMatch[1]) : 1;
         let pvUCI = pvMatch ? pvMatch[1] : '';
@@ -191,7 +209,10 @@ const ChessReplay: React.FC = () => {
     }
 
     engineRef.current?.postMessage('stop');
-    scheduleNextTask();
+    activeTaskNodeIdRef.current = null;
+    analysisSessionRef.current += 1;
+    readySessionRef.current = analysisSessionRef.current;
+    engineRef.current?.postMessage('isready');
   }, [currentNodeId]);
 
   // --- GAME LOGIC ---
@@ -225,6 +246,8 @@ const ChessReplay: React.FC = () => {
   };
 
   const onDrop = (sourceSquare: string, targetSquare: string) => makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
+
+  const applyEngineMove = (uci: string) => makeMove({ from: uci.substring(0, 2), to: uci.substring(2, 4), promotion: uci[4] || 'q' });
 
   const importPgn = (pgn: string) => {
     const tempGame = new Chess();
@@ -291,7 +314,7 @@ const ChessReplay: React.FC = () => {
           <div className="flex flex-col gap-2">
             {engineLines.length === 0 && <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>}
             {engineLines.map((line, idx) => (
-              <button key={idx} onClick={() => makeMove(line.uci)} className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left">
+              <button key={idx} onClick={() => applyEngineMove(line.uci)} className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left">
                 <div className="flex justify-between items-center w-full">
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-bold text-gray-300">{line.multipv}.</span>
