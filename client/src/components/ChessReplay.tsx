@@ -8,60 +8,20 @@ interface MoveEval {
 }
 
 const ChessReplay: React.FC = () => {
+  const [game, setGame] = useState(new Chess());
   const [pgnInput, setPgnInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
-  const [fen, setFen] = useState('start');
-  const [status, setStatus] = useState('Ready');
-  
-  // Analysis state
   const [moveEvals, setMoveEvals] = useState<Record<number, MoveEval>>({});
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [status, setStatus] = useState('Interactive Mode');
   
   const engineRef = useRef<Worker | null>(null);
-  const analysisQueueRef = useRef<{index: number, depth: number}[]>([]);
-  const currentTaskRef = useRef<{index: number, depth: number} | null>(null);
   const historyRef = useRef<string[]>([]);
 
-  // Keep historyRef in sync for the worker closure
+  // Keep historyRef in sync
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
-
-  // Main task processor (Stable Reference)
-  const processNextTask = () => {
-    if (analysisQueueRef.current.length === 0) {
-      setIsAnalyzing(false);
-      currentTaskRef.current = null;
-      setStatus('Analysis Complete');
-      return;
-    }
-
-    const nextTask = analysisQueueRef.current.shift()!;
-    currentTaskRef.current = nextTask;
-    
-    const game = new Chess();
-    const currentHistory = historyRef.current;
-    
-    try {
-      for (let i = 0; i <= nextTask.index; i++) {
-        game.move(currentHistory[i]);
-      }
-      
-      setStatus(`Analyzing move ${nextTask.index + 1} at depth ${nextTask.depth}...`);
-      engineRef.current?.postMessage(`position fen ${game.fen()}`);
-      engineRef.current?.postMessage(`go depth ${nextTask.depth}`);
-    } catch (err) {
-      console.error('Analysis task failed', err);
-      processNextTask(); // Skip failed move
-    }
-  };
-
-  // We use a Ref to store the processor so the worker always calls the "latest" version
-  const processorRef = useRef(processNextTask);
-  useEffect(() => {
-    processorRef.current = processNextTask;
-  }, [processNextTask]);
 
   // Initialize Engine
   useEffect(() => {
@@ -70,25 +30,19 @@ const ChessReplay: React.FC = () => {
 
     worker.onmessage = (e) => {
       const line = e.data;
-      const task = currentTaskRef.current;
-      if (!task) return;
+      const activeIndex = historyRef.current.length - 1;
 
       if (line.includes('score cp')) {
         const match = line.match(/score cp (-?\d+)/);
         if (match) {
           const score = (parseInt(match[1]) / 100).toFixed(1);
-          setMoveEvals(prev => ({ ...prev, [task.index]: { score, depth: task.depth } }));
+          setMoveEvals(prev => ({ ...prev, [activeIndex]: { score, depth: 18 } }));
         }
       } else if (line.includes('score mate')) {
         const match = line.match(/score mate (-?\d+)/);
         if (match) {
-          setMoveEvals(prev => ({ ...prev, [task.index]: { score: `M${match[1]}`, depth: task.depth } }));
+          setMoveEvals(prev => ({ ...prev, [activeIndex]: { score: `M${match[1]}`, depth: 18 } }));
         }
-      }
-
-      // Move is done when we see 'bestmove'
-      if (line.startsWith('bestmove')) {
-        processorRef.current();
       }
     };
 
@@ -98,55 +52,89 @@ const ChessReplay: React.FC = () => {
     return () => worker.terminate();
   }, []);
 
-  const startFullAnalysis = () => {
-    if (history.length === 0) return;
-    
-    setIsAnalyzing(true);
-    setMoveEvals({});
-    
-    const queue: {index: number, depth: number}[] = [];
-    [12, 16, 20].forEach(depth => {
-      for (let i = 0; i < history.length; i++) {
-        queue.push({ index: i, depth });
-      }
-    });
-    
-    analysisQueueRef.current = queue;
-    processNextTask();
+  const analyzeLatest = (fen: string) => {
+    if (!engineRef.current) return;
+    engineRef.current.postMessage('stop');
+    engineRef.current.postMessage(`position fen ${fen}`);
+    engineRef.current.postMessage('go depth 18');
+    setStatus('Analyzing...');
   };
 
-  useEffect(() => {
-    const game = new Chess();
+  // Handle move on board
+  function makeAMove(move: any) {
+    // 1. Create a game instance at the CURRENTLY VIEWED position
+    const tempGame = new Chess();
     for (let i = 0; i <= currentMoveIndex; i++) {
-      game.move(history[i]);
+      tempGame.move(history[i]);
     }
-    setFen(game.fen());
-  }, [currentMoveIndex, history]);
+
+    try {
+      const result = tempGame.move(move);
+      if (result) {
+        // 2. If we moved from the middle of history, we "branch" (truncate future)
+        const newHistory = [...history.slice(0, currentMoveIndex + 1), result.san];
+        
+        setGame(tempGame);
+        setHistory(newHistory);
+        setCurrentMoveIndex(newHistory.length - 1);
+        setPgnInput(tempGame.pgn());
+        analyzeLatest(tempGame.fen());
+        return true;
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }
+
+  function onDrop(sourceSquare: string, targetSquare: string) {
+    return makeAMove({
+      from: sourceSquare,
+      to: targetSquare,
+      promotion: 'q',
+    });
+  }
 
   const handlePgnSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pgnInput.trim()) return;
     try {
-      const temp = new Chess();
-      temp.loadPgn(pgnInput);
-      setHistory(temp.history());
-      setCurrentMoveIndex(-1);
+      const newGame = new Chess();
+      newGame.loadPgn(pgnInput);
+      setGame(newGame);
+      setHistory(newGame.history());
+      setCurrentMoveIndex(newGame.history().length - 1);
       setMoveEvals({});
-      setStatus(`PGN Loaded. ${temp.history().length} moves.`);
+      setStatus('PGN Loaded');
     } catch (err) {
-      setStatus('Invalid PGN format');
+      setStatus('Invalid PGN');
     }
   };
 
   const loadSample = () => {
     const sample = "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7";
+    const newGame = new Chess();
+    newGame.loadPgn(sample);
+    setGame(newGame);
+    setHistory(newGame.history());
+    setCurrentMoveIndex(newGame.history().length - 1);
     setPgnInput(sample);
-    const temp = new Chess();
-    temp.loadPgn(sample);
-    setHistory(temp.history());
-    setCurrentMoveIndex(-1);
-    setMoveEvals({});
   };
+
+  // Safe FEN calculation for the board
+  const displayFen = React.useMemo(() => {
+    const tempGame = new Chess();
+    try {
+      for (let i = 0; i <= currentMoveIndex; i++) {
+        const move = history[i];
+        if (move) tempGame.move(move);
+      }
+      return tempGame.fen();
+    } catch (err) {
+      console.error("Board sync error:", err);
+      return 'start'; // Fallback to start instead of crashing
+    }
+  }, [currentMoveIndex, history]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100">
@@ -157,28 +145,21 @@ const ChessReplay: React.FC = () => {
             <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Status</span>
             <span className="text-sm font-medium">{status}</span>
           </div>
-          {history.length > 0 && !isAnalyzing && (
-            <button 
-              onClick={startFullAnalysis}
-              className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs font-bold transition-colors"
-            >
-              Analyze Game
-            </button>
-          )}
-          {isAnalyzing && (
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-mono text-indigo-400">Processing Queue...</span>
+          <div className="text-right">
+            <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Evaluation</span>
+            <div className="text-sm font-mono text-indigo-400">
+              {moveEvals[currentMoveIndex]?.score || '--'}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800 relative">
           <Chessboard 
             id="AnalysisBoard"
-            position={fen} 
+            position={displayFen} 
+            onPieceDrop={onDrop}
             boardOrientation="white"
-            animationDuration={300}
+            animationDuration={200}
           />
         </div>
         
@@ -193,25 +174,22 @@ const ChessReplay: React.FC = () => {
       <div className="w-full lg:w-[400px] flex flex-col gap-4">
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-gray-800">PGN Input</h3>
+            <h3 className="font-bold text-gray-800">Current PGN</h3>
             <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
           </div>
           <form onSubmit={handlePgnSubmit} className="flex flex-col gap-2">
             <textarea
-              className="w-full h-20 p-2 text-xs font-mono border rounded outline-none bg-white"
+              className="w-full h-24 p-2 text-xs font-mono border rounded outline-none bg-white"
               value={pgnInput}
               onChange={(e) => setPgnInput(e.target.value)}
-              placeholder="Paste PGN here..."
+              placeholder="Moves will appear here as you play..."
             />
-            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black transition-colors">Load PGN</button>
+            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Update from PGN</button>
           </form>
         </div>
 
         <div className="flex-1 bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col min-h-[400px]">
-          <h3 className="font-bold text-gray-800 mb-2 flex justify-between">
-            Move History 
-            <span className="text-[10px] text-gray-400 font-normal self-center">Evaluations update live</span>
-          </h3>
+          <h3 className="font-bold text-gray-800 mb-2">Game History</h3>
           <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 content-start pr-1 custom-scrollbar">
             {history.map((move, i) => {
               const evaluation = moveEvals[i];
@@ -224,7 +202,7 @@ const ChessReplay: React.FC = () => {
                   onClick={() => setCurrentMoveIndex(i)}
                   className={`relative flex flex-col p-2 text-left rounded border transition-all ${
                     currentMoveIndex === i 
-                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-md scale-[1.02] z-10' 
+                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-md scale-[1.02]' 
                       : 'bg-white hover:bg-indigo-50 border-gray-200 text-gray-700'
                   }`}
                 >
@@ -232,15 +210,6 @@ const ChessReplay: React.FC = () => {
                     <span className={`text-[10px] font-bold ${currentMoveIndex === i ? 'text-indigo-200' : 'text-gray-400'}`}>
                       {moveNum}{isWhite ? '.' : '...'}
                     </span>
-                    {evaluation && (
-                      <span className={`text-[9px] px-1 rounded font-mono font-bold ${
-                        currentMoveIndex === i 
-                          ? 'bg-white/20 text-white' 
-                          : parseFloat(evaluation.score) >= 0 ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'
-                      }`}>
-                        d{evaluation.depth}
-                      </span>
-                    )}
                   </div>
                   <div className="flex justify-between items-end">
                     <span className="text-sm font-bold font-mono">{move}</span>
