@@ -8,11 +8,7 @@ interface MoveNode {
   fen: string;
   parentId: string | null;
   children: string[];
-  evaluation?: { 
-    score: string; 
-    depth: number;
-    pvUCI?: string; // Cache the raw engine line
-  };
+  evaluation?: NodeEvaluation;
 }
 
 interface EngineLine {
@@ -24,6 +20,29 @@ interface EngineLine {
   multipv: number;
 }
 
+interface PositionSnapshot {
+  depth: number;
+  evaluation: string;
+  pvUCI?: string;
+  lines: EngineLine[];
+}
+
+interface NodeEvaluation {
+  score: string;
+  depth: number;
+  pvUCI?: string;
+  lines?: EngineLine[];
+}
+
+interface PendingAnalysis {
+  nodeId: string;
+  fen: string;
+  requestedDepth: number;
+  evaluation?: string;
+  pvUCI?: string;
+  lines: Record<number, EngineLine>;
+}
+
 const ChessReplay: React.FC = () => {
   // --- STATE ---
   const [tree, setTree] = useState<Record<string, MoveNode>>({});
@@ -32,19 +51,25 @@ const ChessReplay: React.FC = () => {
   const [pgnInput, setPgnInput] = useState('');
   const [status, setStatus] = useState('Interactive Mode');
   const [engineLines, setEngineLines] = useState<EngineLine[]>([]);
+  const [positionCache, setPositionCache] = useState<Record<string, PositionSnapshot[]>>({});
 
   // --- REFS ---
   const engineRef = useRef<Worker | null>(null);
   const treeRef = useRef<Record<string, MoveNode>>({});
+  const positionCacheRef = useRef<Record<string, PositionSnapshot[]>>({});
   const currentNodeIdRef = useRef<string | null>(null);
   const activeTaskNodeIdRef = useRef<string | null>(null);
+  const activeTaskFenRef = useRef<string>('start');
+  const activeTaskDepthRef = useRef(0);
+  const pendingAnalysisRef = useRef<PendingAnalysis | null>(null);
   const analysisSessionRef = useRef(0);
   const readySessionRef = useRef(0);
 
   useEffect(() => {
     treeRef.current = tree;
+    positionCacheRef.current = positionCache;
     currentNodeIdRef.current = currentNodeId;
-  }, [tree, currentNodeId]);
+  }, [tree, positionCache, currentNodeId]);
 
   // --- PGN GENERATION ---
   const generatePgnString = (nodeId: string, moveNum: number, isWhite: boolean, isFirstInVar: boolean, currentTree: Record<string, MoveNode>): string => {
@@ -99,6 +124,51 @@ const ChessReplay: React.FC = () => {
     return '';
   };
 
+  const getCurrentFen = (nodeId: string | null, currentTree: Record<string, MoveNode>) => nodeId ? currentTree[nodeId]?.fen ?? 'start' : 'start';
+
+  const getBestSnapshot = (fen: string) => {
+    const snapshots = positionCacheRef.current[fen] ?? [];
+    if (snapshots.length === 0) return null;
+    return snapshots.reduce((best, snapshot) => snapshot.depth > best.depth ? snapshot : best);
+  };
+
+  const upsertPositionSnapshot = (fen: string, nextSnapshot: PositionSnapshot) => {
+    setPositionCache(prev => {
+      const existingSnapshots = prev[fen] ?? [];
+      const index = existingSnapshots.findIndex(snapshot => snapshot.depth === nextSnapshot.depth);
+      const snapshots = [...existingSnapshots];
+
+      if (index >= 0) snapshots[index] = nextSnapshot;
+      else snapshots.push(nextSnapshot);
+
+      snapshots.sort((a, b) => a.depth - b.depth);
+      return { ...prev, [fen]: snapshots };
+    });
+  };
+
+  const syncNodeEvaluation = (nodeId: string, evaluation: Partial<NodeEvaluation>) => {
+    setTree(prev => {
+      const node = prev[nodeId];
+      if (!node) return prev;
+      const nextEvaluation = {
+        score: evaluation.score ?? node.evaluation?.score ?? '',
+        depth: evaluation.depth ?? node.evaluation?.depth ?? 0,
+        pvUCI: evaluation.pvUCI ?? node.evaluation?.pvUCI,
+        lines: evaluation.lines ?? node.evaluation?.lines,
+      };
+      const currentEvaluation = node.evaluation;
+      if (
+        currentEvaluation?.score === nextEvaluation.score &&
+        currentEvaluation?.depth === nextEvaluation.depth &&
+        currentEvaluation?.pvUCI === nextEvaluation.pvUCI &&
+        currentEvaluation?.lines === nextEvaluation.lines
+      ) {
+        return prev;
+      }
+      return { ...prev, [nodeId]: { ...node, evaluation: nextEvaluation } };
+    });
+  };
+
   const scheduleNextTask = () => {
     if (!engineRef.current) return;
     const currentTree = treeRef.current;
@@ -108,14 +178,16 @@ const ChessReplay: React.FC = () => {
     for (const d of depthTiers) {
       if (focusId) {
         const node = currentTree[focusId];
-        if (node && (!node.evaluation || node.evaluation.depth < d)) {
+        const bestSnapshot = node ? getBestSnapshot(node.fen) : null;
+        if (node && (!bestSnapshot || bestSnapshot.depth < d)) {
           runEngine(focusId, d);
           return;
         }
       }
       for (const nodeId in currentTree) {
         const node = currentTree[nodeId];
-        if (!node.evaluation || node.evaluation.depth < d) {
+        const bestSnapshot = getBestSnapshot(node.fen);
+        if (!bestSnapshot || bestSnapshot.depth < d) {
           runEngine(nodeId, d);
           return;
         }
@@ -128,6 +200,14 @@ const ChessReplay: React.FC = () => {
     const node = treeRef.current[nodeId];
     if (!node) return;
     activeTaskNodeIdRef.current = nodeId;
+    activeTaskFenRef.current = node.fen;
+    activeTaskDepthRef.current = depth;
+    pendingAnalysisRef.current = {
+      nodeId,
+      fen: node.fen,
+      requestedDepth: depth,
+      lines: {},
+    };
     engineRef.current?.postMessage(`setoption name MultiPV value ${nodeId === currentNodeIdRef.current ? 3 : 1}`);
     engineRef.current?.postMessage(`position fen ${node.fen}`);
     engineRef.current?.postMessage(`go depth ${depth}`);
@@ -147,6 +227,9 @@ const ChessReplay: React.FC = () => {
 
       const nodeId = activeTaskNodeIdRef.current;
       const currentId = currentNodeIdRef.current;
+      const activeFen = activeTaskFenRef.current;
+      const requestedDepth = activeTaskDepthRef.current;
+      const pendingAnalysis = pendingAnalysisRef.current;
 
       if (line.includes('info') && (line.includes('score cp') || line.includes('score mate'))) {
         let cpMatch = line.match(/score cp (-?\d+)/);
@@ -155,61 +238,112 @@ const ChessReplay: React.FC = () => {
         let multipvMatch = line.match(/multipv (\d+)/);
         let pvMatch = line.match(/ pv (.+)/);
 
-        const nodeFen = nodeId ? treeRef.current[nodeId]?.fen ?? 'start' : 'start';
-        let score = normalizeScoreForWhite(nodeFen, cpMatch?.[1], mateMatch?.[1]);
+        let score = normalizeScoreForWhite(activeFen, cpMatch?.[1], mateMatch?.[1]);
         let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
         let multipv = multipvMatch ? parseInt(multipvMatch[1]) : 1;
         let pvUCI = pvMatch ? pvMatch[1] : '';
 
-        if (score && depth && nodeId && multipv === 1) {
-          setTree(prev => {
-            const node = prev[nodeId];
-            if (!node || (node.evaluation && node.evaluation.depth > depth)) return prev;
-            return { ...prev, [nodeId]: { ...node, evaluation: { score, depth, pvUCI } } };
-          });
-        }
-
-        if (nodeId === currentId && pvUCI && score) {
-          const sanMoves = uciToSanLine(pvUCI, nodeId ? treeRef.current[nodeId].fen : 'start');
+        if (nodeId && pvUCI && score && depth > 0 && requestedDepth > 0 && pendingAnalysis && pendingAnalysis.nodeId === nodeId && pendingAnalysis.requestedDepth === requestedDepth) {
+          const sanMoves = uciToSanLine(pvUCI, activeFen);
           if (sanMoves.length > 0) {
-            setEngineLines(prev => {
-              const newLine: EngineLine = { move: sanMoves[0], uci: pvUCI.split(' ')[0], pv: sanMoves.join(' '), score, depth, multipv };
-              const filtered = prev.filter(l => l.multipv !== multipv);
-              return [...filtered, newLine].sort((a,b) => a.multipv - b.multipv);
-            });
+            const newLine: EngineLine = { move: sanMoves[0], uci: pvUCI.split(' ')[0], pv: sanMoves.join(' '), score, depth, multipv };
+            pendingAnalysis.lines[multipv] = newLine;
+            if (multipv === 1) {
+              pendingAnalysis.evaluation = score;
+              pendingAnalysis.pvUCI = pvUCI;
+            }
+
+            const liveLines = Object.values(pendingAnalysis.lines).sort((a, b) => a.multipv - b.multipv);
+
+            if (nodeId === currentId) {
+              setEngineLines(liveLines);
+            }
           }
         }
       }
-      if (line.startsWith('bestmove')) scheduleNextTask();
+      if (line.startsWith('bestmove')) {
+        const finishedAnalysis = pendingAnalysisRef.current;
+        if (
+          finishedAnalysis &&
+          finishedAnalysis.nodeId &&
+          finishedAnalysis.requestedDepth > 0 &&
+          finishedAnalysis.evaluation
+        ) {
+          const finishedLines = Object.values(finishedAnalysis.lines).sort((a, b) => a.multipv - b.multipv);
+          const snapshot: PositionSnapshot = {
+            depth: finishedAnalysis.requestedDepth,
+            evaluation: finishedAnalysis.evaluation,
+            pvUCI: finishedAnalysis.pvUCI,
+            lines: finishedLines,
+          };
+
+          upsertPositionSnapshot(finishedAnalysis.fen, snapshot);
+
+          const bestSnapshot = getBestSnapshot(finishedAnalysis.fen);
+          const bestDepth = Math.max(bestSnapshot?.depth ?? 0, finishedAnalysis.requestedDepth);
+          syncNodeEvaluation(finishedAnalysis.nodeId, {
+            score: finishedAnalysis.evaluation,
+            depth: bestDepth,
+            pvUCI: finishedAnalysis.pvUCI,
+            lines: finishedLines,
+          });
+
+          if (finishedAnalysis.nodeId === currentId) {
+            setEngineLines(finishedLines);
+          }
+        }
+        pendingAnalysisRef.current = null;
+        scheduleNextTask();
+      }
     };
     worker.postMessage('uci');
     worker.postMessage('isready');
     return () => worker.terminate();
   }, []);
 
-  // Sync current position to engine suggestions
+  // Sync current position to cached engine suggestions
   useEffect(() => {
-    const currentPos = tree[currentNodeId || 'start'] || { fen: 'start' };
-    
-    // Check if we have a cached evaluation to show immediately
-    if (currentPos.evaluation?.pvUCI) {
-      const sanMoves = uciToSanLine(currentPos.evaluation.pvUCI, currentPos.fen);
-      if (sanMoves.length > 0) {
-        setEngineLines([{
-          move: sanMoves[0],
-          uci: currentPos.evaluation.pvUCI.split(' ')[0],
-          pv: sanMoves.join(' '),
-          score: currentPos.evaluation.score,
-          depth: currentPos.evaluation.depth,
-          multipv: 1
-        }]);
+    const currentFen = getCurrentFen(currentNodeId, tree);
+    const bestSnapshot = positionCache[currentFen]?.[positionCache[currentFen].length - 1];
+
+    if (bestSnapshot?.lines?.length) {
+      setEngineLines(bestSnapshot.lines);
+      if (currentNodeId) {
+        syncNodeEvaluation(currentNodeId, {
+          score: bestSnapshot.evaluation,
+          depth: bestSnapshot.depth,
+          pvUCI: bestSnapshot.pvUCI,
+          lines: bestSnapshot.lines,
+        });
       }
     } else {
-      setEngineLines([]); 
+      const currentPos = tree[currentNodeId || 'start'] || { fen: currentFen };
+      if (currentPos.evaluation?.pvUCI) {
+        const sanMoves = uciToSanLine(currentPos.evaluation.pvUCI, currentPos.fen);
+        if (sanMoves.length > 0) {
+          setEngineLines([{
+            move: sanMoves[0],
+            uci: currentPos.evaluation.pvUCI.split(' ')[0],
+            pv: sanMoves.join(' '),
+            score: currentPos.evaluation.score,
+            depth: currentPos.evaluation.depth,
+            multipv: 1
+          }]);
+        }
+      } else {
+        setEngineLines([]);
+      }
     }
+  }, [currentNodeId, positionCache, tree]);
 
+  // Restart engine work when the selected position changes
+  useEffect(() => {
+    const currentFen = getCurrentFen(currentNodeId, tree);
     engineRef.current?.postMessage('stop');
     activeTaskNodeIdRef.current = null;
+    activeTaskFenRef.current = currentFen;
+    activeTaskDepthRef.current = 0;
+    pendingAnalysisRef.current = null;
     analysisSessionRef.current += 1;
     readySessionRef.current = analysisSessionRef.current;
     engineRef.current?.postMessage('isready');
