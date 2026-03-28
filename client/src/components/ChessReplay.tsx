@@ -8,13 +8,17 @@ interface MoveNode {
   fen: string;
   parentId: string | null;
   children: string[];
-  evaluation?: { score: string; depth: number };
+  evaluation?: { 
+    score: string; 
+    depth: number;
+    pvUCI?: string; // Cache the raw engine line
+  };
 }
 
 interface EngineLine {
-  move: string;      // First SAN move "e4"
-  uci: string;       // First raw move "e2e4"
-  pv: string;        // Full SAN line "e4 e5 Nf3 ..."
+  move: string;      
+  uci: string;       
+  pv: string;        
   score: string;
   depth: number;
   multipv: number;
@@ -69,7 +73,21 @@ const ChessReplay: React.FC = () => {
 
   useEffect(() => { if (fullTreePgn) setPgnInput(fullTreePgn); }, [fullTreePgn]);
 
-  // --- ENGINE LOGIC ---
+  // --- ENGINE HELPERS ---
+  const uciToSanLine = (uciString: string, baseFen: string) => {
+    const tempGame = new Chess(baseFen === 'start' ? undefined : baseFen);
+    const uciMoves = uciString.split(' ');
+    let sanMoves: string[] = [];
+    for (const u of uciMoves) {
+      try {
+        const m = tempGame.move({ from: u.substring(0,2), to: u.substring(2,4), promotion: u[4] || 'q' });
+        if (m) sanMoves.push(m.san);
+        else break;
+      } catch(e) { break; }
+    }
+    return sanMoves;
+  };
+
   const scheduleNextTask = () => {
     if (!engineRef.current) return;
     const currentTree = treeRef.current;
@@ -84,13 +102,11 @@ const ChessReplay: React.FC = () => {
           return;
         }
       }
-      if (d <= 20) {
-        for (const nodeId in currentTree) {
-          const node = currentTree[nodeId];
-          if (!node.evaluation || node.evaluation.depth < d) {
-            runEngine(nodeId, d);
-            return;
-          }
+      for (const nodeId in currentTree) {
+        const node = currentTree[nodeId];
+        if (!node.evaluation || node.evaluation.depth < d) {
+          runEngine(nodeId, d);
+          return;
         }
       }
     }
@@ -101,11 +117,7 @@ const ChessReplay: React.FC = () => {
     const node = treeRef.current[nodeId];
     if (!node) return;
     activeTaskNodeIdRef.current = nodeId;
-    if (nodeId === currentNodeIdRef.current) {
-      engineRef.current?.postMessage('setoption name MultiPV value 3');
-    } else {
-      engineRef.current?.postMessage('setoption name MultiPV value 1');
-    }
+    engineRef.current?.postMessage(`setoption name MultiPV value ${nodeId === currentNodeIdRef.current ? 3 : 1}`);
     engineRef.current?.postMessage(`position fen ${node.fen}`);
     engineRef.current?.postMessage(`go depth ${depth}`);
     setStatus(`Analyzing ${node.san || 'start'} (d${depth})...`);
@@ -129,55 +141,60 @@ const ChessReplay: React.FC = () => {
         let score = cpMatch ? (parseInt(cpMatch[1]) / 100).toFixed(1) : (mateMatch ? `M${mateMatch[1]}` : '');
         let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
         let multipv = multipvMatch ? parseInt(multipvMatch[1]) : 1;
+        let pvUCI = pvMatch ? pvMatch[1] : '';
 
         if (score && depth && nodeId && multipv === 1) {
           setTree(prev => {
             const node = prev[nodeId];
             if (!node || (node.evaluation && node.evaluation.depth > depth)) return prev;
-            return { ...prev, [nodeId]: { ...node, evaluation: { score, depth } } };
+            return { ...prev, [nodeId]: { ...node, evaluation: { score, depth, pvUCI } } };
           });
         }
 
-        if (nodeId === currentId && pvMatch && score) {
-          const uciMoves = pvMatch[1].split(' ');
-          const firstUci = uciMoves[0];
-          const tempGame = new Chess(nodeId ? treeRef.current[nodeId].fen : undefined);
-          
-          try {
-            const firstMove = tempGame.move({ from: firstUci.substring(0,2), to: firstUci.substring(2,4), promotion: firstUci[4] || 'q' });
-            if (firstMove) {
-              let fullSanLine = firstMove.san;
-              // Build the rest of the PV string
-              for (let i = 1; i < Math.min(uciMoves.length, 8); i++) {
-                const u = uciMoves[i];
-                const m = tempGame.move({ from: u.substring(0,2), to: u.substring(2,4), promotion: u[4] || 'q' });
-                if (m) fullSanLine += " " + m.san;
-                else break;
-              }
-
-              setEngineLines(prev => {
-                const newLine: EngineLine = { move: firstMove.san, uci: firstUci, pv: fullSanLine, score, depth, multipv };
-                const filtered = prev.filter(l => l.multipv !== multipv);
-                return [...filtered, newLine].sort((a,b) => a.multipv - b.multipv);
-              });
-            }
-          } catch(e) {}
+        if (nodeId === currentId && pvUCI && score) {
+          const sanMoves = uciToSanLine(pvUCI, nodeId ? treeRef.current[nodeId].fen : 'start');
+          if (sanMoves.length > 0) {
+            setEngineLines(prev => {
+              const newLine: EngineLine = { move: sanMoves[0], uci: pvUCI.split(' ')[0], pv: sanMoves.join(' '), score, depth, multipv };
+              const filtered = prev.filter(l => l.multipv !== multipv);
+              return [...filtered, newLine].sort((a,b) => a.multipv - b.multipv);
+            });
+          }
         }
       }
       if (line.startsWith('bestmove')) scheduleNextTask();
     };
     worker.postMessage('uci');
-    worker.postMessage('setoption name MultiPV value 3');
     worker.postMessage('isready');
     return () => worker.terminate();
   }, []);
 
+  // Sync current position to engine suggestions
   useEffect(() => {
-    setEngineLines([]);
+    const currentPos = tree[currentNodeId || 'start'] || { fen: 'start' };
+    
+    // Check if we have a cached evaluation to show immediately
+    if (currentPos.evaluation?.pvUCI) {
+      const sanMoves = uciToSanLine(currentPos.evaluation.pvUCI, currentPos.fen);
+      if (sanMoves.length > 0) {
+        setEngineLines([{
+          move: sanMoves[0],
+          uci: currentPos.evaluation.pvUCI.split(' ')[0],
+          pv: sanMoves.join(' '),
+          score: currentPos.evaluation.score,
+          depth: currentPos.evaluation.depth,
+          multipv: 1
+        }]);
+      }
+    } else {
+      setEngineLines([]); 
+    }
+
     engineRef.current?.postMessage('stop');
     scheduleNextTask();
   }, [currentNodeId]);
 
+  // --- GAME LOGIC ---
   const makeMove = (move: any) => {
     const currentFen = currentNodeId ? tree[currentNodeId].fen : 'start';
     const tempGame = new Chess(currentFen === 'start' ? undefined : currentFen);
