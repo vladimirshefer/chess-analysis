@@ -10,6 +10,7 @@ import {
   type EvaluationRequest,
   type FullMoveEvaluation,
 } from '../lib/chessEngine';
+import { classifyMoveMark, MoveMark, type MoveMarkResult } from '../lib/moveMarks';
 
 interface MoveNode {
   id: string;
@@ -53,9 +54,13 @@ interface ViewState {
 
 interface ScheduledTask {
   nodeId: string;
+  fen: string;
+  label: string;
   request: EvaluationRequest;
   priority: EngineEvaluationPriorityValue;
 }
+
+const ROOT_ANALYSIS_NODE_ID = '__root__';
 
 const ChessReplay: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>({
@@ -109,6 +114,31 @@ const ChessReplay: React.FC = () => {
   }, [gameState.activeLineId, gameState.tree]);
 
   const currentAnalysis = gameState.currentNodeId ? analysisState.byNodeId[gameState.currentNodeId] ?? null : null;
+  const moveMarksByNodeId = useMemo(function buildMoveMarks() {
+    return buildMoveMarksByNodeId(gameState.tree, analysisState.byNodeId);
+  }, [analysisState.byNodeId, gameState.tree]);
+  const currentMoveMark = gameState.currentNodeId ? moveMarksByNodeId[gameState.currentNodeId] ?? null : null;
+  const currentMoveSquares = useMemo(function buildCurrentMoveSquares() {
+    if (!gameState.currentNodeId) return null;
+
+    const node = gameState.tree[gameState.currentNodeId];
+    if (!node?.parentId) return null;
+
+    const parent = gameState.tree[node.parentId];
+    if (!parent) return null;
+
+    return getMoveSquares(parent.fen, node.san);
+  }, [gameState.currentNodeId, gameState.tree]);
+  const boardMarkStyles = useMemo(function buildBoardMarkStyles() {
+    if (!currentMoveMark || !currentMoveSquares?.to) return {};
+
+    return {
+      [currentMoveSquares.to]: {
+        boxShadow: `inset 0 0 0 4px ${getMoveMarkColor(currentMoveMark.mark)}`,
+        backgroundColor: getMoveMarkBackground(currentMoveMark.mark),
+      },
+    };
+  }, [currentMoveMark, currentMoveSquares]);
 
   useEffect(function syncGeneratedPgn() {
     if (!fullTreePgn) return;
@@ -166,22 +196,19 @@ const ChessReplay: React.FC = () => {
           return;
         }
 
-        const node = gameStateRef.current.tree[task.nodeId];
-        if (!node) return;
-
         setViewState(function setStatus(previous) {
-          const nextStatus = `Analyzing ${node.san || 'start'} (d${task.request.minDepth})...`;
+          const nextStatus = `Analyzing ${task.label} (d${task.request.minDepth})...`;
           if (previous.statusText === nextStatus) return previous;
           return { ...previous, statusText: nextStatus };
         });
 
-        const finalEvaluation = await analysisEngine.evaluate(node.fen, task.request, task.priority, function onUpdate(update) {
+        const finalEvaluation = await analysisEngine.evaluate(task.fen, task.request, task.priority, function onUpdate(update) {
           if (cancelled || analysisSessionRef.current !== session) return;
-          syncNodeAnalysis(task.nodeId, toNodeAnalysis(node.fen, update, update.isFinal));
+          syncNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
         });
 
         if (cancelled || analysisSessionRef.current !== session) return;
-        syncNodeAnalysis(task.nodeId, toNodeAnalysis(node.fen, finalEvaluation, true));
+        syncNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
       }
     }
 
@@ -347,6 +374,7 @@ const ChessReplay: React.FC = () => {
             onPieceDrop={onDrop}
             boardOrientation="white"
             animationDuration={200}
+            customSquareStyles={boardMarkStyles}
           />
         </div>
 
@@ -428,6 +456,7 @@ const ChessReplay: React.FC = () => {
               const isWhite = index % 2 === 0;
               const isFocus = node.id === gameState.currentNodeId;
               const nodeAnalysis = analysisState.byNodeId[node.id];
+              const moveMark = moveMarksByNodeId[node.id];
 
               return (
                 <div key={node.id} className="flex flex-col gap-1">
@@ -441,7 +470,14 @@ const ChessReplay: React.FC = () => {
                       }}
                       className={`flex-1 flex justify-between items-center p-2 rounded border transition-all ${isFocus ? 'bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300' : 'bg-white hover:bg-indigo-50 border-gray-200'}`}
                     >
-                      <span className="font-bold font-mono text-sm">{node.san}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-bold font-mono text-sm">{node.san}</span>
+                        {moveMark && (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}>
+                            {moveMark.mark}
+                          </span>
+                        )}
+                      </span>
                       {nodeAnalysis && <span className={`text-[10px] font-bold ${isFocus ? 'text-indigo-100' : 'text-gray-500'}`}>{formatScore(nodeAnalysis.evaluation)} <span className="opacity-50">d{nodeAnalysis.depth}</span></span>}
                     </button>
                   </div>
@@ -546,13 +582,14 @@ function scheduleNextTask(gameState: GameState, engine: ChessEngine): ScheduledT
   const otherNodeIds = Object.keys(gameState.tree).filter(function filterNode(nodeId) {
     return nodeId !== currentNodeId;
   });
+  const hasMoves = Object.keys(gameState.tree).length > 0;
 
   function findNode(nodeIds: string[], minDepth: number, linesAmount: number): string | null {
     for (const nodeId of nodeIds) {
-      const node = gameState.tree[nodeId];
-      if (!node) continue;
+      const fen = nodeId === ROOT_ANALYSIS_NODE_ID ? 'start' : gameState.tree[nodeId]?.fen;
+      if (!fen) continue;
 
-      const cachedEvaluation = engine.getEvaluation(node.fen, minDepth);
+      const cachedEvaluation = engine.getEvaluation(fen, minDepth);
       if (!cachedEvaluation) return nodeId;
       if (cachedEvaluation.lines.length < linesAmount) return nodeId;
     }
@@ -560,24 +597,49 @@ function scheduleNextTask(gameState: GameState, engine: ChessEngine): ScheduledT
     return null;
   }
 
-  if (currentNodeId) {
-    const currentAt12 = findNode([currentNodeId], 12, 3);
-    if (currentAt12) return { nodeId: currentAt12, request: { minDepth: 12, linesAmount: 3 }, priority: EngineEvaluationPriority.IMMEDIATE };
+  function toTask(nodeId: string, request: EvaluationRequest, priority: EngineEvaluationPriorityValue): ScheduledTask | null {
+    if (nodeId === ROOT_ANALYSIS_NODE_ID) {
+      return {
+        nodeId,
+        fen: 'start',
+        label: 'start',
+        request,
+        priority,
+      };
+    }
+
+    const node = gameState.tree[nodeId];
+    if (!node) return null;
+
+    return {
+      nodeId,
+      fen: node.fen,
+      label: node.san || 'start',
+      request,
+      priority,
+    };
   }
 
-  const othersAt12 = findNode(otherNodeIds, 12, 1);
-  if (othersAt12) return { nodeId: othersAt12, request: { minDepth: 12, linesAmount: 1 }, priority: EngineEvaluationPriority.NEXT };
+  if (currentNodeId) {
+    const currentAt12 = findNode([currentNodeId], 12, 3);
+    if (currentAt12) return toTask(currentAt12, { minDepth: 12, linesAmount: 3 }, EngineEvaluationPriority.IMMEDIATE);
+  }
+
+  const nextDepth12NodeIds = hasMoves ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds] : otherNodeIds;
+  const othersAt12 = findNode(nextDepth12NodeIds, 12, 2);
+  if (othersAt12) return toTask(othersAt12, { minDepth: 12, linesAmount: 2 }, EngineEvaluationPriority.NEXT);
 
   if (currentNodeId) {
     const currentAt20 = findNode([currentNodeId], 20, 3);
-    if (currentAt20) return { nodeId: currentAt20, request: { minDepth: 20, linesAmount: 3 }, priority: EngineEvaluationPriority.IMMEDIATE };
+    if (currentAt20) return toTask(currentAt20, { minDepth: 20, linesAmount: 3 }, EngineEvaluationPriority.IMMEDIATE);
   }
 
-  const othersAt16 = findNode(otherNodeIds, 16, 1);
-  if (othersAt16) return { nodeId: othersAt16, request: { minDepth: 16, linesAmount: 1 }, priority: EngineEvaluationPriority.BACKGROUND };
+  const backgroundNodeIds = hasMoves ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds] : otherNodeIds;
+  const othersAt16 = findNode(backgroundNodeIds, 16, 1);
+  if (othersAt16) return toTask(othersAt16, { minDepth: 16, linesAmount: 1 }, EngineEvaluationPriority.BACKGROUND);
 
-  const othersAt20 = findNode(otherNodeIds, 20, 1);
-  if (othersAt20) return { nodeId: othersAt20, request: { minDepth: 20, linesAmount: 1 }, priority: EngineEvaluationPriority.BACKGROUND };
+  const othersAt20 = findNode(backgroundNodeIds, 20, 1);
+  if (othersAt20) return toTask(othersAt20, { minDepth: 20, linesAmount: 1 }, EngineEvaluationPriority.BACKGROUND);
 
   return null;
 }
@@ -636,6 +698,113 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
   };
+}
+
+function buildMoveMarksByNodeId(
+  tree: Record<string, MoveNode>,
+  analysesByNodeId: Record<string, NodeAnalysis>,
+): Record<string, MoveMarkResult> {
+  const marksByNodeId: Record<string, MoveMarkResult> = {};
+
+  Object.values(tree).forEach(function classifyNode(node) {
+    const parentAnalysis = node.parentId ? analysesByNodeId[node.parentId] : analysesByNodeId[ROOT_ANALYSIS_NODE_ID];
+    const nodeAnalysis = analysesByNodeId[node.id];
+    const parentFen = node.parentId ? tree[node.parentId]?.fen : 'start';
+    if (!parentFen) return;
+    if (!parentAnalysis?.isFinal || !nodeAnalysis?.isFinal) return;
+    if (parentAnalysis.lines.length === 0) return;
+
+    const mark = classifyMoveMark({
+      parentFen,
+      playedMoveSan: node.san,
+      playedEvaluation: nodeAnalysis.evaluation,
+      parentLines: parentAnalysis.lines.map(function toEngineLine(line) {
+        return {
+          uci: line.uci,
+          evaluation: line.score,
+        };
+      }),
+    });
+
+    if (mark) marksByNodeId[node.id] = mark;
+  });
+
+  return marksByNodeId;
+}
+
+function getMoveSquares(baseFen: string, san: string): { from: string; to: string } | null {
+  const tempGame = new Chess(baseFen === 'start' ? undefined : baseFen);
+
+  try {
+    const move = tempGame.move(san);
+    if (!move) return null;
+    return { from: move.from, to: move.to };
+  } catch {
+    return null;
+  }
+}
+
+function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
+  switch (mark) {
+    case MoveMark.BEST:
+      return isFocus ? 'bg-green-200 text-green-900' : 'bg-green-100 text-green-700';
+    case MoveMark.OK:
+      return isFocus ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 text-gray-700';
+    case MoveMark.INACCURACY:
+      return isFocus ? 'bg-yellow-200 text-yellow-900' : 'bg-yellow-100 text-yellow-800';
+    case MoveMark.MISTAKE:
+      return isFocus ? 'bg-orange-200 text-orange-900' : 'bg-orange-100 text-orange-800';
+    case MoveMark.BLUNDER:
+      return isFocus ? 'bg-red-200 text-red-900' : 'bg-red-100 text-red-700';
+    case MoveMark.ONLY_MOVE:
+      return isFocus ? 'bg-blue-200 text-blue-900' : 'bg-blue-100 text-blue-700';
+    case MoveMark.BRILLIANT:
+      return isFocus ? 'bg-teal-200 text-teal-900' : 'bg-teal-100 text-teal-700';
+    default:
+      return isFocus ? 'bg-gray-200 text-gray-900' : 'bg-gray-100 text-gray-700';
+  }
+}
+
+function getMoveMarkColor(mark: MoveMark): string {
+  switch (mark) {
+    case MoveMark.BEST:
+      return 'rgba(22, 163, 74, 0.9)';
+    case MoveMark.OK:
+      return 'rgba(107, 114, 128, 0.9)';
+    case MoveMark.INACCURACY:
+      return 'rgba(234, 179, 8, 0.9)';
+    case MoveMark.MISTAKE:
+      return 'rgba(249, 115, 22, 0.9)';
+    case MoveMark.BLUNDER:
+      return 'rgba(220, 38, 38, 0.9)';
+    case MoveMark.ONLY_MOVE:
+      return 'rgba(37, 99, 235, 0.9)';
+    case MoveMark.BRILLIANT:
+      return 'rgba(13, 148, 136, 0.9)';
+    default:
+      return 'rgba(107, 114, 128, 0.9)';
+  }
+}
+
+function getMoveMarkBackground(mark: MoveMark): string {
+  switch (mark) {
+    case MoveMark.BEST:
+      return 'rgba(34, 197, 94, 0.22)';
+    case MoveMark.OK:
+      return 'rgba(107, 114, 128, 0.18)';
+    case MoveMark.INACCURACY:
+      return 'rgba(250, 204, 21, 0.24)';
+    case MoveMark.MISTAKE:
+      return 'rgba(251, 146, 60, 0.24)';
+    case MoveMark.BLUNDER:
+      return 'rgba(248, 113, 113, 0.26)';
+    case MoveMark.ONLY_MOVE:
+      return 'rgba(59, 130, 246, 0.24)';
+    case MoveMark.BRILLIANT:
+      return 'rgba(45, 212, 191, 0.24)';
+    default:
+      return 'rgba(107, 114, 128, 0.18)';
+  }
 }
 
 function formatScore(score: number): string {
