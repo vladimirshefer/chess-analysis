@@ -38,6 +38,7 @@ interface PendingAnalysis {
   nodeId: string;
   fen: string;
   requestedDepth: number;
+  requestedMultiPV: number;
   evaluation?: string;
   pvUCI?: string;
   lines: Record<number, EngineLine>;
@@ -173,32 +174,59 @@ const ChessReplay: React.FC = () => {
     if (!engineRef.current) return;
     const currentTree = treeRef.current;
     const focusId = currentNodeIdRef.current;
-    const depthTiers = [12, 16, 20, 22];
+    const otherNodeIds = Object.keys(currentTree).filter(nodeId => nodeId !== focusId);
 
-    for (const d of depthTiers) {
-      if (focusId) {
-        const node = currentTree[focusId];
-        const bestSnapshot = node ? getBestSnapshot(node.fen) : null;
-        if (node && (!bestSnapshot || bestSnapshot.depth < d)) {
-          runEngine(focusId, d);
-          return;
-        }
-      }
-      for (const nodeId in currentTree) {
+    const findNodeNeedingDepth = (nodeIds: string[], targetDepth: number) => {
+      for (const nodeId of nodeIds) {
         const node = currentTree[nodeId];
+        if (!node) continue;
         const bestSnapshot = getBestSnapshot(node.fen);
-        if (!bestSnapshot || bestSnapshot.depth < d) {
-          runEngine(nodeId, d);
-          return;
-        }
+        if (!bestSnapshot || bestSnapshot.depth < targetDepth) return nodeId;
+      }
+      return null;
+    };
+
+    if (focusId) {
+      const currentAt12 = findNodeNeedingDepth([focusId], 12);
+      if (currentAt12) {
+        runEngine(currentAt12, 12);
+        return;
       }
     }
+
+    const othersAt12 = findNodeNeedingDepth(otherNodeIds, 12);
+    if (othersAt12) {
+      runEngine(othersAt12, 12);
+      return;
+    }
+
+    if (focusId) {
+      const currentAt20 = findNodeNeedingDepth([focusId], 20);
+      if (currentAt20) {
+        runEngine(currentAt20, 20);
+        return;
+      }
+    }
+
+    const othersAt16 = findNodeNeedingDepth(otherNodeIds, 16);
+    if (othersAt16) {
+      runEngine(othersAt16, 16);
+      return;
+    }
+
+    const othersAt20 = findNodeNeedingDepth(otherNodeIds, 20);
+    if (othersAt20) {
+      runEngine(othersAt20, 20);
+      return;
+    }
+
     setStatus('Analysis Complete');
   };
 
   const runEngine = (nodeId: string, depth: number) => {
     const node = treeRef.current[nodeId];
     if (!node) return;
+    const requestedMultiPV = nodeId === currentNodeIdRef.current ? 3 : 1;
     activeTaskNodeIdRef.current = nodeId;
     activeTaskFenRef.current = node.fen;
     activeTaskDepthRef.current = depth;
@@ -206,9 +234,10 @@ const ChessReplay: React.FC = () => {
       nodeId,
       fen: node.fen,
       requestedDepth: depth,
+      requestedMultiPV,
       lines: {},
     };
-    engineRef.current?.postMessage(`setoption name MultiPV value ${nodeId === currentNodeIdRef.current ? 3 : 1}`);
+    engineRef.current?.postMessage(`setoption name MultiPV value ${requestedMultiPV}`);
     engineRef.current?.postMessage(`position fen ${node.fen}`);
     engineRef.current?.postMessage(`go depth ${depth}`);
     setStatus(`Analyzing ${node.san || 'start'} (d${depth})...`);
@@ -269,7 +298,22 @@ const ChessReplay: React.FC = () => {
           finishedAnalysis.requestedDepth > 0 &&
           finishedAnalysis.evaluation
         ) {
-          const finishedLines = Object.values(finishedAnalysis.lines).sort((a, b) => a.multipv - b.multipv);
+          const existingSnapshot = positionCacheRef.current[finishedAnalysis.fen]?.find(
+            snapshot => snapshot.depth === finishedAnalysis.requestedDepth
+          );
+          const existingLines = existingSnapshot?.lines ?? [];
+          const mergedLinesByMultipv: Record<number, EngineLine> = {};
+
+          existingLines.forEach(existingLine => {
+            mergedLinesByMultipv[existingLine.multipv] = existingLine;
+          });
+          Object.values(finishedAnalysis.lines).forEach(newLine => {
+            mergedLinesByMultipv[newLine.multipv] = newLine;
+          });
+
+          const mergedLines = Object.values(mergedLinesByMultipv).sort((a, b) => a.multipv - b.multipv);
+          const targetLineCount = Math.max(existingLines.length, finishedAnalysis.requestedMultiPV);
+          const finishedLines = mergedLines.slice(0, targetLineCount);
           const snapshot: PositionSnapshot = {
             depth: finishedAnalysis.requestedDepth,
             evaluation: finishedAnalysis.evaluation,
