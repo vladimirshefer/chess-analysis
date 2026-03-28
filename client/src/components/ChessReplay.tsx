@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 
@@ -8,23 +8,71 @@ const ChessReplay: React.FC = () => {
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
   const [fen, setFen] = useState('start');
   const [status, setStatus] = useState('Board initialized');
+  
+  // Analysis state
+  const [evaluation, setEvaluation] = useState<string>('0.0');
+  const [bestMove, setBestMove] = useState<string>('');
+  const engineRef = useRef<Worker | null>(null);
 
-  // Replay moves logic
+  // Initialize Engine
+  useEffect(() => {
+    // Load Stockfish from public directory
+    const worker = new Worker('/stockfish/stockfish.js');
+    engineRef.current = worker;
+
+    worker.onmessage = (e) => {
+      const line = e.data;
+      
+      // Parse evaluation: "info depth 10 score cp 13 ..."
+      if (line.includes('score cp')) {
+        const match = line.match(/score cp (-?\d+)/);
+        if (match) {
+          const score = (parseInt(match[1]) / 100).toFixed(1);
+          setEvaluation(score);
+        }
+      } else if (line.includes('score mate')) {
+        const match = line.match(/score mate (-?\d+)/);
+        if (match) {
+          setEvaluation(`M${match[1]}`);
+        }
+      }
+
+      // Parse best move: "bestmove e2e4 ponder e7e5"
+      if (line.startsWith('bestmove')) {
+        const match = line.match(/bestmove\s(\w+)/);
+        if (match) {
+          setBestMove(match[1]);
+        }
+      }
+    };
+
+    worker.postMessage('uci');
+    worker.postMessage('isready');
+
+    return () => {
+      worker.terminate();
+    };
+  }, []);
+
+  // Update position and trigger analysis
   useEffect(() => {
     try {
       const game = new Chess();
-      // Re-apply all moves up to current index
       for (let i = 0; i <= currentMoveIndex; i++) {
-        const move = game.move(history[i]);
-        if (!move) throw new Error(`Move ${i} failed: ${history[i]}`);
+        game.move(history[i]);
       }
       
       const newFen = game.fen();
-      console.log('New Position:', newFen);
       setFen(newFen);
       setStatus(`Move ${currentMoveIndex + 1} of ${history.length}`);
+
+      // Start analysis for new position
+      if (engineRef.current) {
+        setBestMove('...');
+        engineRef.current.postMessage(`position fen ${newFen}`);
+        engineRef.current.postMessage('go depth 12'); // Fast enough for real-time
+      }
     } catch (err: any) {
-      console.error(err);
       setStatus(`Error: ${err.message}`);
     }
   }, [currentMoveIndex, history]);
@@ -35,11 +83,10 @@ const ChessReplay: React.FC = () => {
     try {
       const temp = new Chess();
       temp.loadPgn(pgnInput);
-      const moves = temp.history();
-      setHistory(moves);
+      setHistory(temp.history());
       setCurrentMoveIndex(-1);
       setFen('start');
-      setStatus(`PGN Loaded. ${moves.length} moves.`);
+      setStatus(`PGN Loaded. ${temp.history().length} moves.`);
     } catch (err) {
       setStatus('Invalid PGN format');
     }
@@ -53,7 +100,6 @@ const ChessReplay: React.FC = () => {
     setHistory(temp.history());
     setCurrentMoveIndex(-1);
     setFen('start');
-    setStatus('Sample game loaded');
   };
 
   return (
@@ -61,12 +107,21 @@ const ChessReplay: React.FC = () => {
       
       {/* Chessboard Section */}
       <div className="flex-1 flex flex-col items-center">
+        {/* Analysis Bar */}
+        <div className="w-full max-w-[480px] mb-4 flex items-center justify-between bg-gray-900 text-white p-3 rounded-lg shadow-inner">
+          <div className="flex items-center gap-3">
+            <div className={`px-2 py-1 rounded text-xs font-bold ${parseFloat(evaluation) >= 0 ? 'bg-green-600' : 'bg-red-600'}`}>
+              {evaluation}
+            </div>
+            <span className="text-sm font-medium text-gray-400">Engine Score</span>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-wider text-gray-500 font-bold">Best Move</div>
+            <div className="text-sm font-mono text-indigo-400">{bestMove || 'Calculating...'}</div>
+          </div>
+        </div>
+
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800 relative">
-          {/* 
-            REFINED RENDER:
-            Removed 'key={fen}' to allow react-chessboard to animate pieces
-            between positions instead of destroying the board.
-          */}
           <Chessboard 
             id="AnalysisBoard"
             position={fen} 
@@ -77,30 +132,10 @@ const ChessReplay: React.FC = () => {
         
         {/* Simple Controls */}
         <div className="flex items-center gap-4 mt-6">
-          <button 
-            onClick={() => setCurrentMoveIndex(-1)}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
-          >
-            Start
-          </button>
-          <button 
-            onClick={() => setCurrentMoveIndex(p => Math.max(-1, p - 1))}
-            className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
-          >
-            Prev
-          </button>
-          <button 
-            onClick={() => setCurrentMoveIndex(p => Math.min(history.length - 1, p + 1))}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-md"
-          >
-            Next
-          </button>
-          <button 
-            onClick={() => setCurrentMoveIndex(history.length - 1)}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
-          >
-            End
-          </button>
+          <button onClick={() => setCurrentMoveIndex(-1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
+          <button onClick={() => setCurrentMoveIndex(p => Math.max(-1, p - 1))} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Prev</button>
+          <button onClick={() => setCurrentMoveIndex(p => Math.min(history.length - 1, p + 1))} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-md">Next</button>
+          <button onClick={() => setCurrentMoveIndex(history.length - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">End</button>
         </div>
         <div className="mt-4 text-xs font-mono text-gray-500">{status}</div>
       </div>
@@ -122,7 +157,7 @@ const ChessReplay: React.FC = () => {
           </form>
         </div>
 
-        <div className="flex-1 bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col min-h-[250px]">
+        <div className="flex-1 bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col min-h-[300px]">
           <h3 className="font-bold text-gray-800 mb-2">Move History</h3>
           <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-1 content-start pr-1">
             {history.map((move, i) => (
