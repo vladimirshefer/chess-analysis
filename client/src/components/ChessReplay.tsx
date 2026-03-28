@@ -3,12 +3,21 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 
 interface MoveNode {
-  id: string;        // Path-based ID: "e4|e5|Nf3"
-  san: string;       // "Nf3"
-  fen: string;       
+  id: string;
+  san: string;
+  fen: string;
   parentId: string | null;
-  children: string[]; // Order of variations
+  children: string[];
   evaluation?: { score: string; depth: number };
+}
+
+interface EngineLine {
+  move: string;      // First SAN move "e4"
+  uci: string;       // First raw move "e2e4"
+  pv: string;        // Full SAN line "e4 e5 Nf3 ..."
+  score: string;
+  depth: number;
+  multipv: number;
 }
 
 const ChessReplay: React.FC = () => {
@@ -18,7 +27,7 @@ const ChessReplay: React.FC = () => {
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [pgnInput, setPgnInput] = useState('');
   const [status, setStatus] = useState('Interactive Mode');
-  const [isThinking, setIsThinking] = useState(false);
+  const [engineLines, setEngineLines] = useState<EngineLine[]>([]);
 
   // --- REFS ---
   const engineRef = useRef<Worker | null>(null);
@@ -31,57 +40,36 @@ const ChessReplay: React.FC = () => {
     currentNodeIdRef.current = currentNodeId;
   }, [tree, currentNodeId]);
 
-  // --- PGN GENERATION (TREE TRAVERSAL) ---
+  // --- PGN GENERATION ---
   const generatePgnString = (nodeId: string, moveNum: number, isWhite: boolean, isFirstInVar: boolean, currentTree: Record<string, MoveNode>): string => {
     const node = currentTree[nodeId];
     if (!node) return "";
-
-    let pgn = "";
-    if (isWhite) {
-      pgn += `${moveNum}. `;
-    } else if (isFirstInVar) {
-      pgn += `${moveNum}... `;
-    }
-
+    let pgn = isWhite ? `${moveNum}. ` : (isFirstInVar ? `${moveNum}... ` : "");
     pgn += node.san + " ";
-
-    // Variations (indices 1 to end)
     if (node.children.length > 1) {
       for (let i = 1; i < node.children.length; i++) {
-        pgn += `(${generatePgnString(node.children[i], isWhite ? moveNum : moveNum, !isWhite, true, currentTree).trim()}) `;
+        pgn += `(${generatePgnString(node.children[i], moveNum, isWhite, true, currentTree).trim()}) `;
       }
     }
-
-    // Main Line (index 0)
     if (node.children.length > 0) {
       pgn += generatePgnString(node.children[0], isWhite ? moveNum : moveNum + 1, !isWhite, false, currentTree);
     }
-
     return pgn;
   };
 
   const fullTreePgn = useMemo(() => {
     const roots = Object.values(tree).filter(n => n.parentId === null);
     if (roots.length === 0) return "";
-    
-    // Reconstruct PGN starting from all possible roots
     let result = "";
     roots.forEach((root, i) => {
-      if (i === 0) {
-        result += generatePgnString(root.id, 1, true, false, tree);
-      } else {
-        result += `(${generatePgnString(root.id, 1, true, true, tree).trim()}) `;
-      }
+      result += (i === 0 ? "" : "(") + generatePgnString(root.id, 1, true, i !== 0, tree).trim() + (i === 0 ? " " : ") ");
     });
     return result.trim();
   }, [tree]);
 
-  // Update the textarea whenever the tree evolves
-  useEffect(() => {
-    if (fullTreePgn) setPgnInput(fullTreePgn);
-  }, [fullTreePgn]);
+  useEffect(() => { if (fullTreePgn) setPgnInput(fullTreePgn); }, [fullTreePgn]);
 
-  // --- ENGINE (Tiered Priority) ---
+  // --- ENGINE LOGIC ---
   const scheduleNextTask = () => {
     if (!engineRef.current) return;
     const currentTree = treeRef.current;
@@ -107,17 +95,20 @@ const ChessReplay: React.FC = () => {
       }
     }
     setStatus('Analysis Complete');
-    setIsThinking(false);
   };
 
   const runEngine = (nodeId: string, depth: number) => {
     const node = treeRef.current[nodeId];
     if (!node) return;
-    setIsThinking(true);
     activeTaskNodeIdRef.current = nodeId;
+    if (nodeId === currentNodeIdRef.current) {
+      engineRef.current?.postMessage('setoption name MultiPV value 3');
+    } else {
+      engineRef.current?.postMessage('setoption name MultiPV value 1');
+    }
     engineRef.current?.postMessage(`position fen ${node.fen}`);
     engineRef.current?.postMessage(`go depth ${depth}`);
-    setStatus(`Analyzing ${node.san} (d${depth})...`);
+    setStatus(`Analyzing ${node.san || 'start'} (d${depth})...`);
   };
 
   useEffect(() => {
@@ -126,69 +117,82 @@ const ChessReplay: React.FC = () => {
     worker.onmessage = (e) => {
       const line = e.data;
       const nodeId = activeTaskNodeIdRef.current;
+      const currentId = currentNodeIdRef.current;
+
       if (line.includes('info') && (line.includes('score cp') || line.includes('score mate'))) {
-        let score = '';
         let cpMatch = line.match(/score cp (-?\d+)/);
         let mateMatch = line.match(/score mate (-?\d+)/);
         let depthMatch = line.match(/depth (\d+)/);
-        if (cpMatch) score = (parseInt(cpMatch[1]) / 100).toFixed(1);
-        else if (mateMatch) score = `M${mateMatch[1]}`;
-        if (score && depthMatch && nodeId) {
-          const depth = parseInt(depthMatch[1]);
+        let multipvMatch = line.match(/multipv (\d+)/);
+        let pvMatch = line.match(/ pv (.+)/);
+
+        let score = cpMatch ? (parseInt(cpMatch[1]) / 100).toFixed(1) : (mateMatch ? `M${mateMatch[1]}` : '');
+        let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
+        let multipv = multipvMatch ? parseInt(multipvMatch[1]) : 1;
+
+        if (score && depth && nodeId && multipv === 1) {
           setTree(prev => {
             const node = prev[nodeId];
             if (!node || (node.evaluation && node.evaluation.depth > depth)) return prev;
             return { ...prev, [nodeId]: { ...node, evaluation: { score, depth } } };
           });
         }
+
+        if (nodeId === currentId && pvMatch && score) {
+          const uciMoves = pvMatch[1].split(' ');
+          const firstUci = uciMoves[0];
+          const tempGame = new Chess(nodeId ? treeRef.current[nodeId].fen : undefined);
+          
+          try {
+            const firstMove = tempGame.move({ from: firstUci.substring(0,2), to: firstUci.substring(2,4), promotion: firstUci[4] || 'q' });
+            if (firstMove) {
+              let fullSanLine = firstMove.san;
+              // Build the rest of the PV string
+              for (let i = 1; i < Math.min(uciMoves.length, 8); i++) {
+                const u = uciMoves[i];
+                const m = tempGame.move({ from: u.substring(0,2), to: u.substring(2,4), promotion: u[4] || 'q' });
+                if (m) fullSanLine += " " + m.san;
+                else break;
+              }
+
+              setEngineLines(prev => {
+                const newLine: EngineLine = { move: firstMove.san, uci: firstUci, pv: fullSanLine, score, depth, multipv };
+                const filtered = prev.filter(l => l.multipv !== multipv);
+                return [...filtered, newLine].sort((a,b) => a.multipv - b.multipv);
+              });
+            }
+          } catch(e) {}
+        }
       }
       if (line.startsWith('bestmove')) scheduleNextTask();
     };
     worker.postMessage('uci');
+    worker.postMessage('setoption name MultiPV value 3');
     worker.postMessage('isready');
     return () => worker.terminate();
   }, []);
 
   useEffect(() => {
+    setEngineLines([]);
     engineRef.current?.postMessage('stop');
     scheduleNextTask();
   }, [currentNodeId]);
 
-  // --- GAME LOGIC ---
   const makeMove = (move: any) => {
     const currentFen = currentNodeId ? tree[currentNodeId].fen : 'start';
     const tempGame = new Chess(currentFen === 'start' ? undefined : currentFen);
-
     try {
       const result = tempGame.move(move);
       if (result) {
         const newFen = tempGame.fen();
         const newNodeId = currentNodeId ? `${currentNodeId}|${result.san}` : result.san;
-
-        if (tree[newNodeId]) {
-          setCurrentNodeId(newNodeId);
-          setActiveLineId(getDeepestLeaf(newNodeId, tree));
-          return true;
+        if (!tree[newNodeId]) {
+          setTree(prev => {
+            const updated = { ...prev, [newNodeId]: { id: newNodeId, san: result.san, fen: newFen, parentId: currentNodeId, children: [] } };
+            if (currentNodeId) updated[currentNodeId] = { ...prev[currentNodeId], children: [...prev[currentNodeId].children, newNodeId] };
+            return updated;
+          });
         }
-
-        const newNode: MoveNode = {
-          id: newNodeId,
-          san: result.san,
-          fen: newFen,
-          parentId: currentNodeId,
-          children: []
-        };
-
-        setTree(prev => {
-          const updated = { ...prev, [newNodeId]: newNode };
-          if (currentNodeId) {
-            updated[currentNodeId] = {
-              ...prev[currentNodeId],
-              children: [...prev[currentNodeId].children, newNodeId]
-            };
-          }
-          return updated;
-        });
         setCurrentNodeId(newNodeId);
         setActiveLineId(newNodeId);
         return true;
@@ -203,9 +207,7 @@ const ChessReplay: React.FC = () => {
     return getDeepestLeaf(node.children[0], currentTree);
   };
 
-  const onDrop = (sourceSquare: string, targetSquare: string) => {
-    return makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
-  };
+  const onDrop = (sourceSquare: string, targetSquare: string) => makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
 
   const importPgn = (pgn: string) => {
     const tempGame = new Chess();
@@ -214,20 +216,16 @@ const ChessReplay: React.FC = () => {
       const moves = tempGame.history();
       let lastId: string | null = null;
       const newTree: Record<string, MoveNode> = { ...tree };
-
       let walker = new Chess();
       moves.forEach(moveSan => {
         const result = walker.move(moveSan);
         const nodeId = lastId ? `${lastId}|${result.san}` : result.san;
         if (!newTree[nodeId]) {
           newTree[nodeId] = { id: nodeId, san: result.san, fen: walker.fen(), parentId: lastId, children: [] };
-          if (lastId) {
-            newTree[lastId] = { ...newTree[lastId], children: [...newTree[lastId].children, nodeId] };
-          }
+          if (lastId) newTree[lastId] = { ...newTree[lastId], children: [...newTree[lastId].children, nodeId] };
         }
         lastId = nodeId;
       });
-
       setTree(newTree);
       setCurrentNodeId(lastId);
       setActiveLineId(lastId);
@@ -240,64 +238,59 @@ const ChessReplay: React.FC = () => {
     importPgn(sample);
   };
 
-  // --- UI HELPERS ---
-  const displayFen = useMemo(() => {
-    if (!currentNodeId || !tree[currentNodeId]) return 'start';
-    return tree[currentNodeId].fen;
-  }, [currentNodeId, tree]);
-
   const visiblePath = useMemo(() => {
     const path: MoveNode[] = [];
     let curr = activeLineId;
     while (curr) {
       const node = tree[curr];
-      if (node) {
-        path.unshift(node);
-        curr = node.parentId;
-      } else break;
+      if (node) { path.unshift(node); curr = node.parentId; } else break;
     }
     return path;
   }, [activeLineId, tree]);
 
   useEffect(() => {
-    if (!currentNodeId) return;
-    const isOnPath = visiblePath.some(n => n.id === currentNodeId);
-    if (!isOnPath) setActiveLineId(getDeepestLeaf(currentNodeId, tree));
+    if (currentNodeId && !visiblePath.some(n => n.id === currentNodeId)) setActiveLineId(getDeepestLeaf(currentNodeId, tree));
   }, [currentNodeId, tree, visiblePath]);
-
-  const getVariations = (parentId: string | null) => {
-    if (!parentId) return Object.values(tree).filter(n => n.parentId === null);
-    return tree[parentId].children.map(id => tree[id]);
-  };
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
-      
       <div className="flex-1 flex flex-col items-center">
-        <div className="w-full max-w-[480px] mb-4 flex items-center justify-between bg-gray-900 text-white p-3 rounded-lg shadow-inner">
+        <div className="w-full max-w-[480px] mb-4 flex items-center justify-between bg-gray-900 text-white p-3 rounded-lg">
           <div className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Engine Status</span>
+            <span className="text-[10px] uppercase text-gray-500 font-bold">Engine Status</span>
             <span className="text-sm font-medium truncate max-w-[200px]">{status}</span>
           </div>
           <div className="text-right">
-            <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Eval</span>
-            <div className="text-sm font-mono text-indigo-400">
-              {currentNodeId && tree[currentNodeId]?.evaluation?.score || '--'}
-            </div>
+            <span className="text-[10px] uppercase text-gray-500 font-bold">Eval</span>
+            <div className="text-sm font-mono text-indigo-400">{currentNodeId && tree[currentNodeId]?.evaluation?.score || '--'}</div>
           </div>
         </div>
-
-        <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800 relative">
-          <Chessboard id="AnalysisBoard" position={displayFen} onPieceDrop={onDrop} boardOrientation="white" animationDuration={200} />
+        <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
+          <Chessboard id="AnalysisBoard" position={currentNodeId ? tree[currentNodeId].fen : 'start'} onPieceDrop={onDrop} boardOrientation="white" animationDuration={200} />
         </div>
 
-        <div className="w-full max-w-[480px] mt-4 flex flex-wrap gap-2 justify-center">
-          {currentNodeId && tree[currentNodeId].parentId !== undefined && getVariations(tree[currentNodeId].parentId).length > 1 && (
-             <div className="w-full text-center text-[10px] uppercase text-gray-400 font-bold mb-1">Branch Junction</div>
-          )}
-          {currentNodeId && getVariations(tree[currentNodeId].parentId).map(v => (
-            <button key={v.id} onClick={() => { setCurrentNodeId(v.id); setActiveLineId(getDeepestLeaf(v.id, tree)); }} className={`px-3 py-1 rounded text-xs font-bold border transition-all ${v.id === currentNodeId ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>{v.san}</button>
-          ))}
+        <div className="w-full max-w-[480px] mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Engine Suggestions</h3>
+          <div className="flex flex-col gap-2">
+            {engineLines.length === 0 && <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>}
+            {engineLines.map((line, idx) => (
+              <button key={idx} onClick={() => makeMove(line.uci)} className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left">
+                <div className="flex justify-between items-center w-full">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-gray-300">{line.multipv}.</span>
+                    <span className="font-bold text-gray-800 font-mono text-base">{line.move}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold ${parseFloat(line.score) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{line.score}</span>
+                    <span className="text-[10px] text-gray-400">d{line.depth}</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-gray-500 font-mono truncate w-full opacity-70">
+                  {line.pv.split(' ').slice(1).join(' ')}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 mt-6">
@@ -314,7 +307,7 @@ const ChessReplay: React.FC = () => {
             <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); importPgn(pgnInput); }} className="flex flex-col gap-2">
-            <textarea className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} placeholder="PGN Tree with (variations) will appear here..." />
+            <textarea className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} />
             <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Import PGN</button>
           </form>
         </div>
@@ -322,16 +315,14 @@ const ChessReplay: React.FC = () => {
         <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
           <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">Move Tree <button onClick={() => { setTree({}); setCurrentNodeId(null); setActiveLineId(null); setPgnInput(''); }} className="text-[10px] text-red-500 hover:underline">Clear Tree</button></h3>
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
-            {visiblePath.length === 0 && <div className="text-sm text-gray-400 text-center mt-20 italic">Make a move to start.</div>}
             {visiblePath.map((node, i) => {
-              const variations = getVariations(node.parentId);
+              const variations = tree[node.parentId || 'root']?.children?.map(id => tree[id]) || Object.values(tree).filter(n => n.parentId === null);
               const isWhite = i % 2 === 0;
-              const moveNum = Math.floor(i / 2) + 1;
               const isFocus = node.id === currentNodeId;
               return (
                 <div key={node.id} className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-gray-400 w-8">{isWhite ? `${moveNum}.` : ''}</span>
+                    <span className="text-[11px] font-bold text-gray-400 w-8">{isWhite ? `${Math.floor(i/2)+1}.` : ''}</span>
                     <button onClick={() => setCurrentNodeId(node.id)} className={`flex-1 flex justify-between items-center p-2 rounded border transition-all ${isFocus ? 'bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300' : 'bg-white hover:bg-indigo-50 border-gray-200'}`}>
                       <span className="font-bold font-mono text-sm">{node.san}</span>
                       {node.evaluation && <span className={`text-[10px] font-bold ${isFocus ? 'text-indigo-100' : 'text-gray-500'}`}>{node.evaluation.score} <span className="opacity-50">d{node.evaluation.depth}</span></span>}
