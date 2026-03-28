@@ -6,181 +6,424 @@ export interface ChessEngineLine {
   multipv: number;
 }
 
-export interface ChessEngineSnapshot {
-  depth: number;
+export interface FullMoveEvaluation {
+  fen: string;
   evaluation: number;
+  depth: number;
   lines: ChessEngineLine[];
 }
 
+export interface EvaluationRequest {
+  minDepth: number;
+  linesAmount: number;
+}
+
+export interface EvaluationUpdate extends FullMoveEvaluation {
+  isFinal: boolean;
+}
+
 export interface EvaluationCache {
-  getEvaluation(fen: string, minDepth?: number): ChessEngineSnapshot | null;
+  getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
   addEvaluation(fen: string, depth: number, evaluation: number, lines: ChessEngineLine[]): void;
 }
 
+export const EngineEvaluationPriority = {
+  IMMEDIATE: 'IMMEDIATE',
+  NEXT: 'NEXT',
+  BACKGROUND: 'BACKGROUND',
+} as const;
+
+export type EngineEvaluationPriority =
+  typeof EngineEvaluationPriority[keyof typeof EngineEvaluationPriority];
+
 export interface ChessEngine {
-  evaluate(fen: string, minDepth: number): Promise<number>;
-  lines(fen: string, minDepth: number, amount: number): Promise<ChessEngineLine[]>;
-  peekEvaluation(fen: string, minDepth: number): number | null;
-  peekLines(fen: string, minDepth: number, amount: number): ChessEngineLine[] | null;
+  evaluate(
+    fen: string,
+    options: EvaluationRequest,
+    priority: EngineEvaluationPriority,
+    onUpdate?: (update: EvaluationUpdate) => void,
+  ): Promise<FullMoveEvaluation>;
+  getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
+  getLines(fen: string, minDepth?: number, amount?: number): ChessEngineLine[] | null;
 }
 
-interface AnalysisTask {
-  fen: string;
-  minDepth: number;
-  amount: number;
-  resolve(lines: ChessEngineLine[]): void;
+type JobPriority = 'IMMEDIATE' | 'NEXT' | 'BACKGROUND';
+
+interface JobSubscriber {
+  onUpdate?: (update: EvaluationUpdate) => void;
+  resolve(result: FullMoveEvaluation): void;
   reject(error: unknown): void;
 }
 
-class FinalEvaluationCache implements EvaluationCache {
-  private snapshotsByFen = new Map<string, ChessEngineSnapshot[]>();
+interface EngineJob {
+  fen: string;
+  minDepth: number;
+  linesAmount: number;
+  priority: JobPriority;
+  subscribers: JobSubscriber[];
+  collected: Map<number, ChessEngineLine>;
+  lastUpdate: EvaluationUpdate | null;
+  shouldRestart: boolean;
+}
 
-  getEvaluation(fen: string, minDepth: number = 0): ChessEngineSnapshot | null {
+class FinalEvaluationCache implements EvaluationCache {
+  private snapshotsByFen = new Map<string, FullMoveEvaluation[]>();
+
+  getEvaluation(fen: string, minDepth: number = 0): FullMoveEvaluation | null {
     const snapshots = this.snapshotsByFen.get(fen) ?? [];
-    return snapshots.find(function findSnapshot(entry) {
-      return entry.depth >= minDepth;
+    return snapshots.find(function findSnapshot(snapshot) {
+      return snapshot.depth >= minDepth;
     }) ?? null;
   }
 
   addEvaluation(fen: string, depth: number, evaluation: number, lines: ChessEngineLine[]): void {
-    const nextSnapshot: ChessEngineSnapshot = { depth, evaluation, lines };
+    const nextSnapshot: FullMoveEvaluation = {
+      fen,
+      depth,
+      evaluation,
+      lines,
+    };
     const snapshots = [...(this.snapshotsByFen.get(fen) ?? [])];
     const existingIndex = snapshots.findIndex(function findByDepth(snapshot) {
       return snapshot.depth === depth;
     });
 
     if (existingIndex >= 0) {
-      snapshots[existingIndex] = mergeSnapshots(snapshots[existingIndex], nextSnapshot);
+      snapshots[existingIndex] = mergeEvaluations(snapshots[existingIndex], nextSnapshot);
     } else {
       snapshots.push(nextSnapshot);
     }
 
-    snapshots.sort(function sortByDepth(a, b) {
-      return a.depth - b.depth;
+    snapshots.sort(function sortByDepth(left, right) {
+      return left.depth - right.depth;
     });
     this.snapshotsByFen.set(fen, snapshots);
   }
 }
 
-class StockfishChessEngine implements ChessEngine {
+class StockfishQueue {
   private worker: Worker;
-  private queue: AnalysisTask[] = [];
-  private currentTask: AnalysisTask | null = null;
-  private collected = new Map<number, ChessEngineLine>();
   private cache: EvaluationCache;
+  private currentJob: EngineJob | null = null;
+  private pendingJobs: EngineJob[] = [];
 
-  constructor() {
-    this.cache = new FinalEvaluationCache();
+  constructor(cache: EvaluationCache) {
+    this.cache = cache;
     this.worker = new Worker('/stockfish/stockfish.js');
     this.worker.onmessage = this.handleMessage.bind(this);
     this.worker.onerror = this.handleError.bind(this);
     this.worker.postMessage('uci');
   }
 
-  async evaluate(fen: string, minDepth: number): Promise<number> {
-    const cached = this.peekEvaluation(fen, minDepth);
-    if (cached !== null) return cached;
-
-    const lines = await this.enqueue(fen, minDepth, 1);
-    return lines[0]?.evaluation ?? 0;
+  evaluate(
+    fen: string,
+    options: EvaluationRequest,
+    priority: EngineEvaluationPriority,
+    onUpdate?: (update: EvaluationUpdate) => void,
+  ): Promise<FullMoveEvaluation> {
+    return this.requestEvaluation(priority, fen, options, onUpdate);
   }
 
-  async lines(fen: string, minDepth: number, amount: number): Promise<ChessEngineLine[]> {
-    const cached = this.peekLines(fen, minDepth, amount);
-    if (cached) return cached;
-    return this.enqueue(fen, minDepth, amount);
-  }
+  private requestEvaluation(
+    priority: JobPriority,
+    fen: string,
+    options: EvaluationRequest,
+    onUpdate?: (update: EvaluationUpdate) => void,
+  ): Promise<FullMoveEvaluation> {
+    const cached = this.cache.getEvaluation(fen, options.minDepth);
+    if (cached && cached.lines.length >= options.linesAmount) {
+      const cachedResult = trimEvaluationLines(cached, options.linesAmount);
+      if (onUpdate) onUpdate({ ...cachedResult, isFinal: true });
+      return Promise.resolve(cachedResult);
+    }
 
-  peekEvaluation(fen: string, minDepth: number): number | null {
-    const snapshot = this.cache.getEvaluation(fen, minDepth);
-    return snapshot ? snapshot.evaluation : null;
-  }
+    return new Promise<FullMoveEvaluation>((resolve, reject) => {
+      const subscriber: JobSubscriber = { onUpdate, resolve, reject };
+      const existingJob = this.findJob(fen);
 
-  peekLines(fen: string, minDepth: number, amount: number): ChessEngineLine[] | null {
-    const snapshot = this.cache.getEvaluation(fen, minDepth);
-    if (!snapshot || snapshot.lines.length < amount) return null;
-    return snapshot ? snapshot.lines.slice(0, amount) : null;
-  }
+      if (existingJob) {
+        existingJob.subscribers.push(subscriber);
+        upgradeJob(existingJob, priority, options);
+        if (existingJob.lastUpdate && onUpdate) onUpdate(trimUpdateLines(existingJob.lastUpdate, existingJob.linesAmount));
 
-  private enqueue(fen: string, minDepth: number, amount: number): Promise<ChessEngineLine[]> {
-    return new Promise<ChessEngineLine[]>((resolve, reject) => {
-      this.queue.push({ fen, minDepth, amount, resolve, reject });
+        if (existingJob === this.currentJob && shouldPreemptCurrent(existingJob, priority, options)) {
+          existingJob.shouldRestart = true;
+          this.worker.postMessage('stop');
+        } else if (existingJob !== this.currentJob) {
+          this.reorderPendingJobs();
+          this.processQueue();
+        }
+        return;
+      }
+
+      const job = createJob(fen, priority, options, subscriber);
+      this.pendingJobs.push(job);
+      this.reorderPendingJobs();
       this.processQueue();
     });
   }
 
+  private findJob(fen: string): EngineJob | null {
+    if (this.currentJob?.fen === fen) return this.currentJob;
+
+    return this.pendingJobs.find(function matchJob(job) {
+      return job.fen === fen;
+    }) ?? null;
+  }
+
+  private reorderPendingJobs(): void {
+    this.pendingJobs.sort(function sortJobs(left, right) {
+      const priorityDiff = getPriorityRank(left.priority) - getPriorityRank(right.priority);
+      if (priorityDiff !== 0) return priorityDiff;
+      return right.minDepth - left.minDepth;
+    });
+  }
+
   private processQueue(): void {
-    if (this.currentTask || this.queue.length === 0) return;
+    if (this.currentJob || this.pendingJobs.length === 0) return;
 
-    const nextTask = this.queue.shift();
-    if (!nextTask) return;
+    const nextJob = this.pendingJobs.shift();
+    if (!nextJob) return;
 
-    this.currentTask = nextTask;
-    this.collected = new Map<number, ChessEngineLine>();
-    this.worker.postMessage(`setoption name MultiPV value ${nextTask.amount}`);
-    this.worker.postMessage(`position fen ${nextTask.fen}`);
-    this.worker.postMessage(`go depth ${nextTask.minDepth}`);
+    nextJob.collected = new Map<number, ChessEngineLine>();
+    nextJob.lastUpdate = null;
+    nextJob.shouldRestart = false;
+    this.currentJob = nextJob;
+
+    this.worker.postMessage(`setoption name MultiPV value ${nextJob.linesAmount}`);
+    this.worker.postMessage(`position fen ${nextJob.fen}`);
+    this.worker.postMessage(`go depth ${nextJob.minDepth}`);
   }
 
   private handleMessage(event: MessageEvent<string>): void {
-    const line = event.data;
-    const task = this.currentTask;
-    if (!task) return;
+    const currentJob = this.currentJob;
+    if (!currentJob) return;
 
-    if (line.includes('info') && (line.includes('score cp') || line.includes('score mate'))) {
-      const depthMatch = line.match(/depth (\d+)/);
-      const multipvMatch = line.match(/multipv (\d+)/);
-      const pvMatch = line.match(/ pv (.+)/);
-      const cpMatch = line.match(/score cp (-?\d+)/);
-      const mateMatch = line.match(/score mate (-?\d+)/);
-
-      const depth = depthMatch ? parseInt(depthMatch[1], 10) : 0;
-      const multipv = multipvMatch ? parseInt(multipvMatch[1], 10) : 1;
-      const pvUci = pvMatch ? pvMatch[1].trim() : '';
-
-      if (depth <= 0 || !pvUci) return;
-
-      this.collected.set(multipv, {
-        uci: pvUci.split(' ')[0],
-        pv: pvUci.split(' '),
-        evaluation: normalizeScoreForWhite(task.fen, cpMatch?.[1], mateMatch?.[1]),
-        depth,
-        multipv,
-      });
+    const message = event.data;
+    if (message.includes('info') && (message.includes('score cp') || message.includes('score mate'))) {
+      this.handleInfoMessage(currentJob, message);
       return;
     }
 
-    if (!line.startsWith('bestmove')) return;
+    if (message.startsWith('bestmove')) {
+      this.handleBestMove(currentJob);
+    }
+  }
 
-    const result = [...this.collected.values()]
-      .filter(function filterByDepth(entry) {
-        return entry.depth >= task.minDepth;
-      })
-      .sort(function sortByMultiPv(a, b) {
-        return a.multipv - b.multipv;
-      })
-      .slice(0, task.amount);
+  private handleInfoMessage(job: EngineJob, message: string): void {
+    const depthMatch = message.match(/depth (\d+)/);
+    const multipvMatch = message.match(/multipv (\d+)/);
+    const pvMatch = message.match(/ pv (.+)/);
+    const cpMatch = message.match(/score cp (-?\d+)/);
+    const mateMatch = message.match(/score mate (-?\d+)/);
 
-    this.cache.addEvaluation(task.fen, task.minDepth, result[0]?.evaluation ?? 0, result);
+    const depth = depthMatch ? parseInt(depthMatch[1], 10) : 0;
+    const multipv = multipvMatch ? parseInt(multipvMatch[1], 10) : 1;
+    const pvUci = pvMatch ? pvMatch[1].trim() : '';
 
-    task.resolve(result);
-    this.currentTask = null;
+    if (depth <= 0 || !pvUci) return;
+
+    job.collected.set(multipv, {
+      uci: pvUci.split(' ')[0],
+      pv: pvUci.split(' '),
+      evaluation: normalizeScoreForWhite(job.fen, cpMatch?.[1], mateMatch?.[1]),
+      depth,
+      multipv,
+    });
+
+    const update = buildUpdate(job, false);
+    if (!update) return;
+
+    job.lastUpdate = update;
+    notifySubscribers(job, update);
+  }
+
+  private handleBestMove(job: EngineJob): void {
+    if (job.shouldRestart) {
+      job.shouldRestart = false;
+      this.currentJob = null;
+      this.pendingJobs.unshift(job);
+      this.reorderPendingJobs();
+      this.processQueue();
+      return;
+    }
+
+    const finalResult = buildFinalEvaluation(job);
+    if (finalResult) {
+      this.cache.addEvaluation(job.fen, finalResult.depth, finalResult.evaluation, finalResult.lines);
+      notifySubscribers(job, { ...finalResult, isFinal: true });
+      resolveSubscribers(job, finalResult);
+    } else {
+      rejectSubscribers(job, new Error('Engine finished without a valid evaluation'));
+    }
+
+    this.currentJob = null;
     this.processQueue();
   }
 
   private handleError(error: ErrorEvent): void {
-    if (this.currentTask) {
-      this.currentTask.reject(error);
-      this.currentTask = null;
+    if (this.currentJob) {
+      rejectSubscribers(this.currentJob, error);
+      this.currentJob = null;
     }
-    while (this.queue.length > 0) {
-      const queued = this.queue.shift();
-      queued?.reject(error);
+
+    while (this.pendingJobs.length > 0) {
+      const job = this.pendingJobs.shift();
+      if (job) rejectSubscribers(job, error);
     }
   }
 }
 
-function mergeSnapshots(current: ChessEngineSnapshot, next: ChessEngineSnapshot): ChessEngineSnapshot {
+class StockfishChessEngine implements ChessEngine {
+  private queue: StockfishQueue;
+  private cache: EvaluationCache;
+
+  constructor() {
+    this.cache = new FinalEvaluationCache();
+    this.queue = new StockfishQueue(this.cache);
+  }
+
+  evaluate(
+    fen: string,
+    options: EvaluationRequest,
+    priority: EngineEvaluationPriority,
+    onUpdate?: (update: EvaluationUpdate) => void,
+  ): Promise<FullMoveEvaluation> {
+    return this.queue.evaluate(fen, options, priority, onUpdate);
+  }
+
+  getEvaluation(fen: string, minDepth: number = 0): FullMoveEvaluation | null {
+    return this.cache.getEvaluation(fen, minDepth);
+  }
+
+  getLines(fen: string, minDepth: number = 0, amount: number = 1): ChessEngineLine[] | null {
+    const evaluation = this.cache.getEvaluation(fen, minDepth);
+    if (!evaluation || evaluation.lines.length < amount) return null;
+    return evaluation.lines.slice(0, amount);
+  }
+}
+
+function createJob(
+  fen: string,
+  priority: JobPriority,
+  options: EvaluationRequest,
+  subscriber: JobSubscriber,
+): EngineJob {
+  return {
+    fen,
+    minDepth: options.minDepth,
+    linesAmount: options.linesAmount,
+    priority,
+    subscribers: [subscriber],
+    collected: new Map<number, ChessEngineLine>(),
+    lastUpdate: null,
+    shouldRestart: false,
+  };
+}
+
+function buildUpdate(job: EngineJob, isFinal: boolean): EvaluationUpdate | null {
+  const lines = [...job.collected.values()]
+    .sort(function sortByMultiPv(left, right) {
+      return left.multipv - right.multipv;
+    })
+    .slice(0, job.linesAmount);
+
+  if (lines.length === 0) return null;
+
+  return {
+    fen: job.fen,
+    evaluation: lines[0].evaluation,
+    depth: lines[0].depth,
+    lines,
+    isFinal,
+  };
+}
+
+function buildFinalEvaluation(job: EngineJob): FullMoveEvaluation | null {
+  const lines = [...job.collected.values()]
+    .filter(function matchDepth(line) {
+      return line.depth >= job.minDepth;
+    })
+    .sort(function sortByMultiPv(left, right) {
+      return left.multipv - right.multipv;
+    })
+    .slice(0, job.linesAmount);
+
+  if (lines.length === 0) return null;
+
+  return {
+    fen: job.fen,
+    evaluation: lines[0].evaluation,
+    depth: Math.min(...lines.map(function getDepth(line) {
+      return line.depth;
+    })),
+    lines,
+  };
+}
+
+function notifySubscribers(job: EngineJob, update: EvaluationUpdate): void {
+  const trimmedUpdate = trimUpdateLines(update, job.linesAmount);
+  job.subscribers.forEach(function notify(subscriber) {
+    subscriber.onUpdate?.(trimmedUpdate);
+  });
+}
+
+function resolveSubscribers(job: EngineJob, result: FullMoveEvaluation): void {
+  const trimmedResult = trimEvaluationLines(result, job.linesAmount);
+  job.subscribers.forEach(function resolve(subscriber) {
+    subscriber.resolve(trimmedResult);
+  });
+}
+
+function rejectSubscribers(job: EngineJob, error: unknown): void {
+  job.subscribers.forEach(function reject(subscriber) {
+    subscriber.reject(error);
+  });
+}
+
+function shouldPreemptCurrent(job: EngineJob, priority: JobPriority, options: EvaluationRequest): boolean {
+  return priority === EngineEvaluationPriority.IMMEDIATE && (
+    getPriorityRank(priority) < getPriorityRank(job.priority) ||
+    options.minDepth > job.minDepth ||
+    options.linesAmount > job.linesAmount
+  );
+}
+
+function trimUpdateLines(update: EvaluationUpdate, amount: number): EvaluationUpdate {
+  return {
+    ...update,
+    lines: update.lines.slice(0, amount),
+  };
+}
+
+function trimEvaluationLines(evaluation: FullMoveEvaluation, amount: number): FullMoveEvaluation {
+  return {
+    ...evaluation,
+    lines: evaluation.lines.slice(0, amount),
+  };
+}
+
+function upgradeJob(job: EngineJob, priority: JobPriority, options: EvaluationRequest): void {
+  if (getPriorityRank(priority) < getPriorityRank(job.priority)) {
+    job.priority = priority;
+  }
+
+  job.minDepth = Math.max(job.minDepth, options.minDepth);
+  job.linesAmount = Math.max(job.linesAmount, options.linesAmount);
+}
+
+function getPriorityRank(priority: JobPriority): number {
+  switch (priority) {
+    case EngineEvaluationPriority.IMMEDIATE:
+      return 0;
+    case EngineEvaluationPriority.NEXT:
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+function mergeEvaluations(current: FullMoveEvaluation, next: FullMoveEvaluation): FullMoveEvaluation {
   const mergedByMultiPv = new Map<number, ChessEngineLine>();
 
   current.lines.forEach(function addCurrent(line) {
@@ -191,10 +434,11 @@ function mergeSnapshots(current: ChessEngineSnapshot, next: ChessEngineSnapshot)
   });
 
   return {
+    fen: next.fen,
     depth: Math.max(current.depth, next.depth),
     evaluation: next.evaluation,
-    lines: [...mergedByMultiPv.values()].sort(function sortByMultiPv(a, b) {
-      return a.multipv - b.multipv;
+    lines: [...mergedByMultiPv.values()].sort(function sortByMultiPv(left, right) {
+      return left.multipv - right.multipv;
     }),
   };
 }
