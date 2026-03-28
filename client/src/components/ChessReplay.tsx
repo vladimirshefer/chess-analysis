@@ -409,22 +409,28 @@ const ChessReplay: React.FC = () => {
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
       <div className="flex-1 flex flex-col items-center">
-        <div className="w-full max-w-[480px] mb-4 flex items-center justify-between bg-gray-900 text-white p-3 rounded-lg">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase text-gray-500 font-bold">Engine Status</span>
-            <span className="text-sm font-medium truncate max-w-[200px]">{status}</span>
-          </div>
-          <div className="text-right">
-            <span className="text-[10px] uppercase text-gray-500 font-bold">Eval</span>
-            <div className="text-sm font-mono text-indigo-400">{currentNodeId && tree[currentNodeId]?.evaluation ? formatScore(tree[currentNodeId].evaluation.score) : '--'}</div>
-          </div>
-        </div>
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
           <Chessboard id="AnalysisBoard" position={currentNodeId ? tree[currentNodeId].fen : 'start'} onPieceDrop={onDrop} boardOrientation="white" animationDuration={200} />
         </div>
 
-        <div className="w-full max-w-[480px] mt-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Engine Suggestions</h3>
+        <div className="flex items-center gap-4 mt-6">
+          <button onClick={() => setCurrentNodeId(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
+          <button onClick={() => { if (currentNodeId && tree[currentNodeId]) setCurrentNodeId(tree[currentNodeId].parentId); }} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Back</button>
+          <button disabled={!currentNodeId || tree[currentNodeId].children.length === 0} onClick={() => { if (currentNodeId && tree[currentNodeId].children.length > 0) setCurrentNodeId(tree[currentNodeId].children[0]); }} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30">Forward</button>
+        </div>
+      </div>
+
+      <div className="w-full lg:w-[450px] flex flex-col gap-4">
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] uppercase text-gray-400 font-bold">Eval</span>
+              <div className="text-sm font-mono text-indigo-500">{currentNodeId && tree[currentNodeId]?.evaluation ? formatScore(tree[currentNodeId].evaluation.score) : '--'}</div>
+            </div>
+          </div>
           <div className="flex flex-col gap-2">
             {engineLines.length === 0 && <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>}
             {engineLines.map((line, idx) => (
@@ -445,25 +451,7 @@ const ChessReplay: React.FC = () => {
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="flex items-center gap-4 mt-6">
-          <button onClick={() => setCurrentNodeId(null)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
-          <button onClick={() => { if (currentNodeId && tree[currentNodeId]) setCurrentNodeId(tree[currentNodeId].parentId); }} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Back</button>
-          <button disabled={!currentNodeId || tree[currentNodeId].children.length === 0} onClick={() => { if (currentNodeId && tree[currentNodeId].children.length > 0) setCurrentNodeId(tree[currentNodeId].children[0]); }} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30">Forward</button>
-        </div>
-      </div>
-
-      <div className="w-full lg:w-[450px] flex flex-col gap-4">
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-gray-800">Full PGN Tree</h3>
-            <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
-          </div>
-          <form onSubmit={(e) => { e.preventDefault(); importPgn(pgnInput); }} className="flex flex-col gap-2">
-            <textarea className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} />
-            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Import PGN</button>
-          </form>
+          <div className="mt-3 text-[11px] text-gray-400">{status}</div>
         </div>
 
         <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
@@ -493,6 +481,17 @@ const ChessReplay: React.FC = () => {
               );
             })}
           </div>
+        </div>
+
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold text-gray-800">PGN</h3>
+            <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
+          </div>
+          <form onSubmit={(e) => { e.preventDefault(); importPgn(pgnInput); }} className="flex flex-col gap-2">
+            <textarea className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} />
+            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Import PGN</button>
+          </form>
         </div>
       </div>
     </div>
