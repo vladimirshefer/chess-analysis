@@ -63,15 +63,15 @@ const ChessReplay: React.FC = () => {
       <div className="flex-1 flex flex-col items-center">
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800 relative">
           {/* 
-            ULTIMATE RE-RENDER:
-            Using 'fen' as the 'key' forces React to completely destroy and 
-            re-create the Chessboard DOM and internal state on every single move.
-            This bypasses any prop-update bugs in the library.
+            REFINED RENDER:
+            Removed 'key={fen}' to allow react-chessboard to animate pieces
+            between positions instead of destroying the board.
           */}
           <Chessboard 
-            key={fen} 
+            id="AnalysisBoard"
             position={fen} 
             boardOrientation="white"
+            animationDuration={300}
           />
         </div>
         
