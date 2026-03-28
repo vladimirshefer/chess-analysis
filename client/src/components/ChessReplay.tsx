@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
+import { getChessEngine, type ChessEngine, type ChessEngineLine } from '../lib/chessEngine';
 
 interface MoveNode {
   id: string;
@@ -15,33 +16,16 @@ interface EngineLine {
   move: string;      
   uci: string;       
   pv: string;        
-  score: string;
+  score: number;
   depth: number;
   multipv: number;
 }
 
-interface PositionSnapshot {
-  depth: number;
-  evaluation: string;
-  pvUCI?: string;
-  lines: EngineLine[];
-}
-
 interface NodeEvaluation {
-  score: string;
+  score: number;
   depth: number;
   pvUCI?: string;
   lines?: EngineLine[];
-}
-
-interface PendingAnalysis {
-  nodeId: string;
-  fen: string;
-  requestedDepth: number;
-  requestedMultiPV: number;
-  evaluation?: string;
-  pvUCI?: string;
-  lines: Record<number, EngineLine>;
 }
 
 const ChessReplay: React.FC = () => {
@@ -52,25 +36,21 @@ const ChessReplay: React.FC = () => {
   const [pgnInput, setPgnInput] = useState('');
   const [status, setStatus] = useState('Interactive Mode');
   const [engineLines, setEngineLines] = useState<EngineLine[]>([]);
-  const [positionCache, setPositionCache] = useState<Record<string, PositionSnapshot[]>>({});
 
   // --- REFS ---
-  const engineRef = useRef<Worker | null>(null);
+  const engineRef = useRef<ChessEngine | null>(null);
   const treeRef = useRef<Record<string, MoveNode>>({});
-  const positionCacheRef = useRef<Record<string, PositionSnapshot[]>>({});
   const currentNodeIdRef = useRef<string | null>(null);
-  const activeTaskNodeIdRef = useRef<string | null>(null);
-  const activeTaskFenRef = useRef<string>('start');
-  const activeTaskDepthRef = useRef(0);
-  const pendingAnalysisRef = useRef<PendingAnalysis | null>(null);
   const analysisSessionRef = useRef(0);
-  const readySessionRef = useRef(0);
 
   useEffect(() => {
     treeRef.current = tree;
-    positionCacheRef.current = positionCache;
     currentNodeIdRef.current = currentNodeId;
-  }, [tree, positionCache, currentNodeId]);
+  }, [tree, currentNodeId]);
+
+  useEffect(() => {
+    engineRef.current = getChessEngine();
+  }, []);
 
   // --- PGN GENERATION ---
   const generatePgnString = (nodeId: string, moveNum: number, isWhite: boolean, isFirstInVar: boolean, currentTree: Record<string, MoveNode>): string => {
@@ -102,7 +82,7 @@ const ChessReplay: React.FC = () => {
   useEffect(() => { if (fullTreePgn) setPgnInput(fullTreePgn); }, [fullTreePgn]);
 
   // --- ENGINE HELPERS ---
-  const uciToSanLine = (uciString: string, baseFen: string) => {
+  function uciToSanLine(uciString: string, baseFen: string) {
     const tempGame = new Chess(baseFen === 'start' ? undefined : baseFen);
     const uciMoves = uciString.split(' ');
     let sanMoves: string[] = [];
@@ -114,45 +94,73 @@ const ChessReplay: React.FC = () => {
       } catch(e) { break; }
     }
     return sanMoves;
-  };
+  }
 
-  const normalizeScoreForWhite = (fen: string, cpScore?: string, mateScore?: string) => {
-    const sideToMove = fen === 'start' ? 'w' : fen.split(' ')[1];
-    const perspective = sideToMove === 'b' ? -1 : 1;
+  function getCurrentFen(nodeId: string | null, currentTree: Record<string, MoveNode>) {
+    return nodeId ? currentTree[nodeId]?.fen ?? 'start' : 'start';
+  }
 
-    if (cpScore) return (parseInt(cpScore, 10) * perspective / 100).toFixed(1);
-    if (mateScore) return `M${parseInt(mateScore, 10) * perspective}`;
-    return '';
-  };
+  function hasSnapshot(fen: string, targetDepth: number, minLines: number) {
+    const engine = engineRef.current;
+    if (!engine) return false;
+    if (minLines > 0) return engine.peekLines(fen, targetDepth, minLines) !== null;
+    return engine.peekEvaluation(fen, targetDepth) !== null;
+  }
 
-  const getCurrentFen = (nodeId: string | null, currentTree: Record<string, MoveNode>) => nodeId ? currentTree[nodeId]?.fen ?? 'start' : 'start';
+  function formatScore(score: number) {
+    return score >= 0 ? `+${score.toFixed(1)}` : score.toFixed(1);
+  }
 
-  const getBestSnapshot = (fen: string) => {
-    const snapshots = positionCacheRef.current[fen] ?? [];
-    if (snapshots.length === 0) return null;
-    return snapshots.reduce((best, snapshot) => snapshot.depth > best.depth ? snapshot : best);
-  };
+  function areEngineLinesEqual(left?: EngineLine[], right?: EngineLine[]) {
+    if (left === right) return true;
+    if (!left || !right) return !left && !right;
+    if (left.length !== right.length) return false;
 
-  const upsertPositionSnapshot = (fen: string, nextSnapshot: PositionSnapshot) => {
-    setPositionCache(prev => {
-      const existingSnapshots = prev[fen] ?? [];
-      const index = existingSnapshots.findIndex(snapshot => snapshot.depth === nextSnapshot.depth);
-      const snapshots = [...existingSnapshots];
+    for (let index = 0; index < left.length; index += 1) {
+      const leftLine = left[index];
+      const rightLine = right[index];
+      if (
+        leftLine.move !== rightLine.move ||
+        leftLine.uci !== rightLine.uci ||
+        leftLine.pv !== rightLine.pv ||
+        leftLine.score !== rightLine.score ||
+        leftLine.depth !== rightLine.depth ||
+        leftLine.multipv !== rightLine.multipv
+      ) {
+        return false;
+      }
+    }
 
-      if (index >= 0) snapshots[index] = nextSnapshot;
-      else snapshots.push(nextSnapshot);
+    return true;
+  }
 
-      snapshots.sort((a, b) => a.depth - b.depth);
-      return { ...prev, [fen]: snapshots };
-    });
-  };
+  function toEngineLine(baseFen: string, line: ChessEngineLine): EngineLine | null {
+    const sanMoves = uciToSanLine(line.pv.join(' '), baseFen);
+    if (sanMoves.length === 0) return null;
+    return {
+      move: sanMoves[0],
+      uci: line.uci,
+      pv: sanMoves.join(' '),
+      score: line.evaluation,
+      depth: line.depth,
+      multipv: line.multipv,
+    };
+  }
 
-  const syncNodeEvaluation = (nodeId: string, evaluation: Partial<NodeEvaluation>) => {
+  function toEngineLines(baseFen: string, lines: ChessEngineLine[]): EngineLine[] {
+    return lines
+      .map(function mapLine(line) {
+        return toEngineLine(baseFen, line);
+      })
+      .filter((line): line is EngineLine => line !== null);
+  }
+
+  function syncNodeEvaluation(nodeId: string, evaluation: Partial<NodeEvaluation>) {
     setTree(prev => {
       const node = prev[nodeId];
       if (!node) return prev;
       const nextEvaluation = {
-        score: evaluation.score ?? node.evaluation?.score ?? '',
+        score: evaluation.score ?? node.evaluation?.score ?? 0,
         depth: evaluation.depth ?? node.evaluation?.depth ?? 0,
         pvUCI: evaluation.pvUCI ?? node.evaluation?.pvUCI,
         lines: evaluation.lines ?? node.evaluation?.lines,
@@ -162,202 +170,83 @@ const ChessReplay: React.FC = () => {
         currentEvaluation?.score === nextEvaluation.score &&
         currentEvaluation?.depth === nextEvaluation.depth &&
         currentEvaluation?.pvUCI === nextEvaluation.pvUCI &&
-        currentEvaluation?.lines === nextEvaluation.lines
+        areEngineLinesEqual(currentEvaluation?.lines, nextEvaluation.lines)
       ) {
         return prev;
       }
       return { ...prev, [nodeId]: { ...node, evaluation: nextEvaluation } };
     });
-  };
+  }
 
-  const scheduleNextTask = () => {
-    if (!engineRef.current) return;
+  function syncVisibleEngineLines(nextLines: EngineLine[]) {
+    setEngineLines(function updateLines(previousLines) {
+      return areEngineLinesEqual(previousLines, nextLines) ? previousLines : nextLines;
+    });
+  }
+
+  function scheduleNextTask() {
     const currentTree = treeRef.current;
     const focusId = currentNodeIdRef.current;
     const otherNodeIds = Object.keys(currentTree).filter(nodeId => nodeId !== focusId);
 
-    const findNodeNeedingDepth = (nodeIds: string[], targetDepth: number) => {
+    function findNodeNeedingTask(nodeIds: string[], targetDepth: number, minLines: number) {
       for (const nodeId of nodeIds) {
         const node = currentTree[nodeId];
         if (!node) continue;
-        const bestSnapshot = getBestSnapshot(node.fen);
-        if (!bestSnapshot || bestSnapshot.depth < targetDepth) return nodeId;
+        if (!hasSnapshot(node.fen, targetDepth, minLines)) return nodeId;
       }
       return null;
-    };
+    }
 
     if (focusId) {
-      const currentAt12 = findNodeNeedingDepth([focusId], 12);
+      const currentAt12 = findNodeNeedingTask([focusId], 12, 3);
       if (currentAt12) {
-        runEngine(currentAt12, 12);
-        return;
+        return { nodeId: currentAt12, depth: 12, amount: 3, includeLines: true };
       }
     }
 
-    const othersAt12 = findNodeNeedingDepth(otherNodeIds, 12);
+    const othersAt12 = findNodeNeedingTask(otherNodeIds, 12, 0);
     if (othersAt12) {
-      runEngine(othersAt12, 12);
-      return;
+      return { nodeId: othersAt12, depth: 12, amount: 1, includeLines: false };
     }
 
     if (focusId) {
-      const currentAt20 = findNodeNeedingDepth([focusId], 20);
+      const currentAt20 = findNodeNeedingTask([focusId], 20, 3);
       if (currentAt20) {
-        runEngine(currentAt20, 20);
-        return;
+        return { nodeId: currentAt20, depth: 20, amount: 3, includeLines: true };
       }
     }
 
-    const othersAt16 = findNodeNeedingDepth(otherNodeIds, 16);
+    const othersAt16 = findNodeNeedingTask(otherNodeIds, 16, 0);
     if (othersAt16) {
-      runEngine(othersAt16, 16);
-      return;
+      return { nodeId: othersAt16, depth: 16, amount: 1, includeLines: false };
     }
 
-    const othersAt20 = findNodeNeedingDepth(otherNodeIds, 20);
+    const othersAt20 = findNodeNeedingTask(otherNodeIds, 20, 0);
     if (othersAt20) {
-      runEngine(othersAt20, 20);
-      return;
+      return { nodeId: othersAt20, depth: 20, amount: 1, includeLines: false };
     }
 
-    setStatus('Analysis Complete');
-  };
-
-  const runEngine = (nodeId: string, depth: number) => {
-    const node = treeRef.current[nodeId];
-    if (!node) return;
-    const requestedMultiPV = nodeId === currentNodeIdRef.current ? 3 : 1;
-    activeTaskNodeIdRef.current = nodeId;
-    activeTaskFenRef.current = node.fen;
-    activeTaskDepthRef.current = depth;
-    pendingAnalysisRef.current = {
-      nodeId,
-      fen: node.fen,
-      requestedDepth: depth,
-      requestedMultiPV,
-      lines: {},
-    };
-    engineRef.current?.postMessage(`setoption name MultiPV value ${requestedMultiPV}`);
-    engineRef.current?.postMessage(`position fen ${node.fen}`);
-    engineRef.current?.postMessage(`go depth ${depth}`);
-    setStatus(`Analyzing ${node.san || 'start'} (d${depth})...`);
-  };
-
-  useEffect(() => {
-    const worker = new Worker('/stockfish/stockfish.js');
-    engineRef.current = worker;
-    worker.onmessage = (e) => {
-      const line = e.data;
-
-      if (line === 'readyok') {
-        if (readySessionRef.current === analysisSessionRef.current) scheduleNextTask();
-        return;
-      }
-
-      const nodeId = activeTaskNodeIdRef.current;
-      const currentId = currentNodeIdRef.current;
-      const activeFen = activeTaskFenRef.current;
-      const requestedDepth = activeTaskDepthRef.current;
-      const pendingAnalysis = pendingAnalysisRef.current;
-
-      if (line.includes('info') && (line.includes('score cp') || line.includes('score mate'))) {
-        let cpMatch = line.match(/score cp (-?\d+)/);
-        let mateMatch = line.match(/score mate (-?\d+)/);
-        let depthMatch = line.match(/depth (\d+)/);
-        let multipvMatch = line.match(/multipv (\d+)/);
-        let pvMatch = line.match(/ pv (.+)/);
-
-        let score = normalizeScoreForWhite(activeFen, cpMatch?.[1], mateMatch?.[1]);
-        let depth = depthMatch ? parseInt(depthMatch[1]) : 0;
-        let multipv = multipvMatch ? parseInt(multipvMatch[1]) : 1;
-        let pvUCI = pvMatch ? pvMatch[1] : '';
-
-        if (nodeId && pvUCI && score && depth > 0 && requestedDepth > 0 && pendingAnalysis && pendingAnalysis.nodeId === nodeId && pendingAnalysis.requestedDepth === requestedDepth) {
-          const sanMoves = uciToSanLine(pvUCI, activeFen);
-          if (sanMoves.length > 0) {
-            const newLine: EngineLine = { move: sanMoves[0], uci: pvUCI.split(' ')[0], pv: sanMoves.join(' '), score, depth, multipv };
-            pendingAnalysis.lines[multipv] = newLine;
-            if (multipv === 1) {
-              pendingAnalysis.evaluation = score;
-              pendingAnalysis.pvUCI = pvUCI;
-            }
-
-            const liveLines = Object.values(pendingAnalysis.lines).sort((a, b) => a.multipv - b.multipv);
-
-            if (nodeId === currentId) {
-              setEngineLines(liveLines);
-            }
-          }
-        }
-      }
-      if (line.startsWith('bestmove')) {
-        const finishedAnalysis = pendingAnalysisRef.current;
-        if (
-          finishedAnalysis &&
-          finishedAnalysis.nodeId &&
-          finishedAnalysis.requestedDepth > 0 &&
-          finishedAnalysis.evaluation
-        ) {
-          const existingSnapshot = positionCacheRef.current[finishedAnalysis.fen]?.find(
-            snapshot => snapshot.depth === finishedAnalysis.requestedDepth
-          );
-          const existingLines = existingSnapshot?.lines ?? [];
-          const mergedLinesByMultipv: Record<number, EngineLine> = {};
-
-          existingLines.forEach(existingLine => {
-            mergedLinesByMultipv[existingLine.multipv] = existingLine;
-          });
-          Object.values(finishedAnalysis.lines).forEach(newLine => {
-            mergedLinesByMultipv[newLine.multipv] = newLine;
-          });
-
-          const mergedLines = Object.values(mergedLinesByMultipv).sort((a, b) => a.multipv - b.multipv);
-          const targetLineCount = Math.max(existingLines.length, finishedAnalysis.requestedMultiPV);
-          const finishedLines = mergedLines.slice(0, targetLineCount);
-          const snapshot: PositionSnapshot = {
-            depth: finishedAnalysis.requestedDepth,
-            evaluation: finishedAnalysis.evaluation,
-            pvUCI: finishedAnalysis.pvUCI,
-            lines: finishedLines,
-          };
-
-          upsertPositionSnapshot(finishedAnalysis.fen, snapshot);
-
-          const bestSnapshot = getBestSnapshot(finishedAnalysis.fen);
-          const bestDepth = Math.max(bestSnapshot?.depth ?? 0, finishedAnalysis.requestedDepth);
-          syncNodeEvaluation(finishedAnalysis.nodeId, {
-            score: finishedAnalysis.evaluation,
-            depth: bestDepth,
-            pvUCI: finishedAnalysis.pvUCI,
-            lines: finishedLines,
-          });
-
-          if (finishedAnalysis.nodeId === currentId) {
-            setEngineLines(finishedLines);
-          }
-        }
-        pendingAnalysisRef.current = null;
-        scheduleNextTask();
-      }
-    };
-    worker.postMessage('uci');
-    worker.postMessage('isready');
-    return () => worker.terminate();
-  }, []);
+    return null;
+  }
 
   // Sync current position to cached engine suggestions
   useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
     const currentFen = getCurrentFen(currentNodeId, tree);
-    const bestSnapshot = positionCache[currentFen]?.[positionCache[currentFen].length - 1];
+    const bestLines = engine.peekLines(currentFen, 0, 3);
 
-    if (bestSnapshot?.lines?.length) {
-      setEngineLines(bestSnapshot.lines);
+    if (bestLines?.length) {
+      const convertedLines = toEngineLines(currentFen, bestLines);
+      syncVisibleEngineLines(convertedLines);
       if (currentNodeId) {
+        const bestEvaluation = engine.peekEvaluation(currentFen, 0) ?? 0;
         syncNodeEvaluation(currentNodeId, {
-          score: bestSnapshot.evaluation,
-          depth: bestSnapshot.depth,
-          pvUCI: bestSnapshot.pvUCI,
-          lines: bestSnapshot.lines,
+          score: bestEvaluation,
+          depth: bestLines[0].depth,
+          pvUCI: bestLines[0].pv.join(' '),
+          lines: convertedLines,
         });
       }
     } else {
@@ -365,7 +254,7 @@ const ChessReplay: React.FC = () => {
       if (currentPos.evaluation?.pvUCI) {
         const sanMoves = uciToSanLine(currentPos.evaluation.pvUCI, currentPos.fen);
         if (sanMoves.length > 0) {
-          setEngineLines([{
+          syncVisibleEngineLines([{
             move: sanMoves[0],
             uci: currentPos.evaluation.pvUCI.split(' ')[0],
             pv: sanMoves.join(' '),
@@ -375,23 +264,70 @@ const ChessReplay: React.FC = () => {
           }]);
         }
       } else {
-        setEngineLines([]);
+        syncVisibleEngineLines([]);
       }
     }
-  }, [currentNodeId, positionCache, tree]);
+  }, [currentNodeId, tree]);
 
-  // Restart engine work when the selected position changes
   useEffect(() => {
-    const currentFen = getCurrentFen(currentNodeId, tree);
-    engineRef.current?.postMessage('stop');
-    activeTaskNodeIdRef.current = null;
-    activeTaskFenRef.current = currentFen;
-    activeTaskDepthRef.current = 0;
-    pendingAnalysisRef.current = null;
-    analysisSessionRef.current += 1;
-    readySessionRef.current = analysisSessionRef.current;
-    engineRef.current?.postMessage('isready');
-  }, [currentNodeId]);
+    const maybeEngine = engineRef.current;
+    if (!maybeEngine) return;
+    const analysisEngine: ChessEngine = maybeEngine;
+
+    const session = analysisSessionRef.current + 1;
+    analysisSessionRef.current = session;
+    let cancelled = false;
+
+    async function runAnalysisLoop() {
+      while (!cancelled && analysisSessionRef.current === session) {
+        const task = scheduleNextTask();
+        if (!task) {
+          setStatus('Analysis Complete');
+          return;
+        }
+
+        const node = treeRef.current[task.nodeId];
+        if (!node) return;
+
+        setStatus(`Analyzing ${node.san || 'start'} (d${task.depth})...`);
+
+        if (task.includeLines) {
+          const rawLines = await analysisEngine.lines(node.fen, task.depth, task.amount);
+          if (cancelled || analysisSessionRef.current !== session) return;
+
+          const lines = toEngineLines(node.fen, rawLines);
+          const topLine = rawLines[0];
+          syncNodeEvaluation(task.nodeId, {
+            score: topLine?.evaluation ?? 0,
+            depth: task.depth,
+            pvUCI: topLine ? topLine.pv.join(' ') : undefined,
+            lines,
+          });
+
+          if (task.nodeId === currentNodeIdRef.current) {
+            syncVisibleEngineLines(lines);
+          }
+          continue;
+        }
+
+        const evaluation = await analysisEngine.evaluate(node.fen, task.depth);
+        if (cancelled || analysisSessionRef.current !== session) return;
+
+        syncNodeEvaluation(task.nodeId, {
+          score: evaluation,
+          depth: task.depth,
+        });
+      }
+    }
+
+    runAnalysisLoop().catch(() => {
+      if (!cancelled && analysisSessionRef.current === session) setStatus('Engine Error');
+    });
+
+    return function cleanup() {
+      cancelled = true;
+    };
+  }, [currentNodeId, tree]);
 
   // --- GAME LOGIC ---
   const makeMove = (move: any) => {
@@ -480,7 +416,7 @@ const ChessReplay: React.FC = () => {
           </div>
           <div className="text-right">
             <span className="text-[10px] uppercase text-gray-500 font-bold">Eval</span>
-            <div className="text-sm font-mono text-indigo-400">{currentNodeId && tree[currentNodeId]?.evaluation?.score || '--'}</div>
+            <div className="text-sm font-mono text-indigo-400">{currentNodeId && tree[currentNodeId]?.evaluation ? formatScore(tree[currentNodeId].evaluation.score) : '--'}</div>
           </div>
         </div>
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
@@ -499,7 +435,7 @@ const ChessReplay: React.FC = () => {
                     <span className="font-bold text-gray-800 font-mono text-base">{line.move}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-sm font-bold ${parseFloat(line.score) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{line.score}</span>
+                    <span className={`text-sm font-bold ${line.score >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatScore(line.score)}</span>
                     <span className="text-[10px] text-gray-400">d{line.depth}</span>
                   </div>
                 </div>
@@ -543,7 +479,7 @@ const ChessReplay: React.FC = () => {
                     <span className="text-[11px] font-bold text-gray-400 w-8">{isWhite ? `${Math.floor(i/2)+1}.` : ''}</span>
                     <button onClick={() => setCurrentNodeId(node.id)} className={`flex-1 flex justify-between items-center p-2 rounded border transition-all ${isFocus ? 'bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300' : 'bg-white hover:bg-indigo-50 border-gray-200'}`}>
                       <span className="font-bold font-mono text-sm">{node.san}</span>
-                      {node.evaluation && <span className={`text-[10px] font-bold ${isFocus ? 'text-indigo-100' : 'text-gray-500'}`}>{node.evaluation.score} <span className="opacity-50">d{node.evaluation.depth}</span></span>}
+                      {node.evaluation && <span className={`text-[10px] font-bold ${isFocus ? 'text-indigo-100' : 'text-gray-500'}`}>{formatScore(node.evaluation.score)} <span className="opacity-50">d{node.evaluation.depth}</span></span>}
                     </button>
                   </div>
                   {variations.length > 1 && (
