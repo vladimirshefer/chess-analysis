@@ -15,7 +15,7 @@ const ChessReplay: React.FC = () => {
   // --- STATE ---
   const [tree, setTree] = useState<Record<string, MoveNode>>({});
   const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
-  const [activeLineId, setActiveLineId] = useState<string | null>(null); // The tip of the current visible path
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [pgnInput, setPgnInput] = useState('');
   const [status, setStatus] = useState('Interactive Mode');
   const [isThinking, setIsThinking] = useState(false);
@@ -31,12 +31,61 @@ const ChessReplay: React.FC = () => {
     currentNodeIdRef.current = currentNodeId;
   }, [tree, currentNodeId]);
 
+  // --- PGN GENERATION (TREE TRAVERSAL) ---
+  const generatePgnString = (nodeId: string, moveNum: number, isWhite: boolean, isFirstInVar: boolean, currentTree: Record<string, MoveNode>): string => {
+    const node = currentTree[nodeId];
+    if (!node) return "";
+
+    let pgn = "";
+    if (isWhite) {
+      pgn += `${moveNum}. `;
+    } else if (isFirstInVar) {
+      pgn += `${moveNum}... `;
+    }
+
+    pgn += node.san + " ";
+
+    // Variations (indices 1 to end)
+    if (node.children.length > 1) {
+      for (let i = 1; i < node.children.length; i++) {
+        pgn += `(${generatePgnString(node.children[i], isWhite ? moveNum : moveNum, !isWhite, true, currentTree).trim()}) `;
+      }
+    }
+
+    // Main Line (index 0)
+    if (node.children.length > 0) {
+      pgn += generatePgnString(node.children[0], isWhite ? moveNum : moveNum + 1, !isWhite, false, currentTree);
+    }
+
+    return pgn;
+  };
+
+  const fullTreePgn = useMemo(() => {
+    const roots = Object.values(tree).filter(n => n.parentId === null);
+    if (roots.length === 0) return "";
+    
+    // Reconstruct PGN starting from all possible roots
+    let result = "";
+    roots.forEach((root, i) => {
+      if (i === 0) {
+        result += generatePgnString(root.id, 1, true, false, tree);
+      } else {
+        result += `(${generatePgnString(root.id, 1, true, true, tree).trim()}) `;
+      }
+    });
+    return result.trim();
+  }, [tree]);
+
+  // Update the textarea whenever the tree evolves
+  useEffect(() => {
+    if (fullTreePgn) setPgnInput(fullTreePgn);
+  }, [fullTreePgn]);
+
   // --- ENGINE (Tiered Priority) ---
   const scheduleNextTask = () => {
     if (!engineRef.current) return;
     const currentTree = treeRef.current;
     const focusId = currentNodeIdRef.current;
-
     const depthTiers = [12, 16, 20, 22];
 
     for (const d of depthTiers) {
@@ -133,10 +182,9 @@ const ChessReplay: React.FC = () => {
         setTree(prev => {
           const updated = { ...prev, [newNodeId]: newNode };
           if (currentNodeId) {
-            // Add new variation to the START of children to make it the "active" branch
             updated[currentNodeId] = {
               ...prev[currentNodeId],
-              children: [newNodeId, ...prev[currentNodeId].children.filter(id => id !== newNodeId)]
+              children: [...prev[currentNodeId].children, newNodeId]
             };
           }
           return updated;
@@ -189,7 +237,6 @@ const ChessReplay: React.FC = () => {
 
   const loadSample = () => {
     const sample = "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7";
-    setPgnInput(sample);
     importPgn(sample);
   };
 
@@ -212,13 +259,10 @@ const ChessReplay: React.FC = () => {
     return path;
   }, [activeLineId, tree]);
 
-  // Auto-update activeLineId when navigating to ensure the path doesn't "snap" away
   useEffect(() => {
     if (!currentNodeId) return;
     const isOnPath = visiblePath.some(n => n.id === currentNodeId);
-    if (!isOnPath) {
-      setActiveLineId(getDeepestLeaf(currentNodeId, tree));
-    }
+    if (!isOnPath) setActiveLineId(getDeepestLeaf(currentNodeId, tree));
   }, [currentNodeId, tree, visiblePath]);
 
   const getVariations = (parentId: string | null) => {
@@ -266,12 +310,12 @@ const ChessReplay: React.FC = () => {
       <div className="w-full lg:w-[450px] flex flex-col gap-4">
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-gray-800">PGN</h3>
+            <h3 className="font-bold text-gray-800">Full PGN Tree</h3>
             <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); importPgn(pgnInput); }} className="flex flex-col gap-2">
-            <textarea className="w-full h-24 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} placeholder="Paste PGN..." />
-            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Sync PGN</button>
+            <textarea className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} placeholder="PGN Tree with (variations) will appear here..." />
+            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Import PGN</button>
           </form>
         </div>
 
@@ -284,7 +328,6 @@ const ChessReplay: React.FC = () => {
               const isWhite = i % 2 === 0;
               const moveNum = Math.floor(i / 2) + 1;
               const isFocus = node.id === currentNodeId;
-
               return (
                 <div key={node.id} className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
