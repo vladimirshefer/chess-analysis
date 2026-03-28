@@ -8,20 +8,56 @@ interface MoveEval {
 }
 
 const ChessReplay: React.FC = () => {
-  const [game, setGame] = useState(new Chess());
-  const [pgnInput, setPgnInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1);
+  const [pgnInput, setPgnInput] = useState('');
   const [moveEvals, setMoveEvals] = useState<Record<number, MoveEval>>({});
   const [status, setStatus] = useState('Interactive Mode');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const engineRef = useRef<Worker | null>(null);
   const historyRef = useRef<string[]>([]);
+  const analysisQueueRef = useRef<{index: number, depth: number}[]>([]);
+  const currentTaskRef = useRef<{index: number, depth: number} | null>(null);
 
-  // Keep historyRef in sync
+  // Sync history for background tasks
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
+
+  // Task Processor
+  const processNextTask = () => {
+    if (analysisQueueRef.current.length === 0) {
+      setIsAnalyzing(false);
+      currentTaskRef.current = null;
+      setStatus('Deepening Complete');
+      return;
+    }
+
+    const nextTask = analysisQueueRef.current.shift()!;
+    currentTaskRef.current = nextTask;
+    
+    const game = new Chess();
+    const currentHistory = historyRef.current;
+    
+    try {
+      for (let i = 0; i <= nextTask.index; i++) {
+        game.move(currentHistory[i]);
+      }
+      
+      setStatus(`Move ${nextTask.index + 1}: Depth ${nextTask.depth}...`);
+      engineRef.current?.postMessage(`position fen ${game.fen()}`);
+      engineRef.current?.postMessage(`go depth ${nextTask.depth}`);
+      setIsAnalyzing(true);
+    } catch (err) {
+      processNextTask();
+    }
+  };
+
+  const processorRef = useRef(processNextTask);
+  useEffect(() => {
+    processorRef.current = processNextTask;
+  }, [processNextTask]);
 
   // Initialize Engine
   useEffect(() => {
@@ -30,19 +66,24 @@ const ChessReplay: React.FC = () => {
 
     worker.onmessage = (e) => {
       const line = e.data;
-      const activeIndex = historyRef.current.length - 1;
+      const task = currentTaskRef.current;
+      if (!task) return;
 
       if (line.includes('score cp')) {
         const match = line.match(/score cp (-?\d+)/);
         if (match) {
           const score = (parseInt(match[1]) / 100).toFixed(1);
-          setMoveEvals(prev => ({ ...prev, [activeIndex]: { score, depth: 18 } }));
+          setMoveEvals(prev => ({ ...prev, [task.index]: { score, depth: task.depth } }));
         }
       } else if (line.includes('score mate')) {
         const match = line.match(/score mate (-?\d+)/);
         if (match) {
-          setMoveEvals(prev => ({ ...prev, [activeIndex]: { score: `M${match[1]}`, depth: 18 } }));
+          setMoveEvals(prev => ({ ...prev, [task.index]: { score: `M${match[1]}`, depth: task.depth } }));
         }
+      }
+
+      if (line.startsWith('bestmove')) {
+        processorRef.current();
       }
     };
 
@@ -52,17 +93,32 @@ const ChessReplay: React.FC = () => {
     return () => worker.terminate();
   }, []);
 
-  const analyzeLatest = (fen: string) => {
-    if (!engineRef.current) return;
-    engineRef.current.postMessage('stop');
-    engineRef.current.postMessage(`position fen ${fen}`);
-    engineRef.current.postMessage('go depth 18');
-    setStatus('Analyzing...');
+  const triggerDeepening = (index: number) => {
+    if (index < 0) return;
+    engineRef.current?.postMessage('stop');
+    analysisQueueRef.current = [
+      { index, depth: 12 },
+      { index, depth: 16 },
+      { index, depth: 20 }
+    ];
+    processNextTask();
   };
 
-  // Handle move on board
+  const startFullGameAnalysis = () => {
+    if (history.length === 0) return;
+    engineRef.current?.postMessage('stop');
+    const queue: {index: number, depth: number}[] = [];
+    [12, 16, 20].forEach(depth => {
+      for (let i = 0; i < history.length; i++) {
+        queue.push({ index: i, depth });
+      }
+    });
+    analysisQueueRef.current = queue;
+    processNextTask();
+  };
+
+  // Handle board interaction
   function makeAMove(move: any) {
-    // 1. Create a game instance at the CURRENTLY VIEWED position
     const tempGame = new Chess();
     for (let i = 0; i <= currentMoveIndex; i++) {
       tempGame.move(history[i]);
@@ -71,14 +127,11 @@ const ChessReplay: React.FC = () => {
     try {
       const result = tempGame.move(move);
       if (result) {
-        // 2. If we moved from the middle of history, we "branch" (truncate future)
         const newHistory = [...history.slice(0, currentMoveIndex + 1), result.san];
-        
-        setGame(tempGame);
         setHistory(newHistory);
         setCurrentMoveIndex(newHistory.length - 1);
         setPgnInput(tempGame.pgn());
-        analyzeLatest(tempGame.fen());
+        triggerDeepening(newHistory.length - 1);
         return true;
       }
     } catch (e) {
@@ -88,11 +141,7 @@ const ChessReplay: React.FC = () => {
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    return makeAMove({
-      from: sourceSquare,
-      to: targetSquare,
-      promotion: 'q',
-    });
+    return makeAMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
   }
 
   const handlePgnSubmit = (e: React.FormEvent) => {
@@ -101,7 +150,6 @@ const ChessReplay: React.FC = () => {
     try {
       const newGame = new Chess();
       newGame.loadPgn(pgnInput);
-      setGame(newGame);
       setHistory(newGame.history());
       setCurrentMoveIndex(newGame.history().length - 1);
       setMoveEvals({});
@@ -115,13 +163,11 @@ const ChessReplay: React.FC = () => {
     const sample = "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7";
     const newGame = new Chess();
     newGame.loadPgn(sample);
-    setGame(newGame);
     setHistory(newGame.history());
     setCurrentMoveIndex(newGame.history().length - 1);
     setPgnInput(sample);
   };
 
-  // Safe FEN calculation for the board
   const displayFen = React.useMemo(() => {
     const tempGame = new Chess();
     try {
@@ -131,43 +177,50 @@ const ChessReplay: React.FC = () => {
       }
       return tempGame.fen();
     } catch (err) {
-      console.error("Board sync error:", err);
-      return 'start'; // Fallback to start instead of crashing
+      return 'start';
     }
   }, [currentMoveIndex, history]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100">
-      
       <div className="flex-1 flex flex-col items-center">
         <div className="w-full max-w-[480px] mb-4 flex items-center justify-between bg-gray-900 text-white p-3 rounded-lg shadow-inner">
           <div className="flex flex-col">
             <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Status</span>
             <span className="text-sm font-medium">{status}</span>
           </div>
-          <div className="text-right">
-            <span className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Evaluation</span>
-            <div className="text-sm font-mono text-indigo-400">
-              {moveEvals[currentMoveIndex]?.score || '--'}
+          {history.length > 0 && !isAnalyzing && (
+            <button onClick={startFullGameAnalysis} className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs font-bold transition-colors">Analyze Game</button>
+          )}
+          {isAnalyzing && (
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-mono text-indigo-400">Deepening...</span>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800 relative">
-          <Chessboard 
-            id="AnalysisBoard"
-            position={displayFen} 
-            onPieceDrop={onDrop}
-            boardOrientation="white"
-            animationDuration={200}
-          />
+          <Chessboard id="AnalysisBoard" position={displayFen} onPieceDrop={onDrop} boardOrientation="white" animationDuration={200} />
         </div>
         
         <div className="flex items-center gap-4 mt-6">
           <button onClick={() => setCurrentMoveIndex(-1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
-          <button onClick={() => setCurrentMoveIndex(p => Math.max(-1, p - 1))} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Prev</button>
-          <button onClick={() => setCurrentMoveIndex(p => Math.min(history.length - 1, p + 1))} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-md">Next</button>
-          <button onClick={() => setCurrentMoveIndex(history.length - 1)} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">End</button>
+          <button onClick={() => {
+            const newIndex = Math.max(-1, currentMoveIndex - 1);
+            setCurrentMoveIndex(newIndex);
+            triggerDeepening(newIndex);
+          }} className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Prev</button>
+          <button onClick={() => {
+            const newIndex = Math.min(history.length - 1, currentMoveIndex + 1);
+            setCurrentMoveIndex(newIndex);
+            triggerDeepening(newIndex);
+          }} className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-md">Next</button>
+          <button onClick={() => {
+            const newIndex = history.length - 1;
+            setCurrentMoveIndex(newIndex);
+            triggerDeepening(newIndex);
+          }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">End</button>
         </div>
       </div>
 
@@ -178,12 +231,7 @@ const ChessReplay: React.FC = () => {
             <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
           </div>
           <form onSubmit={handlePgnSubmit} className="flex flex-col gap-2">
-            <textarea
-              className="w-full h-24 p-2 text-xs font-mono border rounded outline-none bg-white"
-              value={pgnInput}
-              onChange={(e) => setPgnInput(e.target.value)}
-              placeholder="Moves will appear here as you play..."
-            />
+            <textarea className="w-full h-24 p-2 text-xs font-mono border rounded outline-none bg-white" value={pgnInput} onChange={(e) => setPgnInput(e.target.value)} placeholder="Moves appear here..." />
             <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Update from PGN</button>
           </form>
         </div>
@@ -195,27 +243,15 @@ const ChessReplay: React.FC = () => {
               const evaluation = moveEvals[i];
               const isWhite = i % 2 === 0;
               const moveNum = Math.floor(i / 2) + 1;
-              
               return (
-                <button
-                  key={i}
-                  onClick={() => setCurrentMoveIndex(i)}
-                  className={`relative flex flex-col p-2 text-left rounded border transition-all ${
-                    currentMoveIndex === i 
-                      ? 'bg-indigo-600 text-white border-indigo-700 shadow-md scale-[1.02]' 
-                      : 'bg-white hover:bg-indigo-50 border-gray-200 text-gray-700'
-                  }`}
-                >
+                <button key={i} onClick={() => { setCurrentMoveIndex(i); triggerDeepening(i); }} className={`relative flex flex-col p-2 text-left rounded border transition-all ${currentMoveIndex === i ? 'bg-indigo-600 text-white border-indigo-700 shadow-md scale-[1.02]' : 'bg-white hover:bg-indigo-50 border-gray-200 text-gray-700'}`}>
                   <div className="flex justify-between items-start mb-1">
-                    <span className={`text-[10px] font-bold ${currentMoveIndex === i ? 'text-indigo-200' : 'text-gray-400'}`}>
-                      {moveNum}{isWhite ? '.' : '...'}
-                    </span>
+                    <span className={`text-[10px] font-bold ${currentMoveIndex === i ? 'text-indigo-200' : 'text-gray-400'}`}>{moveNum}{isWhite ? '.' : '...'}</span>
+                    {evaluation && <span className={`text-[9px] px-1 rounded font-mono font-bold ${currentMoveIndex === i ? 'bg-white/20 text-white' : 'text-indigo-600 bg-indigo-50'}`}>d{evaluation.depth}</span>}
                   </div>
                   <div className="flex justify-between items-end">
                     <span className="text-sm font-bold font-mono">{move}</span>
-                    <span className={`text-xs font-bold ${currentMoveIndex === i ? 'text-white' : 'text-gray-900'}`}>
-                      {evaluation?.score || '--'}
-                    </span>
+                    <span className={`text-xs font-bold ${currentMoveIndex === i ? 'text-white' : 'text-gray-900'}`}>{evaluation?.score || '--'}</span>
                   </div>
                 </button>
               );
