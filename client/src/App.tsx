@@ -1,16 +1,7 @@
-import { Routes, Route, Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import {Link, Route, Routes} from 'react-router-dom'
 import ChessReplay from './components/ChessReplay'
 
 function Home() {
-  const [message, setMessage] = useState('Loading API...')
-
-  useEffect(() => {
-    fetch('http://localhost:3001/api/message')
-      .then(res => res.json())
-      .then(data => setMessage(data.message))
-      .catch(() => setMessage('Backend disconnected'))
-  }, [])
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -26,9 +17,6 @@ function Home() {
             </h1>
           </div>
           <div className="flex items-center gap-6">
-            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${message === 'Backend disconnected' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-              {message}
-            </span>
             <nav className="flex gap-4">
               <Link to="/" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Analyzer</Link>
               <Link to="/about" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">About</Link>
