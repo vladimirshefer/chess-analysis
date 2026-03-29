@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess } from 'chess.js';
+import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaMagnifyingGlassPlus, FaRotate, FaTrashCan } from 'react-icons/fa6';
+import { GiPerspectiveDiceSixFacesRandom } from 'react-icons/gi';
 import { Chessboard } from 'react-chessboard';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -19,6 +21,7 @@ import {
   type PlayerInfo,
 } from '../lib/gameInfo';
 import { classifyMoveMark, MoveMark, type MoveMarkResult } from '../lib/moveMarks';
+import RenderIcon from './RenderIcon';
 
 interface MoveNode {
   id: string;
@@ -554,25 +557,32 @@ const ChessReplay: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
-          <button onClick={goStart} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
+          <button onClick={goStart} className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">
+            <RenderIcon iconType={FaAnglesLeft} className={"text-sm"}/>
+            <span>Start</span>
+          </button>
           <button
             onClick={goBack}
-            className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
+            className="inline-flex items-center gap-2 px-5 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
           >
-            Back
+            <RenderIcon iconType={FaChevronLeft} className="text-sm" />
+            <span>Back</span>
           </button>
           <button
             disabled={!canGoForward}
             onClick={goForward}
-            className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30"
+            className="inline-flex items-center gap-2 px-5 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30"
           >
-            Forward
+            <RenderIcon iconType={FaChevronRight} className="text-sm" />
+            <span>Forward</span>
           </button>
           <button
             onClick={toggleBoardOrientation}
-            className="px-4 py-2 bg-gray-800 hover:bg-black text-white rounded font-bold"
+            aria-label={viewState.boardOrientation === 'white' ? 'View board as black' : 'View board as white'}
+            title={viewState.boardOrientation === 'white' ? 'View as Black' : 'View as White'}
+            className="inline-flex items-center justify-center w-10 h-10 bg-gray-800 hover:bg-black text-white rounded font-bold"
           >
-            {viewState.boardOrientation === 'white' ? 'View as Black' : 'View as White'}
+            <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
         </div>
 
@@ -595,9 +605,10 @@ const ChessReplay: React.FC = () => {
               <button
                 onClick={runDeepAnalysis}
                 disabled={viewState.deepAnalysisKey !== null}
-                className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Deeper...
+                <RenderIcon iconType={FaMagnifyingGlassPlus} className="text-xs" />
+                <span>Deeper...</span>
               </button>
             </div>
           </div>
@@ -627,7 +638,13 @@ const ChessReplay: React.FC = () => {
         </div>
 
         <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
-          <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">Move Tree <button onClick={clearTree} className="text-[10px] text-red-500 hover:underline">Clear Tree</button></h3>
+          <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
+            <span>Move Tree</span>
+            <button onClick={clearTree} className="inline-flex items-center gap-1.5 text-[10px] text-red-500 hover:underline">
+              <RenderIcon iconType={FaTrashCan} className="text-[9px]" />
+              <span>Clear Tree</span>
+            </button>
+          </h3>
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
             {visiblePath.map(function renderNode(node, index) {
               const variations = (gameState.tree[node.parentId || 'root']?.children?.map(function toNode(id) {
@@ -698,7 +715,10 @@ const ChessReplay: React.FC = () => {
             <h3 className="font-bold text-gray-800">PGN</h3>
             <div className="flex items-center gap-3">
               <Link to="/import/chess-com" className="text-[10px] text-indigo-600 font-bold hover:underline">Chess.com</Link>
-              <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
+              <button onClick={loadSample} className="inline-flex items-center gap-1.5 text-[10px] text-indigo-600 font-bold hover:underline">
+                <RenderIcon iconType={GiPerspectiveDiceSixFacesRandom} className="text-xs" />
+                <span>Sample</span>
+              </button>
             </div>
           </div>
           <form
@@ -718,7 +738,10 @@ const ChessReplay: React.FC = () => {
                 });
               }}
             />
-            <button className="py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">Import PGN</button>
+            <button className="inline-flex items-center justify-center gap-2 py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">
+              <RenderIcon iconType={FaFileImport} className="text-sm" />
+              <span>Import PGN</span>
+            </button>
           </form>
         </div>
       </div>

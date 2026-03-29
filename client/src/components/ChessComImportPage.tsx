@@ -1,8 +1,10 @@
 import type { FormEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { FaArrowRight, FaMagnifyingGlass } from 'react-icons/fa6';
 import { Link, useNavigate } from 'react-router-dom';
 import { getRecentGames, type ChessComGameSummary, type ChessComRecentGames } from '../lib/chessCom';
 import { toImportedGameInfoFromChessComGame } from '../lib/gameInfo';
+import RenderIcon from './RenderIcon';
 
 const CHESS_COM_USERNAME_STORAGE_KEY = 'chess-com-username';
 
@@ -90,9 +92,10 @@ function ChessComImportPage() {
           />
           <button
             disabled={isLoading}
-            className="px-5 py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-black disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-black disabled:opacity-40"
           >
-            {isLoading ? 'Loading...' : 'Load Games'}
+            <RenderIcon iconType={FaMagnifyingGlass} className="text-sm" />
+            <span>{isLoading ? 'Loading...' : 'Load Games'}</span>
           </button>
         </form>
 
@@ -125,8 +128,12 @@ function ChessComImportPage() {
                         {formatTimestamp(game.endTime)} · {game.timeClass} · {game.timeControl}
                       </div>
                     </div>
-                    <button onClick={function handleOpen() { openGame(game); }} className="px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">
-                      Open
+                    <button onClick={function handleOpen() {
+                      openGame(game);
+                    }}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">
+                      <RenderIcon iconType={FaArrowRight} className="text-sm" />
+                      <span>Open</span>
                     </button>
                   </div>
 
@@ -170,5 +177,4 @@ function getInitialBoardOrientation(game: ChessComGameSummary, username: string 
   if (game.black.username.trim().toLowerCase() === normalizedUsername) return 'black';
   return 'white';
 }
-
 export default ChessComImportPage;
