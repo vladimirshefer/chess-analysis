@@ -2,6 +2,7 @@ import type { FormEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getRecentGames, type ChessComGameSummary, type ChessComRecentGames } from '../lib/chessCom';
+import { toImportedGameInfoFromChessComGame } from '../lib/gameInfo';
 
 const CHESS_COM_USERNAME_STORAGE_KEY = 'chess-com-username';
 
@@ -58,6 +59,7 @@ function ChessComImportPage() {
     navigate('/', {
       state: {
         importedPgn: game.pgn,
+        importedGameInfo: toImportedGameInfoFromChessComGame(game),
       },
     });
   }

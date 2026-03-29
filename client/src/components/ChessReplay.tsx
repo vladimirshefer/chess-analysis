@@ -11,6 +11,13 @@ import {
   type EvaluationRequest,
   type FullMoveEvaluation,
 } from '../lib/chessEngine';
+import {
+  mergePlayersInfo,
+  parsePgnPlayersInfo,
+  type GamePlayersInfo,
+  type ImportedGameInfo,
+  type PlayerInfo,
+} from '../lib/gameInfo';
 import { classifyMoveMark, MoveMark, type MoveMarkResult } from '../lib/moveMarks';
 
 interface MoveNode {
@@ -54,6 +61,16 @@ interface ViewState {
   deepAnalysisKey: string | null;
 }
 
+interface BoardPlayers {
+  top: PlayerCardInfo;
+  bottom: PlayerCardInfo;
+}
+
+interface PlayerCardInfo {
+  side: 'white' | 'black';
+  player: PlayerInfo | null;
+}
+
 interface ScheduledTask {
   nodeId: string;
   fen: string;
@@ -64,6 +81,7 @@ interface ScheduledTask {
 
 interface AnalyzerLocationState {
   importedPgn?: string;
+  importedGameInfo?: ImportedGameInfo;
 }
 
 const ROOT_ANALYSIS_NODE_ID = '__root__';
@@ -79,6 +97,7 @@ const ChessReplay: React.FC = () => {
   });
   const [analysisState, setAnalysisState] = useState<AnalysisState>({ byNodeId: {} });
   const [viewState, setViewState] = useState<ViewState>({ statusText: 'Interactive Mode', deepAnalysisKey: null });
+  const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
 
   const engineRef = useRef<ChessEngine | null>(null);
   const gameStateRef = useRef<GameState>(gameState);
@@ -122,7 +141,7 @@ const ChessReplay: React.FC = () => {
     if (lastImportedRouteKeyRef.current === location.key) return;
 
     lastImportedRouteKeyRef.current = location.key;
-    importPgn(importedPgn);
+    importPgn(importedPgn, locationState?.importedGameInfo ?? null);
     navigate(location.pathname, { replace: true, state: null });
   }, [location.key, location.pathname, location.state, navigate]);
 
@@ -204,6 +223,9 @@ const ChessReplay: React.FC = () => {
   const canGoForward = useMemo(function checkCanGoForward() {
     return getNextNodeId(gameState.currentNodeId, gameState.tree) !== null;
   }, [gameState.currentNodeId, gameState.tree]);
+  const boardPlayers = useMemo(function buildBoardPlayers() {
+    return getDisplayedPlayersInfo(playersInfo, 'white');
+  }, [playersInfo]);
 
   useEffect(function syncGeneratedPgn() {
     if (!fullTreePgn) return;
@@ -417,11 +439,13 @@ const ChessReplay: React.FC = () => {
     return makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
   }
 
-  function importPgn(pgn: string) {
+  function importPgn(pgn: string, importedGameInfo: ImportedGameInfo | null = null) {
     const tempGame = new Chess();
 
     try {
       tempGame.loadPgn(pgn);
+      const parsedPlayersInfo = parsePgnPlayersInfo(tempGame.getHeaders());
+      const mergedPlayersInfo = mergePlayersInfo(parsedPlayersInfo, importedGameInfo?.players ?? null);
       const moves = tempGame.history();
       let lastNodeId: string | null = null;
       const nextTree: Record<string, MoveNode> = {};
@@ -456,6 +480,7 @@ const ChessReplay: React.FC = () => {
         activeLineId: lastNodeId,
         pgnInput: pgn,
       });
+      setPlayersInfo(mergedPlayersInfo);
       setAnalysisState({ byNodeId: {} });
       setViewState(function update(previous) {
         return { ...previous, statusText: 'PGN Imported' };
@@ -478,6 +503,7 @@ const ChessReplay: React.FC = () => {
       activeLineId: null,
       pgnInput: '',
     });
+    setPlayersInfo(null);
     setAnalysisState({ byNodeId: {} });
     setViewState({ statusText: 'Interactive Mode', deepAnalysisKey: null });
   }
@@ -485,6 +511,9 @@ const ChessReplay: React.FC = () => {
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
       <div className="flex-1 flex flex-col items-center">
+        <div className="w-full max-w-[480px] mb-3">
+          <PlayerCard info={boardPlayers.top} />
+        </div>
         <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
           <Chessboard
             id="AnalysisBoard"
@@ -511,6 +540,10 @@ const ChessReplay: React.FC = () => {
           >
             Forward
           </button>
+        </div>
+
+        <div className="w-full max-w-[480px] mt-4">
+          <PlayerCard info={boardPlayers.bottom} />
         </div>
       </div>
 
@@ -659,6 +692,20 @@ const ChessReplay: React.FC = () => {
   );
 };
 
+function PlayerCard({ info }: { info: PlayerCardInfo }) {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-400">{info.side}</div>
+        <div className="text-sm font-bold text-gray-900">{info.player?.name ?? capitalizeSide(info.side)}</div>
+      </div>
+      {typeof info.player?.rating === 'number' && (
+        <div className="text-sm font-mono font-bold text-gray-500">{info.player.rating}</div>
+      )}
+    </div>
+  );
+}
+
 function generatePgnString(
   nodeId: string,
   moveNum: number,
@@ -697,6 +744,20 @@ function isEditableTarget(target: EventTarget | null): boolean {
 
 function getCurrentFen(nodeId: string | null, tree: Record<string, MoveNode>): string {
   return nodeId ? tree[nodeId]?.fen ?? 'start' : 'start';
+}
+
+function getDisplayedPlayersInfo(playersInfo: GamePlayersInfo | null, orientation: 'white' | 'black'): BoardPlayers {
+  if (orientation === 'black') {
+    return {
+      top: { side: 'white', player: playersInfo?.white ?? null },
+      bottom: { side: 'black', player: playersInfo?.black ?? null },
+    };
+  }
+
+  return {
+    top: { side: 'black', player: playersInfo?.black ?? null },
+    bottom: { side: 'white', player: playersInfo?.white ?? null },
+  };
 }
 
 function getRootNodeIds(tree: Record<string, MoveNode>): string[] {
@@ -973,6 +1034,10 @@ function getMoveMarkBackground(mark: MoveMark): string {
     default:
       return 'rgba(107, 114, 128, 0.18)';
   }
+}
+
+function capitalizeSide(side: 'white' | 'black'): string {
+  return side.charAt(0).toUpperCase() + side.slice(1);
 }
 
 function formatScore(score: number): string {
