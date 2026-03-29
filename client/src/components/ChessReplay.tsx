@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   EngineEvaluationPriority,
   getChessEngine,
@@ -61,9 +62,15 @@ interface ScheduledTask {
   priority: EngineEvaluationPriorityValue;
 }
 
+interface AnalyzerLocationState {
+  importedPgn?: string;
+}
+
 const ROOT_ANALYSIS_NODE_ID = '__root__';
 
 const ChessReplay: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [gameState, setGameState] = useState<GameState>({
     tree: {},
     currentNodeId: null,
@@ -76,6 +83,7 @@ const ChessReplay: React.FC = () => {
   const engineRef = useRef<ChessEngine | null>(null);
   const gameStateRef = useRef<GameState>(gameState);
   const analysisSessionRef = useRef(0);
+  const lastImportedRouteKeyRef = useRef<string | null>(null);
 
   useEffect(function syncGameStateRef() {
     gameStateRef.current = gameState;
@@ -84,6 +92,17 @@ const ChessReplay: React.FC = () => {
   useEffect(function initEngine() {
     engineRef.current = getChessEngine();
   }, []);
+
+  useEffect(function importPgnFromRouteState() {
+    const locationState = location.state as AnalyzerLocationState | null;
+    const importedPgn = locationState?.importedPgn?.trim();
+    if (!importedPgn) return;
+    if (lastImportedRouteKeyRef.current === location.key) return;
+
+    lastImportedRouteKeyRef.current = location.key;
+    importPgn(importedPgn);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.key, location.pathname, location.state, navigate]);
 
   const fullTreePgn = useMemo(function buildFullTreePgn() {
     const roots = Object.values(gameState.tree).filter(function isRoot(node) {
@@ -577,7 +596,10 @@ const ChessReplay: React.FC = () => {
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold text-gray-800">PGN</h3>
-            <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
+            <div className="flex items-center gap-3">
+              <Link to="/import/chess-com" className="text-[10px] text-indigo-600 font-bold hover:underline">Chess.com</Link>
+              <button onClick={loadSample} className="text-[10px] text-indigo-600 font-bold hover:underline">Sample</button>
+            </div>
           </div>
           <form
             onSubmit={function submitPgn(event) {
