@@ -190,7 +190,6 @@ class StockfishQueue {
     nextJob.shouldRestart = false;
     this.currentJob = nextJob;
 
-    console.log(`Start Processing ${nextJob.minDepth} ${nextJob.fen}`)
     this.worker.postMessage(`setoption name MultiPV value ${nextJob.linesAmount}`);
     this.worker.postMessage(`position fen ${nextJob.fen}`);
     this.worker.postMessage(`go depth ${nextJob.minDepth}`);
@@ -207,7 +206,6 @@ class StockfishQueue {
     }
 
     if (message.startsWith('bestmove')) {
-      console.log(`Finish Processing ${currentJob.minDepth} ${currentJob.fen}`)
       this.handleBestMove(currentJob);
     }
   }

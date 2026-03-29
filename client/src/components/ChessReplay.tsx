@@ -50,6 +50,7 @@ interface AnalysisState {
 
 interface ViewState {
   statusText: string;
+  deepAnalysisKey: string | null;
 }
 
 interface ScheduledTask {
@@ -70,7 +71,7 @@ const ChessReplay: React.FC = () => {
     pgnInput: '',
   });
   const [analysisState, setAnalysisState] = useState<AnalysisState>({ byNodeId: {} });
-  const [viewState, setViewState] = useState<ViewState>({ statusText: 'Interactive Mode' });
+  const [viewState, setViewState] = useState<ViewState>({ statusText: 'Interactive Mode', deepAnalysisKey: null });
 
   const engineRef = useRef<ChessEngine | null>(null);
   const gameStateRef = useRef<GameState>(gameState);
@@ -214,11 +215,15 @@ const ChessReplay: React.FC = () => {
 
     loop()
         .then(function handleSuccess() {
-          setViewState({ statusText: 'Analysis Complete' });
+          setViewState(function update(previous) {
+            return { ...previous, statusText: 'Analysis Complete' };
+          });
         })
         .catch(function handleError() {
       if (cancelled || analysisSessionRef.current !== session) return;
-      setViewState({ statusText: 'Engine Error' });
+      setViewState(function update(previous) {
+        return { ...previous, statusText: 'Engine Error' };
+      });
     });
 
     return function cleanup() {
@@ -238,6 +243,51 @@ const ChessReplay: React.FC = () => {
         },
       };
     });
+  }
+
+  function runDeepAnalysis() {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    const target = getSelectedAnalysisTarget(gameState);
+    if (!target) return;
+
+    setViewState(function update(previous) {
+      return {
+        ...previous,
+        deepAnalysisKey: target.nodeId,
+        statusText: `Analyzing ${target.label} (d22)...`,
+      };
+    });
+
+    void engine.evaluate(
+      target.fen,
+      { minDepth: 22, linesAmount: 3 },
+      EngineEvaluationPriority.IMMEDIATE,
+      function onUpdate(update) {
+        syncNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
+      },
+    )
+      .then(function handleDeepResult(result) {
+        syncNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, result, true));
+      })
+      .catch(function handleDeepError() {
+        setViewState(function update(previous) {
+          return { ...previous, statusText: 'Engine Error' };
+        });
+      })
+      .finally(function clearDeepState() {
+        setViewState(function update(previous) {
+          if (previous.deepAnalysisKey !== target.nodeId) return previous;
+          return {
+            ...previous,
+            deepAnalysisKey: null,
+            statusText: previous.statusText === `Analyzing ${target.label} (d22)...`
+              ? 'Analysis Complete'
+              : previous.statusText,
+          };
+        });
+      });
   }
 
   function makeMove(move: { from: string; to: string; promotion?: string }) {
@@ -343,9 +393,13 @@ const ChessReplay: React.FC = () => {
         pgnInput: pgn,
       });
       setAnalysisState({ byNodeId: {} });
-      setViewState({ statusText: 'PGN Imported' });
+      setViewState(function update(previous) {
+        return { ...previous, statusText: 'PGN Imported' };
+      });
     } catch {
-      setViewState({ statusText: 'Invalid PGN' });
+      setViewState(function update(previous) {
+        return { ...previous, statusText: 'Invalid PGN' };
+      });
     }
   }
 
@@ -361,7 +415,7 @@ const ChessReplay: React.FC = () => {
       pgnInput: '',
     });
     setAnalysisState({ byNodeId: {} });
-    setViewState({ statusText: 'Interactive Mode' });
+    setViewState({ statusText: 'Interactive Mode', deepAnalysisKey: null });
   }
 
   return (
@@ -414,9 +468,18 @@ const ChessReplay: React.FC = () => {
             <div>
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
             </div>
-            <div className="text-right">
-              <span className="text-[10px] uppercase text-gray-400 font-bold">Eval</span>
-              <div className="text-sm font-mono text-indigo-500">{currentAnalysis ? formatScore(currentAnalysis.evaluation) : '--'}</div>
+            <div className="flex items-start gap-3">
+              <div className="text-right">
+                <span className="text-[10px] uppercase text-gray-400 font-bold">Eval</span>
+                <div className="text-sm font-mono text-indigo-500">{currentAnalysis ? formatScore(currentAnalysis.evaluation) : '--'}</div>
+              </div>
+              <button
+                onClick={runDeepAnalysis}
+                disabled={viewState.deepAnalysisKey !== null}
+                className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Deeper...
+              </button>
             </div>
           </div>
           <div className="flex flex-col gap-2">
@@ -630,18 +693,38 @@ function scheduleNextTask(gameState: GameState, engine: ChessEngine): ScheduledT
   if (othersAt12) return toTask(othersAt12, { minDepth: 12, linesAmount: 2 }, EngineEvaluationPriority.NEXT);
 
   if (currentNodeId) {
-    const currentAt20 = findNode([currentNodeId], 20, 3);
-    if (currentAt20) return toTask(currentAt20, { minDepth: 20, linesAmount: 3 }, EngineEvaluationPriority.IMMEDIATE);
+    const currentAt16 = findNode([currentNodeId], 16, 3);
+    if (currentAt16) return toTask(currentAt16, { minDepth: 16, linesAmount: 3 }, EngineEvaluationPriority.IMMEDIATE);
   }
 
   const backgroundNodeIds = hasMoves ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds] : otherNodeIds;
   const othersAt16 = findNode(backgroundNodeIds, 16, 1);
   if (othersAt16) return toTask(othersAt16, { minDepth: 16, linesAmount: 1 }, EngineEvaluationPriority.BACKGROUND);
 
-  const othersAt20 = findNode(backgroundNodeIds, 20, 1);
-  if (othersAt20) return toTask(othersAt20, { minDepth: 20, linesAmount: 1 }, EngineEvaluationPriority.BACKGROUND);
-
   return null;
+}
+
+function getSelectedAnalysisTarget(gameState: GameState): ScheduledTask | null {
+  if (!gameState.currentNodeId) {
+    return {
+      nodeId: ROOT_ANALYSIS_NODE_ID,
+      fen: 'start',
+      label: 'start',
+      request: { minDepth: 22, linesAmount: 3 },
+      priority: EngineEvaluationPriority.IMMEDIATE,
+    };
+  }
+
+  const node = gameState.tree[gameState.currentNodeId];
+  if (!node) return null;
+
+  return {
+    nodeId: node.id,
+    fen: node.fen,
+    label: node.san || 'start',
+    request: { minDepth: 22, linesAmount: 3 },
+    priority: EngineEvaluationPriority.IMMEDIATE,
+  };
 }
 
 function uciToSanLine(uciString: string, baseFen: string): string[] {
