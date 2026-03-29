@@ -1,7 +1,9 @@
 import type { FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getRecentGames, type ChessComGameSummary, type ChessComRecentGames } from '../lib/chessCom';
+
+const CHESS_COM_USERNAME_STORAGE_KEY = 'chess-com-username';
 
 function ChessComImportPage() {
   const navigate = useNavigate();
@@ -13,6 +15,12 @@ function ChessComImportPage() {
   const helperText = useMemo(function buildHelperText() {
     if (import.meta.env.DEV) return 'Local mode: direct requests to Chess.com API';
     return 'Production mode: requests go through app proxy';
+  }, []);
+
+  useEffect(function loadStoredUsername() {
+    const storedUsername = window.localStorage.getItem(CHESS_COM_USERNAME_STORAGE_KEY);
+    if (!storedUsername) return;
+    setUsername(storedUsername);
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -27,6 +35,7 @@ function ChessComImportPage() {
 
     setIsLoading(true);
     setErrorText('');
+    window.localStorage.setItem(CHESS_COM_USERNAME_STORAGE_KEY, nextUsername);
 
     try {
       const result = await getRecentGames(nextUsername, 10);
