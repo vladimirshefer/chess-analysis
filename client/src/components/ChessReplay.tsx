@@ -93,6 +93,28 @@ const ChessReplay: React.FC = () => {
     engineRef.current = getChessEngine();
   }, []);
 
+  function goStart() {
+    setGameState(function update(previous) {
+      if (previous.currentNodeId === null) return previous;
+      return { ...previous, currentNodeId: null };
+    });
+  }
+
+  function goBack() {
+    setGameState(function update(previous) {
+      if (!previous.currentNodeId || !previous.tree[previous.currentNodeId]) return previous;
+      return { ...previous, currentNodeId: previous.tree[previous.currentNodeId].parentId };
+    });
+  }
+
+  function goForward() {
+    setGameState(function update(previous) {
+      const nextNodeId = getNextNodeId(previous.currentNodeId, previous.tree);
+      if (!nextNodeId) return previous;
+      return { ...previous, currentNodeId: nextNodeId };
+    });
+  }
+
   useEffect(function importPgnFromRouteState() {
     const locationState = location.state as AnalyzerLocationState | null;
     const importedPgn = locationState?.importedPgn?.trim();
@@ -103,6 +125,26 @@ const ChessReplay: React.FC = () => {
     importPgn(importedPgn);
     navigate(location.pathname, { replace: true, state: null });
   }, [location.key, location.pathname, location.state, navigate]);
+
+  useEffect(function bindArrowNavigation() {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isEditableTarget(event.target)) return;
+
+      if (event.key === 'ArrowLeft') {
+        goBack();
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        goForward();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return function cleanup() {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const fullTreePgn = useMemo(function buildFullTreePgn() {
     const roots = Object.values(gameState.tree).filter(function isRoot(node) {
@@ -159,6 +201,9 @@ const ChessReplay: React.FC = () => {
       },
     };
   }, [currentMoveMark, currentMoveSquares]);
+  const canGoForward = useMemo(function checkCanGoForward() {
+    return getNextNodeId(gameState.currentNodeId, gameState.tree) !== null;
+  }, [gameState.currentNodeId, gameState.tree]);
 
   useEffect(function syncGeneratedPgn() {
     if (!fullTreePgn) return;
@@ -452,28 +497,16 @@ const ChessReplay: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4 mt-6">
-          <button onClick={function goStart() { setGameState(function update(previous) { return { ...previous, currentNodeId: null }; }); }} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
+          <button onClick={goStart} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
           <button
-            onClick={function goBack() {
-              setGameState(function update(previous) {
-                if (!previous.currentNodeId || !previous.tree[previous.currentNodeId]) return previous;
-                return { ...previous, currentNodeId: previous.tree[previous.currentNodeId].parentId };
-              });
-            }}
+            onClick={goBack}
             className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
           >
             Back
           </button>
           <button
-            disabled={!gameState.currentNodeId || gameState.tree[gameState.currentNodeId].children.length === 0}
-            onClick={function goForward() {
-              setGameState(function update(previous) {
-                if (!previous.currentNodeId) return previous;
-                const node = previous.tree[previous.currentNodeId];
-                if (!node || node.children.length === 0) return previous;
-                return { ...previous, currentNodeId: node.children[0] };
-              });
-            }}
+            disabled={!canGoForward}
+            onClick={goForward}
             className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30"
           >
             Forward
@@ -652,8 +685,38 @@ function generatePgnString(
   return pgn;
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+
+  const tagName = target.tagName.toLowerCase();
+  if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') return true;
+  if (target.isContentEditable) return true;
+
+  return Boolean(target.closest('[contenteditable="true"]'));
+}
+
 function getCurrentFen(nodeId: string | null, tree: Record<string, MoveNode>): string {
   return nodeId ? tree[nodeId]?.fen ?? 'start' : 'start';
+}
+
+function getRootNodeIds(tree: Record<string, MoveNode>): string[] {
+  return Object.values(tree)
+    .filter(function isRoot(node) {
+      return node.parentId === null;
+    })
+    .map(function toId(node) {
+      return node.id;
+    });
+}
+
+function getNextNodeId(currentNodeId: string | null, tree: Record<string, MoveNode>): string | null {
+  if (currentNodeId === null) {
+    return getRootNodeIds(tree)[0] ?? null;
+  }
+
+  const node = tree[currentNodeId];
+  if (!node || node.children.length === 0) return null;
+  return node.children[0];
 }
 
 function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string {
