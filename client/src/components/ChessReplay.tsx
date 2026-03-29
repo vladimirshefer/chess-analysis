@@ -59,6 +59,7 @@ interface AnalysisState {
 interface ViewState {
   statusText: string;
   deepAnalysisKey: string | null;
+  boardOrientation: 'white' | 'black';
 }
 
 interface BoardPlayers {
@@ -82,6 +83,7 @@ interface ScheduledTask {
 interface AnalyzerLocationState {
   importedPgn?: string;
   importedGameInfo?: ImportedGameInfo;
+  initialBoardOrientation?: 'white' | 'black';
 }
 
 const ROOT_ANALYSIS_NODE_ID = '__root__';
@@ -96,7 +98,11 @@ const ChessReplay: React.FC = () => {
     pgnInput: '',
   });
   const [analysisState, setAnalysisState] = useState<AnalysisState>({ byNodeId: {} });
-  const [viewState, setViewState] = useState<ViewState>({ statusText: 'Interactive Mode', deepAnalysisKey: null });
+  const [viewState, setViewState] = useState<ViewState>({
+    statusText: 'Interactive Mode',
+    deepAnalysisKey: null,
+    boardOrientation: 'white',
+  });
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
 
   const engineRef = useRef<ChessEngine | null>(null);
@@ -141,7 +147,11 @@ const ChessReplay: React.FC = () => {
     if (lastImportedRouteKeyRef.current === location.key) return;
 
     lastImportedRouteKeyRef.current = location.key;
-    importPgn(importedPgn, locationState?.importedGameInfo ?? null);
+    importPgn(
+      importedPgn,
+      locationState?.importedGameInfo ?? null,
+      locationState?.initialBoardOrientation ?? 'white',
+    );
     navigate(location.pathname, { replace: true, state: null });
   }, [location.key, location.pathname, location.state, navigate]);
 
@@ -224,8 +234,8 @@ const ChessReplay: React.FC = () => {
     return getNextNodeId(gameState.currentNodeId, gameState.tree) !== null;
   }, [gameState.currentNodeId, gameState.tree]);
   const boardPlayers = useMemo(function buildBoardPlayers() {
-    return getDisplayedPlayersInfo(playersInfo, 'white');
-  }, [playersInfo]);
+    return getDisplayedPlayersInfo(playersInfo, viewState.boardOrientation);
+  }, [playersInfo, viewState.boardOrientation]);
 
   useEffect(function syncGeneratedPgn() {
     if (!fullTreePgn) return;
@@ -439,7 +449,11 @@ const ChessReplay: React.FC = () => {
     return makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
   }
 
-  function importPgn(pgn: string, importedGameInfo: ImportedGameInfo | null = null) {
+  function importPgn(
+    pgn: string,
+    importedGameInfo: ImportedGameInfo | null = null,
+    initialBoardOrientation: 'white' | 'black' = 'white',
+  ) {
     const tempGame = new Chess();
 
     try {
@@ -483,7 +497,12 @@ const ChessReplay: React.FC = () => {
       setPlayersInfo(mergedPlayersInfo);
       setAnalysisState({ byNodeId: {} });
       setViewState(function update(previous) {
-        return { ...previous, statusText: 'PGN Imported' };
+        return {
+          ...previous,
+          statusText: 'PGN Imported',
+          deepAnalysisKey: null,
+          boardOrientation: initialBoardOrientation,
+        };
       });
     } catch {
       setViewState(function update(previous) {
@@ -505,7 +524,16 @@ const ChessReplay: React.FC = () => {
     });
     setPlayersInfo(null);
     setAnalysisState({ byNodeId: {} });
-    setViewState({ statusText: 'Interactive Mode', deepAnalysisKey: null });
+    setViewState({ statusText: 'Interactive Mode', deepAnalysisKey: null, boardOrientation: 'white' });
+  }
+
+  function toggleBoardOrientation() {
+    setViewState(function update(previous) {
+      return {
+        ...previous,
+        boardOrientation: previous.boardOrientation === 'white' ? 'black' : 'white',
+      };
+    });
   }
 
   return (
@@ -519,13 +547,13 @@ const ChessReplay: React.FC = () => {
             id="AnalysisBoard"
             position={gameState.currentNodeId ? gameState.tree[gameState.currentNodeId].fen : 'start'}
             onPieceDrop={onDrop}
-            boardOrientation="white"
+            boardOrientation={viewState.boardOrientation}
             animationDuration={200}
             customSquareStyles={boardMarkStyles}
           />
         </div>
 
-        <div className="flex items-center gap-4 mt-6">
+        <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
           <button onClick={goStart} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold">Start</button>
           <button
             onClick={goBack}
@@ -539,6 +567,12 @@ const ChessReplay: React.FC = () => {
             className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30"
           >
             Forward
+          </button>
+          <button
+            onClick={toggleBoardOrientation}
+            className="px-4 py-2 bg-gray-800 hover:bg-black text-white rounded font-bold"
+          >
+            {viewState.boardOrientation === 'white' ? 'View as Black' : 'View as White'}
           </button>
         </div>
 

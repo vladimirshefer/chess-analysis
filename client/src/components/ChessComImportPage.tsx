@@ -56,10 +56,14 @@ function ChessComImportPage() {
   }
 
   function openGame(game: ChessComGameSummary) {
+    const storedUsername = window.localStorage.getItem(CHESS_COM_USERNAME_STORAGE_KEY);
+    const initialBoardOrientation = getInitialBoardOrientation(game, storedUsername);
+
     navigate('/', {
       state: {
         importedPgn: game.pgn,
         importedGameInfo: toImportedGameInfoFromChessComGame(game),
+        initialBoardOrientation,
       },
     });
   }
@@ -158,6 +162,13 @@ function formatTimestamp(timestamp: number | null): string {
 function formatAccuracy(accuracy?: number): string {
   if (typeof accuracy !== 'number') return '-';
   return `${accuracy.toFixed(1)}%`;
+}
+
+function getInitialBoardOrientation(game: ChessComGameSummary, username: string | null): 'white' | 'black' {
+  const normalizedUsername = username?.trim().toLowerCase();
+  if (!normalizedUsername) return 'white';
+  if (game.black.username.trim().toLowerCase() === normalizedUsername) return 'black';
+  return 'white';
 }
 
 export default ChessComImportPage;
