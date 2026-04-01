@@ -569,10 +569,10 @@ const ChessReplay: React.FC = () => {
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
       <div className="flex-1 flex flex-col items-center">
-        <div className="w-full max-w-[480px] mb-3">
+        <div className="w-full max-w-120 mb-3">
           <PlayerCard info={boardPlayers.top} />
         </div>
-        <div className="w-full max-w-[520px] flex items-stretch gap-3">
+        <div className="w-full max-w-130 flex items-stretch gap-3">
           <EvaluationThermometer
             evaluation={currentAnalysis?.evaluation ?? null}
             orientation={viewState.boardOrientation}
@@ -620,7 +620,7 @@ const ChessReplay: React.FC = () => {
           </button>
         </div>
 
-        <div className="w-full max-w-[480px] mt-4">
+        <div className="w-full max-w-120 mt-4">
           <PlayerCard info={boardPlayers.bottom} />
         </div>
       </div>
