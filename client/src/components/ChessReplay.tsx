@@ -21,6 +21,7 @@ import {
   type PlayerInfo,
 } from '../lib/gameInfo';
 import { classifyMoveMark, MoveMark, type MoveMarkResult } from '../lib/moveMarks';
+import EvaluationThermometer from './EvaluationThermometer';
 import RenderIcon from './RenderIcon';
 
 interface MoveNode {
@@ -34,6 +35,7 @@ interface MoveNode {
 interface DisplayEngineLine {
   move: string;
   uci: string;
+  pvUci: string[];
   pv: string;
   score: number;
   depth: number;
@@ -46,6 +48,7 @@ interface NodeAnalysis {
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
+  source: 'engine-final' | 'engine-live' | 'seeded-from-parent';
 }
 
 interface GameState {
@@ -81,6 +84,11 @@ interface ScheduledTask {
   label: string;
   request: EvaluationRequest;
   priority: EngineEvaluationPriorityValue;
+}
+
+interface MoveResult {
+  nodeId: string;
+  fen: string;
 }
 
 interface AnalyzerLocationState {
@@ -333,12 +341,13 @@ const ChessReplay: React.FC = () => {
   function syncNodeAnalysis(nodeId: string, nextAnalysis: NodeAnalysis) {
     setAnalysisState(function updateAnalysis(previous) {
       const currentAnalysisEntry = previous.byNodeId[nodeId];
-      if (areNodeAnalysesEqual(currentAnalysisEntry, nextAnalysis)) return previous;
+      const preferredAnalysis = pickPreferredAnalysis(currentAnalysisEntry, nextAnalysis);
+      if (areNodeAnalysesEqual(currentAnalysisEntry, preferredAnalysis)) return previous;
       return {
         ...previous,
         byNodeId: {
           ...previous.byNodeId,
-          [nodeId]: nextAnalysis,
+          [nodeId]: preferredAnalysis,
         },
       };
     });
@@ -389,13 +398,13 @@ const ChessReplay: React.FC = () => {
       });
   }
 
-  function makeMove(move: { from: string; to: string; promotion?: string }) {
+  function makeMove(move: { from: string; to: string; promotion?: string }): MoveResult | null {
     const currentFen = getCurrentFen(gameState.currentNodeId, gameState.tree);
     const tempGame = new Chess(currentFen === 'start' ? undefined : currentFen);
 
     try {
       const result = tempGame.move(move);
-      if (!result) return false;
+      if (!result) return null;
 
       const nextFen = tempGame.fen();
       const nextNodeId = gameState.currentNodeId ? `${gameState.currentNodeId}|${result.san}` : result.san;
@@ -434,22 +443,40 @@ const ChessReplay: React.FC = () => {
           activeLineId: nextNodeId,
         };
       });
-      return true;
+      return {
+        nodeId: nextNodeId,
+        fen: nextFen,
+      };
     } catch {
-      return false;
+      return null;
     }
   }
 
-  function applyEngineMove(uci: string) {
-    return makeMove({
-      from: uci.substring(0, 2),
-      to: uci.substring(2, 4),
-      promotion: uci[4] || 'q',
+  function applyEngineMove(line: DisplayEngineLine) {
+    const moveResult = makeMove({
+      from: line.uci.substring(0, 2),
+      to: line.uci.substring(2, 4),
+      promotion: line.uci[4] || 'q',
     });
+    if (!moveResult) return null;
+
+    const engine = engineRef.current;
+    const cachedEvaluation = engine?.getEvaluation(moveResult.fen, 0);
+    if (cachedEvaluation) {
+      syncNodeAnalysis(moveResult.nodeId, toNodeAnalysis(moveResult.fen, cachedEvaluation, true));
+      return moveResult;
+    }
+
+    const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line);
+    if (seededAnalysis) {
+      syncNodeAnalysis(moveResult.nodeId, seededAnalysis);
+    }
+
+    return moveResult;
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    return makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' });
+    return makeMove({ from: sourceSquare, to: targetSquare, promotion: 'q' }) !== null;
   }
 
   function importPgn(
@@ -545,15 +572,22 @@ const ChessReplay: React.FC = () => {
         <div className="w-full max-w-[480px] mb-3">
           <PlayerCard info={boardPlayers.top} />
         </div>
-        <div className="w-full max-w-[480px] shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
-          <Chessboard
-            id="AnalysisBoard"
-            position={gameState.currentNodeId ? gameState.tree[gameState.currentNodeId].fen : 'start'}
-            onPieceDrop={onDrop}
-            boardOrientation={viewState.boardOrientation}
-            animationDuration={200}
-            customSquareStyles={boardMarkStyles}
+        <div className="w-full max-w-[520px] flex items-stretch gap-3">
+          <EvaluationThermometer
+            evaluation={currentAnalysis?.evaluation ?? null}
+            orientation={viewState.boardOrientation}
+            className="w-8 min-h-120 rounded-md"
           />
+          <div className="flex-1 shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
+            <Chessboard
+              id="AnalysisBoard"
+              position={gameState.currentNodeId ? gameState.tree[gameState.currentNodeId].fen : 'start'}
+              onPieceDrop={onDrop}
+              boardOrientation={viewState.boardOrientation}
+              animationDuration={200}
+              customSquareStyles={boardMarkStyles}
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
@@ -616,7 +650,7 @@ const ChessReplay: React.FC = () => {
             {(!currentAnalysis || currentAnalysis.lines.length === 0) && <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>}
             {currentAnalysis?.lines.map(function renderLine(line, index) {
               return (
-                <button key={index} onClick={function applyLine() { applyEngineMove(line.uci); }} className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left">
+                <button key={index} onClick={function applyLine() { applyEngineMove(line); }} className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left">
                   <div className="flex justify-between items-center w-full">
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold text-gray-300">{line.multipv}.</span>
@@ -959,6 +993,7 @@ function toDisplayLine(baseFen: string, line: ChessEngineLine): DisplayEngineLin
   return {
     move: sanMoves[0],
     uci: line.uci,
+    pvUci: line.pv,
     pv: sanMoves.join(' '),
     score: line.evaluation,
     depth: line.depth,
@@ -983,7 +1018,37 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
+    source: isFinal ? 'engine-final' : 'engine-live',
   };
+}
+
+function buildSeededNodeAnalysis(childFen: string, line: DisplayEngineLine): NodeAnalysis | null {
+  const childPvUci = line.pvUci.slice(1);
+  const childLines = childPvUci.length > 0 ? toSeededDisplayLines(childFen, childPvUci, line) : [];
+
+  return {
+    fen: childFen,
+    evaluation: line.score,
+    depth: line.depth,
+    lines: childLines,
+    isFinal: false,
+    source: 'seeded-from-parent',
+  };
+}
+
+function toSeededDisplayLines(childFen: string, childPvUci: string[], line: DisplayEngineLine): DisplayEngineLine[] {
+  const sanMoves = uciToSanLine(childPvUci.join(' '), childFen);
+  if (sanMoves.length === 0) return [];
+
+  return [{
+    move: sanMoves[0],
+    uci: childPvUci[0],
+    pvUci: childPvUci,
+    pv: sanMoves.join(' '),
+    score: line.score,
+    depth: line.depth,
+    multipv: 1,
+  }];
 }
 
 function buildMoveMarksByNodeId(
@@ -1109,6 +1174,7 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
     left.evaluation === right.evaluation &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
+    left.source === right.source &&
     areDisplayLinesEqual(left.lines, right.lines);
 }
 
@@ -1122,6 +1188,7 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
     if (
       leftLine.move !== rightLine.move ||
       leftLine.uci !== rightLine.uci ||
+      leftLine.pvUci.join(' ') !== rightLine.pvUci.join(' ') ||
       leftLine.pv !== rightLine.pv ||
       leftLine.score !== rightLine.score ||
       leftLine.depth !== rightLine.depth ||
@@ -1132,6 +1199,44 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
   }
 
   return true;
+}
+
+function pickPreferredAnalysis(currentAnalysis: NodeAnalysis | undefined, nextAnalysis: NodeAnalysis): NodeAnalysis {
+  const mergedNextAnalysis = mergeNodeAnalysisLines(currentAnalysis, nextAnalysis);
+  if (!currentAnalysis) return nextAnalysis;
+  if (currentAnalysis.source === 'engine-final' && mergedNextAnalysis.source === 'seeded-from-parent') return currentAnalysis;
+  if (currentAnalysis.source === 'engine-live' && mergedNextAnalysis.source === 'seeded-from-parent') return currentAnalysis;
+  if (currentAnalysis.source === 'engine-final' && mergedNextAnalysis.source === 'engine-live' && mergedNextAnalysis.depth <= currentAnalysis.depth) {
+    return currentAnalysis;
+  }
+  if (mergedNextAnalysis.source === 'engine-final' && currentAnalysis.source !== 'engine-final') return mergedNextAnalysis;
+  if (currentAnalysis.source === 'seeded-from-parent' && mergedNextAnalysis.source !== 'seeded-from-parent') return mergedNextAnalysis;
+  if (mergedNextAnalysis.depth > currentAnalysis.depth) return mergedNextAnalysis;
+  if (mergedNextAnalysis.depth < currentAnalysis.depth) return currentAnalysis;
+  if (mergedNextAnalysis.lines.length > currentAnalysis.lines.length) return mergedNextAnalysis;
+  if (mergedNextAnalysis.lines.length < currentAnalysis.lines.length) return currentAnalysis;
+  return mergedNextAnalysis;
+}
+
+function mergeNodeAnalysisLines(currentAnalysis: NodeAnalysis | undefined, nextAnalysis: NodeAnalysis): NodeAnalysis {
+  if (!currentAnalysis) return nextAnalysis;
+  if (currentAnalysis.fen !== nextAnalysis.fen) return nextAnalysis;
+  if (nextAnalysis.lines.length >= currentAnalysis.lines.length) return nextAnalysis;
+
+  const mergedByMultiPv = new Map<number, DisplayEngineLine>();
+  nextAnalysis.lines.forEach(function addNext(line) {
+    mergedByMultiPv.set(line.multipv, line);
+  });
+  currentAnalysis.lines.forEach(function addMissing(line) {
+    if (!mergedByMultiPv.has(line.multipv)) mergedByMultiPv.set(line.multipv, line);
+  });
+
+  return {
+    ...nextAnalysis,
+    lines: [...mergedByMultiPv.values()].sort(function sortByMultiPv(left, right) {
+      return left.multipv - right.multipv;
+    }),
+  };
 }
 
 export default ChessReplay;
