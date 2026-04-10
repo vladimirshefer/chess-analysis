@@ -1,3 +1,4 @@
 - Every page should be under src/pages/PageName/index.tsx.
 - Never extract the component props type as a separate interface.
 - Never use arrow functions for components.
+- We're actively using typescript `namespace`-s to group the code.
