@@ -1,13 +1,20 @@
 const DEFAULT_LIMIT = 10;
 
 export async function fetchPlayer(username) {
-  return fetchChessComJson(`https://api.chess.com/pub/player/${encodeURIComponent(username)}`);
+  return fetchChessComJson(
+    `https://api.chess.com/pub/player/${encodeURIComponent(username)}`,
+  );
 }
 
 export async function fetchRecentGamesPayload(username, limit = DEFAULT_LIMIT) {
   const player = await fetchPlayer(username);
-  const archivesResponse = await fetchChessComJson(`https://api.chess.com/pub/player/${encodeURIComponent(username)}/games/archives`);
-  const games = await collectRecentGames(archivesResponse.archives || [], limit);
+  const archivesResponse = await fetchChessComJson(
+    `https://api.chess.com/pub/player/${encodeURIComponent(username)}/games/archives`,
+  );
+  const games = await collectRecentGames(
+    archivesResponse.archives || [],
+    limit,
+  );
 
   return {
     player: {
@@ -24,12 +31,12 @@ export function sendJson(response, status, payload) {
 }
 
 export function sendError(response, error) {
-  if (error && typeof error.status === 'number') {
+  if (error && typeof error.status === "number") {
     sendJson(response, error.status, { message: error.message });
     return;
   }
 
-  sendJson(response, 502, { message: 'Unable to load Chess.com data' });
+  sendJson(response, 502, { message: "Unable to load Chess.com data" });
 }
 
 async function collectRecentGames(archiveUrls, limit) {
@@ -51,15 +58,22 @@ async function collectRecentGames(archiveUrls, limit) {
 }
 
 function normalizeGame(game) {
-  if (!game || !game.url || !game.pgn || !game.white?.username || !game.black?.username) return null;
+  if (
+    !game ||
+    !game.url ||
+    !game.pgn ||
+    !game.white?.username ||
+    !game.black?.username
+  )
+    return null;
 
   return {
     id: game.url,
     url: game.url,
     pgn: game.pgn,
     endTime: game.end_time ?? null,
-    timeClass: game.time_class ?? 'unknown',
-    timeControl: game.time_control ?? '-',
+    timeClass: game.time_class ?? "unknown",
+    timeControl: game.time_control ?? "-",
     white: {
       username: game.white.username,
       rating: game.white.rating,
@@ -72,9 +86,9 @@ function normalizeGame(game) {
     },
     accuracies: game.accuracies
       ? {
-        white: game.accuracies.white,
-        black: game.accuracies.black,
-      }
+          white: game.accuracies.white,
+          black: game.accuracies.black,
+        }
       : undefined,
   };
 }
@@ -86,7 +100,9 @@ async function fetchChessComJson(url) {
   });
 
   if (!response.ok) {
-    const error = new Error(payload.message || response.statusText || 'Chess.com request failed');
+    const error = new Error(
+      payload.message || response.statusText || "Chess.com request failed",
+    );
     error.status = response.status;
     throw error;
   }

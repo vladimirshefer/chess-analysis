@@ -1,8 +1,8 @@
-import type {ReactNode} from 'react'
-import {Link, Route, Routes} from 'react-router-dom'
-import ChessReplay from './components/ChessReplay'
-import ChessComImportPage from './components/ChessComImportPage'
-import {AboutPage} from "./pages/AboutPage";
+import type { ReactNode } from "react";
+import { Link, Route, Routes } from "react-router-dom";
+import ChessReplay from "./components/ChessReplay";
+import ChessComImportPage from "./components/ChessComImportPage";
+import { AboutPage } from "./pages/AboutPage";
 
 function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -19,36 +19,49 @@ function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <div className="flex items-center gap-6">
             <nav className="flex gap-4">
-              <Link to="/" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Analyzer</Link>
-              <Link to="/import/chess-com" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">Chess.com</Link>
-              <Link to="/about" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">About</Link>
+              <Link
+                to="/"
+                className="text-gray-600 hover:text-indigo-600 font-medium transition-colors"
+              >
+                Analyzer
+              </Link>
+              <Link
+                to="/import/chess-com"
+                className="text-gray-600 hover:text-indigo-600 font-medium transition-colors"
+              >
+                Chess.com
+              </Link>
+              <Link
+                to="/about"
+                className="text-gray-600 hover:text-indigo-600 font-medium transition-colors"
+              >
+                About
+              </Link>
             </nav>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 py-10 px-6">
-        {children}
-      </main>
+      <main className="flex-1 py-10 px-6">{children}</main>
 
       <footer className="grid py-2 border-t border-gray-200 bg-white text-center text-gray-400 text-sm">
-          <span>Built with React, Chess.js, and Tailwind CSS</span>
-          <span>Copyright (2026) Vladimir Shefer</span>
+        <span>Built with React, Chess.js, and Tailwind CSS</span>
+        <span>Copyright (2026) Vladimir Shefer</span>
       </footer>
     </div>
-  )
+  );
 }
 
 function App() {
   return (
     <AppShell>
-        <Routes>
-          <Route path="/" element={<ChessReplay />} />
-          <Route path="/import/chess-com" element={<ChessComImportPage />} />
-          <Route path="/about" element={<AboutPage />} />
-        </Routes>
+      <Routes>
+        <Route path="/" element={<ChessReplay />} />
+        <Route path="/import/chess-com" element={<ChessComImportPage />} />
+        <Route path="/about" element={<AboutPage />} />
+      </Routes>
     </AppShell>
-  )
+  );
 }
 
-export default App
+export default App;

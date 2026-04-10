@@ -75,7 +75,10 @@ interface ChessComRecentGamesResponse {
 
 const DEFAULT_LIMIT = 10;
 
-export async function getRecentGames(username: string, limit: number = DEFAULT_LIMIT): Promise<ChessComRecentGames> {
+export async function getRecentGames(
+  username: string,
+  limit: number = DEFAULT_LIMIT,
+): Promise<ChessComRecentGames> {
   if (import.meta.env.DEV) {
     return getRecentGamesDirect(username, limit);
   }
@@ -83,11 +86,21 @@ export async function getRecentGames(username: string, limit: number = DEFAULT_L
   return getRecentGamesViaProxy(username, limit);
 }
 
-async function getRecentGamesDirect(username: string, limit: number): Promise<ChessComRecentGames> {
+async function getRecentGamesDirect(
+  username: string,
+  limit: number,
+): Promise<ChessComRecentGames> {
   const normalizedUsername = username.trim().toLowerCase();
-  const player = await fetchJson<ChessComPlayerResponse>(`https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}`);
-  const archivesResponse = await fetchJson<ChessComArchivesResponse>(`https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}/games/archives`);
-  const games = await collectRecentGames(archivesResponse.archives ?? [], limit);
+  const player = await fetchJson<ChessComPlayerResponse>(
+    `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}`,
+  );
+  const archivesResponse = await fetchJson<ChessComArchivesResponse>(
+    `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}/games/archives`,
+  );
+  const games = await collectRecentGames(
+    archivesResponse.archives ?? [],
+    limit,
+  );
 
   return {
     player: {
@@ -99,14 +112,22 @@ async function getRecentGamesDirect(username: string, limit: number): Promise<Ch
   };
 }
 
-async function getRecentGamesViaProxy(username: string, limit: number): Promise<ChessComRecentGames> {
+async function getRecentGamesViaProxy(
+  username: string,
+  limit: number,
+): Promise<ChessComRecentGames> {
   const normalizedUsername = username.trim().toLowerCase();
-  const response = await fetch(`/api/chesscom/player/${encodeURIComponent(normalizedUsername)}/games?limit=${limit}`);
+  const response = await fetch(
+    `/api/chesscom/player/${encodeURIComponent(normalizedUsername)}/games?limit=${limit}`,
+  );
   const payload = await parseResponse<ChessComRecentGamesResponse>(response);
   return payload;
 }
 
-async function collectRecentGames(archiveUrls: string[], limit: number): Promise<ChessComGameSummary[]> {
+async function collectRecentGames(
+  archiveUrls: string[],
+  limit: number,
+): Promise<ChessComGameSummary[]> {
   const recentGames: ChessComGameSummary[] = [];
 
   for (let index = archiveUrls.length - 1; index >= 0; index -= 1) {
@@ -129,16 +150,19 @@ async function collectRecentGames(archiveUrls: string[], limit: number): Promise
   return recentGames.slice(0, limit);
 }
 
-function normalizeGame(game: ChessComArchiveGameResponse): ChessComGameSummary | null {
-  if (!game.url || !game.pgn || !game.white?.username || !game.black?.username) return null;
+function normalizeGame(
+  game: ChessComArchiveGameResponse,
+): ChessComGameSummary | null {
+  if (!game.url || !game.pgn || !game.white?.username || !game.black?.username)
+    return null;
 
   return {
     id: game.url,
     url: game.url,
     pgn: game.pgn,
     endTime: game.end_time ?? null,
-    timeClass: game.time_class ?? 'unknown',
-    timeControl: game.time_control ?? '-',
+    timeClass: game.time_class ?? "unknown",
+    timeControl: game.time_control ?? "-",
     white: {
       username: game.white.username,
       rating: game.white.rating,
@@ -151,9 +175,9 @@ function normalizeGame(game: ChessComArchiveGameResponse): ChessComGameSummary |
     },
     accuracies: game.accuracies
       ? {
-        white: game.accuracies.white,
-        black: game.accuracies.black,
-      }
+          white: game.accuracies.white,
+          black: game.accuracies.black,
+        }
       : undefined,
   };
 }
@@ -172,15 +196,15 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 async function toChessComError(response: Response): Promise<Error> {
-  let message = 'Unable to load Chess.com games';
+  let message = "Unable to load Chess.com games";
 
   if (response.status === 404) {
-    message = 'Chess.com user not found';
+    message = "Chess.com user not found";
   } else if (response.status === 429) {
-    message = 'Chess.com rate limit reached';
+    message = "Chess.com rate limit reached";
   } else {
     try {
-      const payload = await response.json() as { message?: string };
+      const payload = (await response.json()) as { message?: string };
       if (payload.message) message = payload.message;
     } catch {
       message = response.statusText || message;

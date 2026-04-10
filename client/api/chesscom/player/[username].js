@@ -1,10 +1,12 @@
-import { fetchPlayer, sendError, sendJson } from '../_lib.js';
+import { fetchPlayer, sendError, sendJson } from "../_lib.js";
 
 export default async function handler(request, response) {
-  const username = String(request.query.username || '').trim().toLowerCase();
+  const username = String(request.query.username || "")
+    .trim()
+    .toLowerCase();
 
   if (!username) {
-    sendJson(response, 400, { message: 'Username is required' });
+    sendJson(response, 400, { message: "Username is required" });
     return;
   }
 

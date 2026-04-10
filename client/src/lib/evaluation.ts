@@ -1,52 +1,72 @@
-import { Chess } from 'chess.js';
+import { Chess } from "chess.js";
 
 export const GameResult = {
-  WHITE_WIN: '1-0',
-  BLACK_WIN: '0-1',
-  DRAW: '1/2-1/2',
+  WHITE_WIN: "1-0",
+  BLACK_WIN: "0-1",
+  DRAW: "1/2-1/2",
 } as const;
 
-export type GameResult = typeof GameResult[keyof typeof GameResult];
+export type GameResult = (typeof GameResult)[keyof typeof GameResult];
 
 export type EngineEvaluation =
-  | { kind: 'cp'; pawns: number }
-  | { kind: 'mate'; moves: number }
-  | { kind: 'result'; result: GameResult };
+  | { kind: "cp"; pawns: number }
+  | { kind: "mate"; moves: number }
+  | { kind: "result"; result: GameResult };
 
 export function formatEvaluation(evaluation: EngineEvaluation): string {
   switch (evaluation.kind) {
-    case 'cp':
-      return evaluation.pawns >= 0 ? `+${evaluation.pawns.toFixed(1)}` : evaluation.pawns.toFixed(1);
-    case 'mate':
-      return evaluation.moves >= 0 ? `M${evaluation.moves}` : `-M${Math.abs(evaluation.moves)}`;
-    case 'result':
+    case "cp":
+      return evaluation.pawns >= 0
+        ? `+${evaluation.pawns.toFixed(1)}`
+        : evaluation.pawns.toFixed(1);
+    case "mate":
+      return evaluation.moves >= 0
+        ? `M${evaluation.moves}`
+        : `-M${Math.abs(evaluation.moves)}`;
+    case "result":
       return evaluation.result;
   }
 }
 
-export function toComparableEvaluationScore(evaluation: EngineEvaluation): number {
+export function toComparableEvaluationScore(
+  evaluation: EngineEvaluation,
+): number {
   switch (evaluation.kind) {
-    case 'cp':
+    case "cp":
       return evaluation.pawns;
-    case 'mate':
-      return evaluation.moves >= 0 ? 1000 - Math.abs(evaluation.moves) : -1000 + Math.abs(evaluation.moves);
-    case 'result':
+    case "mate":
+      return evaluation.moves >= 0
+        ? 1000 - Math.abs(evaluation.moves)
+        : -1000 + Math.abs(evaluation.moves);
+    case "result":
       if (evaluation.result === GameResult.WHITE_WIN) return 2000;
       if (evaluation.result === GameResult.BLACK_WIN) return -2000;
       return 0;
   }
 }
 
-export function areEvaluationsEqual(left: EngineEvaluation, right: EngineEvaluation): boolean {
+export function areEvaluationsEqual(
+  left: EngineEvaluation,
+  right: EngineEvaluation,
+): boolean {
   if (left.kind !== right.kind) return false;
 
   switch (left.kind) {
-    case 'cp':
-      return left.pawns === (right as Extract<EngineEvaluation, { kind: 'cp' }>).pawns;
-    case 'mate':
-      return left.moves === (right as Extract<EngineEvaluation, { kind: 'mate' }>).moves;
-    case 'result':
-      return left.result === (right as Extract<EngineEvaluation, { kind: 'result' }>).result;
+    case "cp":
+      return (
+        left.pawns ===
+        (right as Extract<EngineEvaluation, { kind: "cp" }>).pawns
+      );
+    case "mate":
+      return (
+        left.moves ===
+        (right as Extract<EngineEvaluation, { kind: "mate" }>).moves
+      );
+    case "result":
+      return (
+        left.result ===
+        (right as Extract<EngineEvaluation, { kind: "result" }>).result
+      );
   }
 }
 
@@ -55,40 +75,40 @@ export function parseEngineEvaluation(
   cpScore?: string,
   mateScore?: string,
 ): EngineEvaluation {
-  const sideToMove = fen === 'start' ? 'w' : fen.split(' ')[1];
-  const perspective = sideToMove === 'b' ? -1 : 1;
+  const sideToMove = fen === "start" ? "w" : fen.split(" ")[1];
+  const perspective = sideToMove === "b" ? -1 : 1;
 
   if (cpScore) {
     return {
-      kind: 'cp',
-      pawns: parseInt(cpScore, 10) * perspective / 100,
+      kind: "cp",
+      pawns: (parseInt(cpScore, 10) * perspective) / 100,
     };
   }
 
   if (mateScore) {
     return {
-      kind: 'mate',
+      kind: "mate",
       moves: parseInt(mateScore, 10) * perspective,
     };
   }
 
-  return { kind: 'cp', pawns: 0 };
+  return { kind: "cp", pawns: 0 };
 }
 
 export function getTerminalEvaluation(fen: string): EngineEvaluation | null {
-  const chess = new Chess(fen === 'start' ? undefined : fen);
+  const chess = new Chess(fen === "start" ? undefined : fen);
   if (!chess.isGameOver()) return null;
 
   if (chess.isCheckmate()) {
-    const sideToMove = fen === 'start' ? 'w' : fen.split(' ')[1];
+    const sideToMove = fen === "start" ? "w" : fen.split(" ")[1];
     return {
-      kind: 'result',
-      result: sideToMove === 'w' ? GameResult.BLACK_WIN : GameResult.WHITE_WIN,
+      kind: "result",
+      result: sideToMove === "w" ? GameResult.BLACK_WIN : GameResult.WHITE_WIN,
     };
   }
 
   if (chess.isDraw()) {
-    return { kind: 'result', result: GameResult.DRAW };
+    return { kind: "result", result: GameResult.DRAW };
   }
 
   return null;

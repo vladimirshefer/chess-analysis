@@ -1,4 +1,4 @@
-import type {ChessComGameSummary} from './chessCom';
+import type { ChessComGameSummary } from "./chessCom";
 
 export interface PlayerInfo {
   name?: string;
@@ -12,10 +12,12 @@ export interface GamePlayersInfo {
 
 export interface ImportedGameInfo {
   players: GamePlayersInfo;
-  source: 'pgn' | 'chesscom';
+  source: "pgn" | "chesscom";
 }
 
-export function parsePgnPlayersInfo(headers: Record<string, string>): GamePlayersInfo | null {
+export function parsePgnPlayersInfo(
+  headers: Record<string, string>,
+): GamePlayersInfo | null {
   const white = {
     name: headers.White,
     rating: toInt(headers.WhiteElo),
@@ -33,7 +35,10 @@ export function parsePgnPlayersInfo(headers: Record<string, string>): GamePlayer
   };
 }
 
-export function mergePlayersInfo(base: GamePlayersInfo | null, override: GamePlayersInfo | null): GamePlayersInfo | null {
+export function mergePlayersInfo(
+  base: GamePlayersInfo | null,
+  override: GamePlayersInfo | null,
+): GamePlayersInfo | null {
   return {
     white: {
       ...base?.white,
@@ -46,9 +51,11 @@ export function mergePlayersInfo(base: GamePlayersInfo | null, override: GamePla
   };
 }
 
-export function toImportedGameInfoFromChessComGame(game: ChessComGameSummary): ImportedGameInfo {
+export function toImportedGameInfoFromChessComGame(
+  game: ChessComGameSummary,
+): ImportedGameInfo {
   return {
-    source: 'chesscom',
+    source: "chesscom",
     players: {
       white: {
         name: game.white.username,
