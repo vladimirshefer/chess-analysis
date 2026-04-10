@@ -20,7 +20,14 @@ import {
   type ImportedGameInfo,
   type PlayerInfo,
 } from '../lib/gameInfo';
-import { classifyMoveMark, MoveMark, type MoveMarkResult } from '../lib/moveMarks';
+import {
+  areEvaluationsEqual,
+  formatEvaluation,
+  getTerminalEvaluation,
+  toComparableEvaluationScore,
+  type EngineEvaluation,
+} from '../lib/evaluation';
+import { classifyMoveMark, MoveMark, toMoveMarkEvaluation, type MoveMarkResult } from '../lib/moveMarks';
 import EvaluationThermometer from './EvaluationThermometer';
 import RenderIcon from './RenderIcon';
 
@@ -37,14 +44,14 @@ interface DisplayEngineLine {
   uci: string;
   pvUci: string[];
   pv: string;
-  score: number;
+  score: EngineEvaluation;
   depth: number;
   multipv: number;
 }
 
 interface NodeAnalysis {
   fen: string;
-  evaluation: number;
+  evaluation: EngineEvaluation;
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
@@ -279,9 +286,13 @@ const ChessReplay: React.FC = () => {
     if (!node) return;
 
     const cachedEvaluation = engine.getEvaluation(node.fen, 0);
-    if (!cachedEvaluation) return;
+    if (cachedEvaluation) {
+      syncNodeAnalysis(currentNodeId, toNodeAnalysis(node.fen, cachedEvaluation, true));
+      return;
+    }
 
-    syncNodeAnalysis(currentNodeId, toNodeAnalysis(node.fen, cachedEvaluation, true));
+    const terminalAnalysis = buildTerminalNodeAnalysis(node.fen);
+    if (terminalAnalysis) syncNodeAnalysis(currentNodeId, terminalAnalysis);
   }, [gameState.currentNodeId, gameState.tree]);
 
   useEffect(function runAnalysisLoop() {
@@ -634,7 +645,7 @@ const ChessReplay: React.FC = () => {
             <div className="flex items-start gap-3">
               <div className="text-right">
                 <span className="text-[10px] uppercase text-gray-400 font-bold">Eval</span>
-                <div className="text-sm font-mono text-indigo-500">{currentAnalysis ? formatScore(currentAnalysis.evaluation) : '--'}</div>
+                <div className="text-sm font-mono text-indigo-500">{currentAnalysis ? formatEvaluation(currentAnalysis.evaluation) : '--'}</div>
               </div>
               <button
                 onClick={runDeepAnalysis}
@@ -647,8 +658,9 @@ const ChessReplay: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {(!currentAnalysis || currentAnalysis.lines.length === 0) && <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>}
+            {(!currentAnalysis || (currentAnalysis.lines.length === 0 && !currentAnalysis.isFinal)) && <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>}
             {currentAnalysis?.lines.map(function renderLine(line, index) {
+              const scoreValue = toComparableEvaluationScore(line.score);
               return (
                 <button key={index} onClick={function applyLine() { applyEngineMove(line); }} className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left">
                   <div className="flex justify-between items-center w-full">
@@ -657,7 +669,7 @@ const ChessReplay: React.FC = () => {
                       <span className="font-bold text-gray-800 font-mono text-base">{line.move}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className={`text-sm font-bold ${line.score >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatScore(line.score)}</span>
+                      <span className={`text-sm font-bold ${scoreValue > 0 ? 'text-green-600' : scoreValue < 0 ? 'text-red-600' : 'text-gray-500'}`}>{formatEvaluation(line.score)}</span>
                       <span className="text-[10px] text-gray-400">d{line.depth}</span>
                     </div>
                   </div>
@@ -711,7 +723,7 @@ const ChessReplay: React.FC = () => {
                           </span>
                         )}
                       </span>
-                      {nodeAnalysis && <span className={`text-[10px] font-bold ${isFocus ? 'text-indigo-100' : 'text-gray-500'}`}>{formatScore(nodeAnalysis.evaluation)} <span className="opacity-50">d{nodeAnalysis.depth}</span></span>}
+                      {nodeAnalysis && <span className={`text-[10px] font-bold ${isFocus ? 'text-indigo-100' : 'text-gray-500'}`}>{formatEvaluation(nodeAnalysis.evaluation)} {nodeAnalysis.depth > 0 && <span className="opacity-50">d{nodeAnalysis.depth}</span>}</span>}
                     </button>
                   </div>
                   {variations.length > 1 && (
@@ -888,6 +900,7 @@ function scheduleNextTask(gameState: GameState, engine: ChessEngine): ScheduledT
     for (const nodeId of nodeIds) {
       const fen = nodeId === ROOT_ANALYSIS_NODE_ID ? 'start' : gameState.tree[nodeId]?.fen;
       if (!fen) continue;
+      if (getTerminalEvaluation(fen)) continue;
 
       const cachedEvaluation = engine.getEvaluation(fen, minDepth);
       if (!cachedEvaluation) return nodeId;
@@ -1012,9 +1025,11 @@ function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngin
 }
 
 function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal: boolean): NodeAnalysis {
+  const terminalEvaluation = getTerminalEvaluation(evaluation.fen);
+
   return {
     fen: evaluation.fen,
-    evaluation: evaluation.evaluation,
+    evaluation: terminalEvaluation ?? evaluation.evaluation,
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
@@ -1033,6 +1048,20 @@ function buildSeededNodeAnalysis(childFen: string, line: DisplayEngineLine): Nod
     lines: childLines,
     isFinal: false,
     source: 'seeded-from-parent',
+  };
+}
+
+function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
+  const evaluation = getTerminalEvaluation(fen);
+  if (!evaluation) return null;
+
+  return {
+    fen,
+    evaluation,
+    depth: 0,
+    lines: [],
+    isFinal: true,
+    source: 'engine-final',
   };
 }
 
@@ -1068,11 +1097,11 @@ function buildMoveMarksByNodeId(
     const mark = classifyMoveMark({
       parentFen,
       playedMoveSan: node.san,
-      playedEvaluation: nodeAnalysis.evaluation,
+      playedEvaluation: toMoveMarkEvaluation(nodeAnalysis.evaluation),
       parentLines: parentAnalysis.lines.map(function toEngineLine(line) {
         return {
           uci: line.uci,
-          evaluation: line.score,
+          evaluation: toMoveMarkEvaluation(line.score),
         };
       }),
     });
@@ -1162,16 +1191,12 @@ function capitalizeSide(side: 'white' | 'black'): string {
   return side.charAt(0).toUpperCase() + side.slice(1);
 }
 
-function formatScore(score: number): string {
-  return score >= 0 ? `+${score.toFixed(1)}` : score.toFixed(1);
-}
-
 function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolean {
   if (left === right) return true;
   if (!left || !right) return !left && !right;
 
   return left.fen === right.fen &&
-    left.evaluation === right.evaluation &&
+    areEvaluationsEqual(left.evaluation, right.evaluation) &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
     left.source === right.source &&
@@ -1190,7 +1215,7 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
       leftLine.uci !== rightLine.uci ||
       leftLine.pvUci.join(' ') !== rightLine.pvUci.join(' ') ||
       leftLine.pv !== rightLine.pv ||
-      leftLine.score !== rightLine.score ||
+      !areEvaluationsEqual(leftLine.score, rightLine.score) ||
       leftLine.depth !== rightLine.depth ||
       leftLine.multipv !== rightLine.multipv
     ) {

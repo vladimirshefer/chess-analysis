@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { toComparableEvaluationScore, type EngineEvaluation } from './evaluation';
 interface MoveMarkLine {
   uci: string;
   evaluation: number;
@@ -27,6 +28,10 @@ interface ClassifyMoveMarkInput {
   playedMoveSan: string;
   playedEvaluation: number;
   parentLines: MoveMarkLine[];
+}
+
+export function toMoveMarkEvaluation(evaluation: EngineEvaluation): number {
+  return toComparableEvaluationScore(evaluation);
 }
 
 export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult | null {

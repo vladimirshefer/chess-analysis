@@ -1,14 +1,16 @@
+import { getTerminalEvaluation, parseEngineEvaluation, type EngineEvaluation } from './evaluation';
+
 export interface ChessEngineLine {
   uci: string;
   pv: string[];
-  evaluation: number;
+  evaluation: EngineEvaluation;
   depth: number;
   multipv: number;
 }
 
 export interface FullMoveEvaluation {
   fen: string;
-  evaluation: number;
+  evaluation: EngineEvaluation;
   depth: number;
   lines: ChessEngineLine[];
 }
@@ -24,7 +26,7 @@ export interface EvaluationUpdate extends FullMoveEvaluation {
 
 export interface EvaluationCache {
   getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
-  addEvaluation(fen: string, depth: number, evaluation: number, lines: ChessEngineLine[]): void;
+  addEvaluation(fen: string, depth: number, evaluation: EngineEvaluation, lines: ChessEngineLine[]): void;
 }
 
 export const EngineEvaluationPriority = {
@@ -76,7 +78,7 @@ class FinalEvaluationCache implements EvaluationCache {
     }) ?? null;
   }
 
-  addEvaluation(fen: string, depth: number, evaluation: number, lines: ChessEngineLine[]): void {
+  addEvaluation(fen: string, depth: number, evaluation: EngineEvaluation, lines: ChessEngineLine[]): void {
     const nextSnapshot: FullMoveEvaluation = {
       fen,
       depth,
@@ -130,6 +132,18 @@ class StockfishQueue {
     options: EvaluationRequest,
     onUpdate?: (update: EvaluationUpdate) => void,
   ): Promise<FullMoveEvaluation> {
+    const terminalEvaluation = getTerminalEvaluation(fen);
+    if (terminalEvaluation) {
+      const terminalResult: FullMoveEvaluation = {
+        fen,
+        evaluation: terminalEvaluation,
+        depth: 0,
+        lines: [],
+      };
+      if (onUpdate) onUpdate({ ...terminalResult, isFinal: true });
+      return Promise.resolve(terminalResult);
+    }
+
     const cached = this.cache.getEvaluation(fen, options.minDepth);
     if (cached && cached.lines.length >= options.linesAmount) {
       const cachedResult = trimEvaluationLines(cached, options.linesAmount);
@@ -226,7 +240,7 @@ class StockfishQueue {
     job.collected.set(multipv, {
       uci: pvUci.split(' ')[0],
       pv: pvUci.split(' '),
-      evaluation: normalizeScoreForWhite(job.fen, cpMatch?.[1], mateMatch?.[1]),
+      evaluation: parseEngineEvaluation(job.fen, cpMatch?.[1], mateMatch?.[1]),
       depth,
       multipv,
     });
@@ -248,7 +262,7 @@ class StockfishQueue {
       return;
     }
 
-    const finalResult = buildFinalEvaluation(job);
+    const finalResult = buildFinalEvaluation(job) ?? buildTerminalEvaluation(job);
     if (finalResult) {
       this.cache.addEvaluation(job.fen, finalResult.depth, finalResult.evaluation, finalResult.lines);
       notifySubscribers(job, { ...finalResult, isFinal: true });
@@ -361,6 +375,18 @@ function buildFinalEvaluation(job: EngineJob): FullMoveEvaluation | null {
   };
 }
 
+function buildTerminalEvaluation(job: EngineJob): FullMoveEvaluation | null {
+  const evaluation = getTerminalEvaluation(job.fen);
+  if (!evaluation) return null;
+
+  return {
+    fen: job.fen,
+    evaluation,
+    depth: 0,
+    lines: [],
+  };
+}
+
 function notifySubscribers(job: EngineJob, update: EvaluationUpdate): void {
   const trimmedUpdate = trimUpdateLines(update, job.linesAmount);
   job.subscribers.forEach(function notify(subscriber) {
@@ -441,15 +467,6 @@ function mergeEvaluations(current: FullMoveEvaluation, next: FullMoveEvaluation)
       return left.multipv - right.multipv;
     }),
   };
-}
-
-function normalizeScoreForWhite(fen: string, cpScore?: string, mateScore?: string): number {
-  const sideToMove = fen === 'start' ? 'w' : fen.split(' ')[1];
-  const perspective = sideToMove === 'b' ? -1 : 1;
-
-  if (cpScore) return parseInt(cpScore, 10) * perspective / 100;
-  if (mateScore) return parseInt(mateScore, 10) * perspective * 1000;
-  return 0;
 }
 
 let singleton: ChessEngine | null = null;

@@ -1,5 +1,7 @@
+import { formatEvaluation, toComparableEvaluationScore, type EngineEvaluation } from '../lib/evaluation';
+
 interface EvaluationThermometerProps {
-  evaluation: number | null;
+  evaluation: EngineEvaluation | null;
   orientation: 'white' | 'black';
   className?: string;
 }
@@ -42,18 +44,13 @@ function EvaluationThermometer({ evaluation, orientation, className = '' }: Eval
   );
 }
 
-function formatEvaluation(score: number): string {
-  return score >= 0 ? `+${score.toFixed(1)}` : score.toFixed(1);
-}
-
-function getThermometerValue(evaluation: number | null): number {
-  if (evaluation === null || Number.isNaN(evaluation)) return 0;
-  if (!Number.isFinite(evaluation)) return evaluation > 0 ? 1 : -1;
-  return Math.max(-1, Math.min(1, evaluation / 6));
+function getThermometerValue(evaluation: EngineEvaluation | null): number {
+  if (evaluation === null) return 0;
+  return Math.max(-1, Math.min(1, toComparableEvaluationScore(evaluation) / 6));
 }
 
 function getThermometerSegments(
-  evaluation: number | null,
+  evaluation: EngineEvaluation | null,
   orientation: 'white' | 'black',
 ): ThermometerSegments {
   const whiteShare = (getThermometerValue(evaluation) + 1) / 2;
