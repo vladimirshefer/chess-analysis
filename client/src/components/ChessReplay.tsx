@@ -1,33 +1,41 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Chess } from 'chess.js';
-import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaMagnifyingGlassPlus, FaRotate, FaTrashCan } from 'react-icons/fa6';
-import { GiPerspectiveDiceSixFacesRandom } from 'react-icons/gi';
-import { Chessboard } from 'react-chessboard';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {useEffect, useMemo, useRef, useState} from 'react';
+import {Chess} from 'chess.js';
 import {
-  EngineEvaluationPriority,
-  getChessEngine,
+  FaAnglesLeft,
+  FaChevronLeft,
+  FaChevronRight,
+  FaFileImport,
+  FaMagnifyingGlassPlus,
+  FaRotate,
+  FaTrashCan
+} from 'react-icons/fa6';
+import {GiPerspectiveDiceSixFacesRandom} from 'react-icons/gi';
+import {Chessboard} from 'react-chessboard';
+import {Link, useLocation, useNavigate} from 'react-router-dom';
+import {
   type ChessEngine,
   type ChessEngineLine,
+  EngineEvaluationPriority,
   type EngineEvaluationPriority as EngineEvaluationPriorityValue,
   type EvaluationRequest,
   type FullMoveEvaluation,
+  getChessEngine,
 } from '../lib/chessEngine';
 import {
-  mergePlayersInfo,
-  parsePgnPlayersInfo,
   type GamePlayersInfo,
   type ImportedGameInfo,
+  mergePlayersInfo,
+  parsePgnPlayersInfo,
   type PlayerInfo,
 } from '../lib/gameInfo';
 import {
   areEvaluationsEqual,
+  type EngineEvaluation,
   formatEvaluation,
   getTerminalEvaluation,
   toComparableEvaluationScore,
-  type EngineEvaluation,
 } from '../lib/evaluation';
-import { classifyMoveMark, MoveMark, toMoveMarkEvaluation, type MoveMarkResult } from '../lib/moveMarks';
+import {classifyMoveMark, MoveMark, type MoveMarkResult, toMoveMarkEvaluation} from '../lib/moveMarks';
 import EvaluationThermometer from './EvaluationThermometer';
 import RenderIcon from './RenderIcon';
 
@@ -106,7 +114,7 @@ interface AnalyzerLocationState {
 
 const ROOT_ANALYSIS_NODE_ID = '__root__';
 
-const ChessReplay: React.FC = () => {
+function ChessReplay() {
   const location = useLocation();
   const navigate = useNavigate();
   const [gameState, setGameState] = useState<GameState>({
