@@ -13,7 +13,7 @@ function AppShell({ children }: { children: ReactNode }) {
               ♜
             </div>
             <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-              CHESS<span className="text-indigo-600">REPLAY</span>
+              CHESS<span className="text-indigo-600">ANALYSIS</span>
             </h1>
           </Link>
           <div className="flex items-center gap-6">
