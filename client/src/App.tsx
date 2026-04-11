@@ -42,7 +42,7 @@ function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="flex-1 py-10 px-6">{children}</main>
+      <main>{children}</main>
 
       <footer className="grid py-2 border-t border-gray-200 bg-white text-center text-gray-400 text-sm">
         <span>Built with React, Chess.js, and Tailwind CSS</span>
