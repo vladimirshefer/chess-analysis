@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import ChessReplay from "./components/ChessReplay";
-import ChessComImportPage from "./components/ChessComImportPage";
 import { AboutPage } from "./pages/AboutPage";
+import ChessComImportPage from "./pages/ChessComImportPage";
 
 function AppShell({ children }: { children: ReactNode }) {
   return (
