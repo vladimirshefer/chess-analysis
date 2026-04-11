@@ -3,6 +3,7 @@ import {
   parseEngineEvaluation,
   type EngineEvaluation,
 } from "./evaluation";
+import { UniversalChessInterface } from "./universalChessInterface";
 
 export interface ChessEngineLine {
   uci: string;
@@ -248,11 +249,9 @@ class StockfishQueue {
     if (!currentJob) return;
 
     const message = event.data;
-    if (
-      message.includes("info") &&
-      (message.includes("score cp") || message.includes("score mate"))
-    ) {
-      this.handleInfoMessage(currentJob, message);
+    const parsedInfo = UniversalChessInterface.parseInfoLine(message);
+    if (parsedInfo) {
+      this.handleInfoMessage(currentJob, parsedInfo);
       return;
     }
 
@@ -261,26 +260,14 @@ class StockfishQueue {
     }
   }
 
-  private handleInfoMessage(job: EngineJob, message: string): void {
-    const depthMatch = message.match(/depth (\d+)/);
-    const multipvMatch = message.match(/multipv (\d+)/);
-    const pvMatch = message.match(/ pv (.+)/);
-    const cpMatch = message.match(/score cp (-?\d+)/);
-    const mateMatch = message.match(/score mate (-?\d+)/);
+  private handleInfoMessage(
+    job: EngineJob,
+    infoLine: UniversalChessInterface.InfoLineDto,
+  ): void {
+    const engineLine = ChessEngineUciAdapter.toChessEngineLine(job.fen, infoLine);
+    if (!engineLine) return;
 
-    const depth = depthMatch ? parseInt(depthMatch[1], 10) : 0;
-    const multipv = multipvMatch ? parseInt(multipvMatch[1], 10) : 1;
-    const pvUci = pvMatch ? pvMatch[1].trim() : "";
-
-    if (depth <= 0 || !pvUci) return;
-
-    job.collected.set(multipv, {
-      uci: pvUci.split(" ")[0],
-      pv: pvUci.split(" "),
-      evaluation: parseEngineEvaluation(job.fen, cpMatch?.[1], mateMatch?.[1]),
-      depth,
-      multipv,
-    });
+    job.collected.set(engineLine.multipv, engineLine);
 
     const update = buildUpdate(job, false);
     if (!update) return;
@@ -331,6 +318,34 @@ class StockfishQueue {
       const job = this.pendingJobs.shift();
       if (job) rejectSubscribers(job, error);
     }
+  }
+}
+
+namespace ChessEngineUciAdapter {
+  export function toChessEngineLine(
+    fen: string,
+    infoLine: UniversalChessInterface.InfoLineDto,
+  ): ChessEngineLine | null {
+    const depth = infoLine.depth ?? 0;
+    if (depth <= 0) return null;
+
+    const pv = infoLine.principalVariation;
+    if (!pv || pv.length === 0) return null;
+
+    const hasCentipawn = typeof infoLine.scoreCentipawn === "number";
+    const hasMate = typeof infoLine.mateInMoves === "number";
+    if (!hasCentipawn && !hasMate) return null;
+
+    const cpScore = hasCentipawn ? String(infoLine.scoreCentipawn) : undefined;
+    const mateScore = hasMate ? String(infoLine.mateInMoves) : undefined;
+
+    return {
+      uci: pv[0],
+      pv,
+      evaluation: parseEngineEvaluation(fen, cpScore, mateScore),
+      depth,
+      multipv: infoLine.multiPrincipalVariation ?? 1,
+    };
   }
 }
 
