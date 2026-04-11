@@ -3,7 +3,7 @@ import {
   parseEngineEvaluation,
   type EngineEvaluation,
 } from "./evaluation";
-import { UniversalChessInterface } from "./universalChessInterface";
+import { UniversalChessInterface } from "./UniversalChessInterface.ts";
 
 export interface ChessEngineLine {
   uci: string;

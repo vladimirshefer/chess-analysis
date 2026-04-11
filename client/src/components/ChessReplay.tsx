@@ -20,7 +20,7 @@ import {
   type EvaluationRequest,
   type FullMoveEvaluation,
   getChessEngine,
-} from "../lib/chessEngine";
+} from "../lib/ChessEngine.ts";
 import {
   type GamePlayersInfo,
   type ImportedGameInfo,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UniversalChessInterface } from "./universalChessInterface";
+import { UniversalChessInterface } from "./UniversalChessInterface.ts";
 
 describe("UniversalChessInterface.parseInfoLine", function suite() {
   it("returns null for non-info lines", function testCase() {
