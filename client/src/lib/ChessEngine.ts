@@ -1,11 +1,16 @@
 import {
+  type EngineEvaluation,
   getTerminalEvaluation,
   parseEngineEvaluation,
-  type EngineEvaluation,
 } from "./evaluation";
 import { UniversalChessInterface } from "./UniversalChessInterface.ts";
+import {
+  type EvaluationCache,
+  sharedEvaluationCache,
+} from "./EvaluationCache.ts";
 
 export interface ChessEngineLine {
+  /** UCI = Universal Chess Interface */
   uci: string;
   pv: string[];
   evaluation: EngineEvaluation;
@@ -14,8 +19,10 @@ export interface ChessEngineLine {
 }
 
 export interface FullMoveEvaluation {
+  /** Chess position in FEN notation */
   fen: string;
   evaluation: EngineEvaluation;
+  /** Depth of the evaluation in half-moves */
   depth: number;
   lines: ChessEngineLine[];
 }
@@ -27,16 +34,6 @@ export interface EvaluationRequest {
 
 export interface EvaluationUpdate extends FullMoveEvaluation {
   isFinal: boolean;
-}
-
-export interface EvaluationCache {
-  getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
-  addEvaluation(
-    fen: string,
-    depth: number,
-    evaluation: EngineEvaluation,
-    lines: ChessEngineLine[],
-  ): void;
 }
 
 export const EngineEvaluationPriority = {
@@ -55,7 +52,9 @@ export interface ChessEngine {
     priority: EngineEvaluationPriority,
     onUpdate?: (update: EvaluationUpdate) => void,
   ): Promise<FullMoveEvaluation>;
+
   getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
+
   getLines(
     fen: string,
     minDepth?: number,
@@ -80,51 +79,6 @@ interface EngineJob {
   collected: Map<number, ChessEngineLine>;
   lastUpdate: EvaluationUpdate | null;
   shouldRestart: boolean;
-}
-
-class FinalEvaluationCache implements EvaluationCache {
-  private snapshotsByFen = new Map<string, FullMoveEvaluation[]>();
-
-  getEvaluation(fen: string, minDepth: number = 0): FullMoveEvaluation | null {
-    const snapshots = this.snapshotsByFen.get(fen) ?? [];
-    return (
-      snapshots.find(function findSnapshot(snapshot) {
-        return snapshot.depth >= minDepth;
-      }) ?? null
-    );
-  }
-
-  addEvaluation(
-    fen: string,
-    depth: number,
-    evaluation: EngineEvaluation,
-    lines: ChessEngineLine[],
-  ): void {
-    const nextSnapshot: FullMoveEvaluation = {
-      fen,
-      depth,
-      evaluation,
-      lines,
-    };
-    const snapshots = [...(this.snapshotsByFen.get(fen) ?? [])];
-    const existingIndex = snapshots.findIndex(function findByDepth(snapshot) {
-      return snapshot.depth === depth;
-    });
-
-    if (existingIndex >= 0) {
-      snapshots[existingIndex] = mergeEvaluations(
-        snapshots[existingIndex],
-        nextSnapshot,
-      );
-    } else {
-      snapshots.push(nextSnapshot);
-    }
-
-    snapshots.sort(function sortByDepth(left, right) {
-      return left.depth - right.depth;
-    });
-    this.snapshotsByFen.set(fen, snapshots);
-  }
 }
 
 class StockfishQueue {
@@ -359,7 +313,7 @@ class StockfishChessEngine implements ChessEngine {
   private cache: EvaluationCache;
 
   constructor() {
-    this.cache = new FinalEvaluationCache();
+    this.cache = sharedEvaluationCache;
     this.queue = new StockfishQueue(this.cache);
   }
 
@@ -537,31 +491,6 @@ function getPriorityRank(priority: JobPriority): number {
     default:
       return 2;
   }
-}
-
-function mergeEvaluations(
-  current: FullMoveEvaluation,
-  next: FullMoveEvaluation,
-): FullMoveEvaluation {
-  const mergedByMultiPv = new Map<number, ChessEngineLine>();
-
-  current.lines.forEach(function addCurrent(line) {
-    mergedByMultiPv.set(line.multipv, line);
-  });
-  next.lines.forEach(function addNext(line) {
-    mergedByMultiPv.set(line.multipv, line);
-  });
-
-  return {
-    fen: next.fen,
-    depth: Math.max(current.depth, next.depth),
-    evaluation: next.evaluation,
-    lines: [...mergedByMultiPv.values()].sort(
-      function sortByMultiPv(left, right) {
-        return left.multipv - right.multipv;
-      },
-    ),
-  };
 }
 
 let singleton: ChessEngine | null = null;

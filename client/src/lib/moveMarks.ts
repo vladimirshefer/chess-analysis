@@ -71,8 +71,8 @@ export function classifyMoveMark(
   }
 
   if (evalLoss >= 3) return { mark: MoveMark.BLUNDER, evalLoss, bestMoveUci };
-  if (evalLoss >= 1.5) return { mark: MoveMark.MISTAKE, evalLoss, bestMoveUci };
-  if (evalLoss >= 0.5)
+  if (evalLoss >= 1.7) return { mark: MoveMark.MISTAKE, evalLoss, bestMoveUci };
+  if (evalLoss >= 0.8)
     return { mark: MoveMark.INACCURACY, evalLoss, bestMoveUci };
   return { mark: MoveMark.OK, evalLoss, bestMoveUci };
 }
