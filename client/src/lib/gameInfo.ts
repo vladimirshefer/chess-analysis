@@ -1,4 +1,4 @@
-import type { ChessComGameSummary } from "./chessCom";
+import type { ChessComClient } from "./ChessComClient.ts";
 
 export interface PlayerInfo {
   name?: string;
@@ -52,7 +52,7 @@ export function mergePlayersInfo(
 }
 
 export function toImportedGameInfoFromChessComGame(
-  game: ChessComGameSummary,
+  game: ChessComClient.Dto.ChessComGameSummary,
 ): ImportedGameInfo {
   return {
     source: "chesscom",
