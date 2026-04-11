@@ -249,13 +249,15 @@ class StockfishQueue {
     if (!currentJob) return;
 
     const message = event.data;
-    const parsedInfo = UniversalChessInterface.parseInfoLine(message);
-    if (parsedInfo) {
-      this.handleInfoMessage(currentJob, parsedInfo);
+    const parsedLine = UniversalChessInterface.parseEngineLine(message);
+    if (!parsedLine) return;
+
+    if (parsedLine.type === "info") {
+      this.handleInfoMessage(currentJob, parsedLine.data);
       return;
     }
 
-    if (message.startsWith("bestmove")) {
+    if (parsedLine.type === "bestmove") {
       this.handleBestMove(currentJob);
     }
   }

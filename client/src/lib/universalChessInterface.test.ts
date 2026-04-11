@@ -71,3 +71,54 @@ describe("UniversalChessInterface.parseInfoLine", function suite() {
     });
   });
 });
+
+describe("UniversalChessInterface.parseEngineLine", function suite() {
+  it("parses bestmove with ponder", function testCase() {
+    expect(
+      UniversalChessInterface.parseEngineLine("bestmove e2e4 ponder e7e5"),
+    ).toEqual({
+      type: "bestmove",
+      data: { bestMove: "e2e4", ponderMove: "e7e5" },
+    });
+  });
+
+  it("parses id lines", function testCase() {
+    expect(
+      UniversalChessInterface.parseEngineLine("id name Stockfish 16.1"),
+    ).toEqual({
+      type: "id",
+      data: { field: "name", value: "Stockfish 16.1" },
+    });
+  });
+
+  it("parses option lines with vars", function testCase() {
+    expect(
+      UniversalChessInterface.parseEngineLine(
+        "option name Analysis Style type combo default Balanced var Balanced var Aggressive var Solid",
+      ),
+    ).toEqual({
+      type: "option",
+      data: {
+        name: "Analysis Style",
+        optionType: "combo",
+        defaultValue: "Balanced",
+        variables: ["Balanced", "Aggressive", "Solid"],
+      },
+    });
+  });
+
+  it("parses ready markers", function testCase() {
+    expect(UniversalChessInterface.parseEngineLine("uciok")).toEqual({
+      type: "uciok",
+      data: { marker: "uciok" },
+    });
+    expect(UniversalChessInterface.parseEngineLine("readyok")).toEqual({
+      type: "readyok",
+      data: { marker: "readyok" },
+    });
+  });
+
+  it("returns null for unknown lines", function testCase() {
+    expect(UniversalChessInterface.parseEngineLine("unknown token")).toBeNull();
+  });
+});
