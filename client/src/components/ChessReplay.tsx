@@ -704,17 +704,17 @@ function ChessReplay() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
-      <div className="flex-1 flex flex-col items-center">
-        <div className="w-full max-w-120 mb-3">
+      <div className="flex-1 flex flex-col items-center gap-2">
+        <div className="w-full max-w-120">
           <PlayerCard info={boardPlayers.top} />
         </div>
-        <div className="w-full max-w-130 flex items-stretch gap-3">
+        <div className="w-full max-w-130 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
           <EvaluationThermometer
             evaluation={currentAnalysis?.evaluation ?? null}
             orientation={viewState.boardOrientation}
-            className="w-8 min-h-120 rounded-md"
+            className="w-6 min-h-120"
           />
-          <div className="flex-1 shadow-2xl rounded-lg overflow-hidden border-8 border-gray-800 bg-gray-800">
+          <div className="flex-1 shadow-2xl overflow-hidden ">
             <Chessboard
               id="AnalysisBoard"
               position={
@@ -733,25 +733,22 @@ function ChessReplay() {
         <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
           <button
             onClick={goStart}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
+            className="inline-flex items-center justify-center p-4 bg-gray-100 hover:bg-gray-200 rounded font-bold"
           >
             <RenderIcon iconType={FaAnglesLeft} className={"text-sm"} />
-            <span>Start</span>
           </button>
           <button
             onClick={goBack}
-            className="inline-flex items-center gap-2 px-5 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold"
+            className="inline-flex items-center justify-center p-4 bg-gray-100 hover:bg-gray-200 rounded font-bold"
           >
             <RenderIcon iconType={FaChevronLeft} className="text-sm" />
-            <span>Back</span>
           </button>
           <button
             disabled={!canGoForward}
             onClick={goForward}
-            className="inline-flex items-center gap-2 px-5 py-2 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30"
+            className="inline-flex items-center justify-center p-4 bg-gray-100 hover:bg-gray-200 rounded font-bold disabled:opacity-30"
           >
             <RenderIcon iconType={FaChevronRight} className="text-sm" />
-            <span>Forward</span>
           </button>
           <button
             onClick={toggleBoardOrientation}
@@ -765,7 +762,7 @@ function ChessReplay() {
                 ? "View as Black"
                 : "View as White"
             }
-            className="inline-flex items-center justify-center w-10 h-10 bg-gray-800 hover:bg-black text-white rounded font-bold"
+            className="inline-flex items-center justify-center p-4 bg-gray-800 hover:bg-black text-white rounded font-bold"
           >
             <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
@@ -1211,7 +1208,7 @@ function scheduleNextTask(
     return toTask(
       othersAt12,
       { minDepth: 12, linesAmount: 2 },
-      EngineEvaluationPriority.NEXT,
+      EngineEvaluationPriority.BACKGROUND,
     );
 
   if (currentNodeId) {
@@ -1220,7 +1217,7 @@ function scheduleNextTask(
       return toTask(
         currentAt16,
         { minDepth: 16, linesAmount: 3 },
-        EngineEvaluationPriority.IMMEDIATE,
+        EngineEvaluationPriority.NEXT,
       );
   }
 

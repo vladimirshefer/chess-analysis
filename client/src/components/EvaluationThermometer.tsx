@@ -1,14 +1,9 @@
 import {
-  formatEvaluation,
-  toComparableEvaluationScore,
   type EngineEvaluation,
+  formatEvaluation,
+  GameResult,
+  toComparableEvaluationScore,
 } from "../lib/evaluation";
-
-interface EvaluationThermometerProps {
-  evaluation: EngineEvaluation | null;
-  orientation: "white" | "black";
-  className?: string;
-}
 
 interface ThermometerSegments {
   topShare: number;
@@ -28,17 +23,36 @@ function EvaluationThermometer({
   evaluation,
   orientation,
   className = "",
-}: EvaluationThermometerProps) {
+}: {
+  evaluation: EngineEvaluation | null;
+  orientation: "white" | "black";
+  className?: string;
+}) {
   const segments = getThermometerSegments(evaluation, orientation);
   const label = evaluation === null ? "--" : formatEvaluation(evaluation);
+  const labelWhite =
+    evaluation === null ? "--" : formatEvaluationForWhite(evaluation);
+  const labelBlack =
+    evaluation === null ? "--" : formatEvaluationForBlack(evaluation);
 
   return (
     <div
-      className={`relative overflow-hidden border border-gray-300 bg-gray-200 shadow-inner ${className}`.trim()}
+      className={`relative shadow-inner group ${className}`.trim()}
     >
-      <div className="absolute inset-x-0 top-1/2 h-px bg-gray-500/50 z-10" />
-      <div className="absolute top-1/2 -translate-y-1/2 z-20 border border-gray-300 bg-white/95 px-1 py-0.5 text-center text-[7px] font-mono font-bold text-gray-700 shadow-sm">
+      <div className="absolute top-1/2 -translate-y-1/2 z-20 border hidden group-hover:block border-gray-300 bg-white/95 px-1 py-0.5 text-center text-md font-mono font-bold text-gray-700 shadow-sm">
         {label}
+      </div>
+      <div
+        className={`absolute z-20 ${orientation == "white" ? "bottom-0" : ""} px-1 py-0.5 
+                       text-center text-[8px] font-mono font-bold text-gray-700 shadow-sm`}
+      >
+        {labelWhite}
+      </div>
+      <div
+        className={`absolute ${orientation == "black" ? "bottom-0" : ""} z-20 px-1 py-0.5 
+                    text-center text-[8px] font-mono font-bold text-gray-100 shadow-sm`}
+      >
+        {labelBlack}
       </div>
       <div className="flex h-full flex-col">
         <div
@@ -84,6 +98,36 @@ function getThermometerSegments(
     topSide: "black",
     bottomSide: "white",
   };
+}
+
+function formatEvaluationForWhite(evaluation: EngineEvaluation): string {
+  switch (evaluation.kind) {
+    case "cp":
+      return evaluation.pawns >= 10
+        ? `${evaluation.pawns.toFixed(0)}`
+        : evaluation.pawns >= 0
+          ? `${evaluation.pawns.toFixed(1)}`
+          : "";
+    case "mate":
+      return evaluation.moves >= 0 ? `M${evaluation.moves}` : "";
+    case "result":
+      return evaluation.result == GameResult.BLACK_WIN ? "" : evaluation.result;
+  }
+}
+
+function formatEvaluationForBlack(evaluation: EngineEvaluation): string {
+  switch (evaluation.kind) {
+    case "cp":
+      return evaluation.pawns <= -10
+        ? `${(-evaluation.pawns).toFixed(0)}`
+        : evaluation.pawns <= 0
+          ? `${(-evaluation.pawns).toFixed(1)}`
+          : "";
+    case "mate":
+      return evaluation.moves >= 0 ? `` : `M${Math.abs(evaluation.moves)}`;
+    case "result":
+      return evaluation.result == GameResult.BLACK_WIN ? evaluation.result : "";
+  }
 }
 
 export default EvaluationThermometer;
