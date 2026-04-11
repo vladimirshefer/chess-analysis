@@ -266,7 +266,10 @@ class StockfishQueue {
     job: EngineJob,
     infoLine: UniversalChessInterface.InfoLineDto,
   ): void {
-    const engineLine = ChessEngineUciAdapter.toChessEngineLine(job.fen, infoLine);
+    const engineLine = ChessEngineUciAdapter.toChessEngineLine(
+      job.fen,
+      infoLine,
+    );
     if (!engineLine) return;
 
     job.collected.set(engineLine.multipv, engineLine);
