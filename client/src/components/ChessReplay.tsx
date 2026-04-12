@@ -109,7 +109,6 @@ function ChessReplay() {
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [positionAnalysisMap, setPositionAnalysisMap] = useState<Record<string, NodeAnalysis>>({});
   const [statusText, setStatusText] = useState("Interactive Mode");
-  const [deepAnalysisNodeId, setDeepAnalysisNodeId] = useState<string | null>(null);
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
 
@@ -322,7 +321,7 @@ function ChessReplay() {
   );
 
   function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
-    setPositionAnalysisMap(function updateAnalysis(previous) {
+    setPositionAnalysisMap((previous) => {
       const currentAnalysisEntry = previous[nodeId];
       const preferredAnalysis = pickPreferredAnalysis(currentAnalysisEntry, analysis);
       if (areNodeAnalysesEqual(currentAnalysisEntry, preferredAnalysis)) return previous;
@@ -340,31 +339,19 @@ function ChessReplay() {
     const target = getSelectedAnalysisTarget(tree, currentNodeId);
     if (!target) return;
 
-    setDeepAnalysisNodeId(target.nodeId);
     setStatusText(`Analyzing ${target.label} (d22)...`);
 
     void engine
-      .evaluate(
-        target.fen,
-        { minDepth: 22, linesAmount: 3 },
-        EngineEvaluationPriority.IMMEDIATE,
-        function onUpdate(update) {
-          syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
-        },
-      )
-      .then(function handleDeepResult(result) {
+      .evaluate(target.fen, { minDepth: 22, linesAmount: 3 }, EngineEvaluationPriority.IMMEDIATE, (update) => {
+        syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
+      })
+      .then((result) => {
         syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, result, true));
+        setStatusText("Analysis Complete");
       })
-      .catch(function handleDeepError() {
+      .catch((e) => {
         setStatusText("Engine Error");
-      })
-      .finally(function clearDeepState() {
-        setDeepAnalysisNodeId(function clearCurrent(previous) {
-          return previous === target.nodeId ? null : previous;
-        });
-        setStatusText(function clearStatus(previous) {
-          return previous === `Analyzing ${target.label} (d22)...` ? "Analysis Complete" : previous;
-        });
+        console.error("Engine Error", e);
       });
   }
 
@@ -493,7 +480,6 @@ function ChessReplay() {
       setPlayersInfo(mergedPlayersInfo);
       setPositionAnalysisMap({});
       setStatusText("PGN Imported");
-      setDeepAnalysisNodeId(null);
       setBoardOrientation(initialBoardOrientation);
     } catch {
       setStatusText("Invalid PGN");
@@ -514,7 +500,6 @@ function ChessReplay() {
     setPlayersInfo(null);
     setPositionAnalysisMap({});
     setStatusText("Interactive Mode");
-    setDeepAnalysisNodeId(null);
     setBoardOrientation("white");
   }
 
@@ -591,7 +576,6 @@ function ChessReplay() {
               </div>
               <button
                 onClick={runDeepAnalysis}
-                disabled={deepAnalysisNodeId !== null}
                 title={"Run deeper analysis"}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
@@ -894,16 +878,6 @@ function buildAnalysisTasks(
     request: EvaluationRequest,
     priority: EngineEvaluationPriorityValue,
   ): ScheduledTask | null {
-    if (nodeId === ROOT_ANALYSIS_NODE_ID) {
-      return {
-        nodeId,
-        fen: "start",
-        label: "start",
-        request,
-        priority,
-      };
-    }
-
     const node = tree[nodeId];
     if (!node) return null;
 
@@ -930,16 +904,7 @@ function buildAnalysisTasks(
 }
 
 function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId: string | null): ScheduledTask | null {
-  if (!currentNodeId) {
-    return {
-      nodeId: ROOT_ANALYSIS_NODE_ID,
-      fen: "start",
-      label: "start",
-      request: { minDepth: 22, linesAmount: 3 },
-      priority: EngineEvaluationPriority.IMMEDIATE,
-    };
-  }
-
+  if (!currentNodeId) return null;
   const node = tree[currentNodeId];
   if (!node) return null;
 
@@ -1219,25 +1184,9 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
 function pickPreferredAnalysis(currentAnalysis: NodeAnalysis | undefined, nextAnalysis: NodeAnalysis): NodeAnalysis {
   const mergedNextAnalysis = mergeNodeAnalysisLines(currentAnalysis, nextAnalysis);
   if (!currentAnalysis) return nextAnalysis;
-  if (currentAnalysis.source === "engine-final" && mergedNextAnalysis.source === "seeded-from-parent")
-    return currentAnalysis;
-  if (currentAnalysis.source === "engine-live" && mergedNextAnalysis.source === "seeded-from-parent")
-    return currentAnalysis;
-  if (
-    currentAnalysis.source === "engine-final" &&
-    mergedNextAnalysis.source === "engine-live" &&
-    mergedNextAnalysis.depth <= currentAnalysis.depth
-  ) {
-    return currentAnalysis;
-  }
-  if (mergedNextAnalysis.source === "engine-final" && currentAnalysis.source !== "engine-final")
-    return mergedNextAnalysis;
-  if (currentAnalysis.source === "seeded-from-parent" && mergedNextAnalysis.source !== "seeded-from-parent")
-    return mergedNextAnalysis;
-  if (mergedNextAnalysis.depth > currentAnalysis.depth) return mergedNextAnalysis;
   if (mergedNextAnalysis.depth < currentAnalysis.depth) return currentAnalysis;
-  if (mergedNextAnalysis.lines.length > currentAnalysis.lines.length) return mergedNextAnalysis;
   if (mergedNextAnalysis.lines.length < currentAnalysis.lines.length) return currentAnalysis;
+  if (!mergedNextAnalysis.isFinal && currentAnalysis.isFinal) return currentAnalysis;
   return mergedNextAnalysis;
 }
 
