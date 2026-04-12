@@ -220,19 +220,16 @@ function ChessReplay() {
     },
     [currentNodeId, tree],
   );
-  const boardMarkStyles = useMemo(
-    function buildBoardMarkStyles() {
-      if (!currentMoveMark || !currentMoveSquares?.to) return {};
+  const boardMarkStyles = useMemo(() => {
+    if (!currentMoveMark || !currentMoveSquares?.to) return {};
 
-      return {
-        [currentMoveSquares.to]: {
-          boxShadow: `inset 0 0 0 4px ${getMoveMarkColor(currentMoveMark.mark)}`,
-          backgroundColor: getMoveMarkBackground(currentMoveMark.mark),
-        },
-      };
-    },
-    [currentMoveMark, currentMoveSquares],
-  );
+    return {
+      [currentMoveSquares.to]: {
+        boxShadow: `inset 0 0 0 4px ${getMoveMarkColor(currentMoveMark.mark)}`,
+        backgroundColor: getMoveMarkBackground(currentMoveMark.mark),
+      },
+    };
+  }, [currentMoveMark, currentMoveSquares]);
   const canGoForward = useMemo(
     function checkCanGoForward() {
       return getNextNodeId(currentNodeId, tree) !== null;
