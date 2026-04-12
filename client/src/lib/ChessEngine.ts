@@ -292,8 +292,8 @@ namespace ChessEngineUciAdapter {
     const hasMate = typeof infoLine.mateInMoves === "number";
     if (!hasCentipawn && !hasMate) return null;
 
-    const cpScore = hasCentipawn ? String(infoLine.scoreCentipawn) : undefined;
-    const mateScore = hasMate ? String(infoLine.mateInMoves) : undefined;
+    const cpScore = hasCentipawn ? infoLine.scoreCentipawn : undefined;
+    const mateScore = hasMate ? infoLine.mateInMoves : undefined;
 
     return {
       uci: pv[0],

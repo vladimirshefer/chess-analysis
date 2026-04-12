@@ -72,23 +72,23 @@ export function areEvaluationsEqual(
 
 export function parseEngineEvaluation(
   fen: string,
-  cpScore?: string,
-  mateScore?: string,
+  cpScore?: number,
+  mateScore?: number,
 ): EngineEvaluation {
   const sideToMove = fen === "start" ? "w" : fen.split(" ")[1];
   const perspective = sideToMove === "b" ? -1 : 1;
 
-  if (cpScore) {
+  if (typeof cpScore === "number") {
     return {
       kind: "cp",
-      pawns: (parseInt(cpScore, 10) * perspective) / 100,
+      pawns: (cpScore * perspective) / 100,
     };
   }
 
-  if (mateScore) {
+  if (typeof mateScore === "number") {
     return {
       kind: "mate",
-      moves: parseInt(mateScore, 10) * perspective,
+      moves: mateScore * perspective,
     };
   }
 
