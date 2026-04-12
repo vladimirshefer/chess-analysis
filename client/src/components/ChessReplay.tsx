@@ -51,9 +51,11 @@ interface DisplayEngineLine {
   move: string;
   uci: string;
   pvUci: string[];
+  /** engine line */
   pv: string;
   score: EngineEvaluation;
   depth: number;
+  /** rank of the line */
   multipv: number;
 }
 
@@ -563,26 +565,24 @@ function ChessReplay() {
         </div>
       </div>
 
-      <div className="w-full lg:w-[450px] flex flex-col gap-4">
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+      <div className="w-full lg:w-md flex flex-col gap-4">
+        <div className="bg-gray-50 p-4 rounded-sm border border-gray-200">
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
             </div>
-            <div className="flex items-start gap-3">
-              <div className="text-right">
-                <span className="text-[10px] uppercase text-gray-400 font-bold">Eval</span>
-                <div className="text-sm font-mono text-indigo-500">
-                  {currentAnalysis ? formatEvaluation(currentAnalysis.evaluation) : "--"}
-                </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-gray-400 font-bold">Eval</span>
+              <div className="text-sm font-mono text-indigo-500">
+                {currentAnalysis ? formatEvaluation(currentAnalysis.evaluation) : "--"}
               </div>
               <button
                 onClick={runDeepAnalysis}
                 disabled={deepAnalysisNodeId !== null}
+                title={"Run deeper analysis"}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <RenderIcon iconType={FaMagnifyingGlassPlus} className="text-xs" />
-                <span>Deeper...</span>
               </button>
             </div>
           </div>
@@ -598,12 +598,13 @@ function ChessReplay() {
                   onClick={function applyLine() {
                     applyEngineMove(line);
                   }}
-                  className="flex flex-col gap-1 p-3 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left"
+                  className="flex flex-col gap-2 px-2 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left"
                 >
-                  <div className="flex justify-between items-center w-full">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-gray-300">{line.multipv}.</span>
-                      <span className="font-bold text-gray-800 font-mono text-base">{line.move}</span>
+                  <div className="flex items-baseline w-full gap-2">
+                    <span className="text-xs font-bold text-gray-300">{line.multipv}.</span>
+                    <span className="font-bold text-gray-800 font-mono text-nowrap">{line.move}</span>
+                    <div className="text-xs text-gray-500 font-mono truncate grow opacity-70">
+                      {line.pv.split(" ").slice(1).join(" ")}
                     </div>
                     <div className="flex items-center gap-3">
                       <span
@@ -611,17 +612,14 @@ function ChessReplay() {
                       >
                         {formatEvaluation(line.score)}
                       </span>
-                      <span className="text-[10px] text-gray-400">d{line.depth}</span>
+                      <span className="text-xs text-gray-400">d{line.depth}</span>
                     </div>
-                  </div>
-                  <div className="text-[11px] text-gray-500 font-mono truncate w-full opacity-70">
-                    {line.pv.split(" ").slice(1).join(" ")}
                   </div>
                 </button>
               );
             })}
+            <div className="text-xs text-gray-400 text-right">{statusText}</div>
           </div>
-          <div className="mt-3 text-[11px] text-gray-400">{statusText}</div>
         </div>
 
         <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
