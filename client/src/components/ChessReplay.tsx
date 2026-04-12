@@ -128,25 +128,31 @@ function ChessReplay() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.key, location.pathname, location.state, navigate]);
 
-  useEffect(function bindArrowNavigation() {
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (isEditableTarget(event.target)) return;
-
-      if (event.key === "ArrowLeft") {
-        goBack();
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        goForward();
-      }
+      if (event.key !== "ArrowLeft") return;
+      goBack();
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return function cleanup() {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [tree]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isEditableTarget(event.target)) return;
+      if (event.key !== "ArrowRight") return;
+      goForward();
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return function cleanup() {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [tree]);
 
   const fullTreePgn = useMemo(() => {
     const roots = Object.values(tree).filter((node) => node.parentId === null);
