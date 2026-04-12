@@ -15,8 +15,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   type ChessEngine,
   type ChessEngineLine,
-  EngineEvaluationPriority,
-  type EngineEvaluationPriority as EngineEvaluationPriorityValue,
+  EngineEvaluationPriorities,
+  type EngineEvaluationPriority,
   type EvaluationRequest,
   type FullMoveEvaluation,
   getChessEngine,
@@ -88,7 +88,7 @@ interface ScheduledTask {
   fen: string;
   label: string;
   request: EvaluationRequest;
-  priority: EngineEvaluationPriorityValue;
+  priority: EngineEvaluationPriority;
 }
 
 interface AnalyzerLocationState {
@@ -276,48 +276,47 @@ function ChessReplay() {
     [currentNodeId, tree],
   );
 
-  useEffect(
-    function runAnalysisBatch() {
-      const engine = engineRef.current;
-      if (!engine) return;
-      const analysisEngine: ChessEngine = engine;
-      let cancelled = false;
-      const tasks = buildAnalysisTasks(tree, currentNodeId, analysisEngine);
-      if (tasks.length === 0) {
-        setStatusText(function setComplete(previous) {
-          return previous === "Analysis Complete" ? previous : "Analysis Complete";
-        });
-        return;
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    let cancelled = false;
+    const tasks = buildAnalysisTasks(tree, currentNodeId, engine);
+    if (tasks.length === 0) {
+      setStatusText("Nothing to analyze");
+      return;
+    }
+
+    setStatusText("Analyzing...");
+
+    void Promise.allSettled(
+      tasks.map((task) =>
+        engine
+          .evaluate(task.fen, task.request, task.priority, (update) => {
+            if (cancelled) return;
+            syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
+            setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
+          })
+          .then((finalEvaluation) => {
+            if (cancelled) return;
+            syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
+          }),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      const hasFailures = results.some((result) => result.status === "rejected");
+      if (hasFailures) {
+        setStatusText(`Engine Error`);
+        console.error(`Engine Error`, results.map((it) => (it as any).reason).filter(Boolean));
+      } else {
+        setStatusText("Analysis Complete");
       }
+    });
 
-      setStatusText("Analyzing...");
-
-      void Promise.allSettled(
-        tasks.map(function runTask(task) {
-          return analysisEngine
-            .evaluate(task.fen, task.request, task.priority, function onUpdate(update) {
-              if (cancelled) return;
-              syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
-            })
-            .then(function handleFinal(finalEvaluation) {
-              if (cancelled) return;
-              syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
-            });
-        }),
-      ).then(function handleSettled(results) {
-        if (cancelled) return;
-        const hasFailures = results.some(function hasFailure(result) {
-          return result.status === "rejected";
-        });
-        setStatusText(hasFailures ? "Engine Error" : "Analysis Complete");
-      });
-
-      return function cleanup() {
-        cancelled = true;
-      };
-    },
-    [tree, currentNodeId],
-  );
+    return () => {
+      cancelled = true;
+    };
+  }, [tree, currentNodeId]);
 
   function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
     setPositionAnalysisMap((previous) => {
@@ -341,7 +340,7 @@ function ChessReplay() {
     setStatusText(`Analyzing ${target.label} (d22)...`);
 
     void engine
-      .evaluate(target.fen, { minDepth: 22, linesAmount: 3 }, EngineEvaluationPriority.IMMEDIATE, (update) => {
+      .evaluate(target.fen, { minDepth: 22, linesAmount: 3 }, EngineEvaluationPriorities.IMMEDIATE, (update) => {
         syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
       })
       .then((result) => {
@@ -841,10 +840,10 @@ function buildAnalysisTasks(
   currentNodeId: string | null,
   engine: ChessEngine,
 ): ScheduledTask[] {
-  const otherNodeIds = Object.keys(tree).filter(function filterNode(nodeId) {
+  const allNodeIds = Object.keys(tree);
+  allNodeIds.filter(function filterNode(nodeId) {
     return nodeId !== currentNodeId;
   });
-  const hasMoves = Object.keys(tree).length > 0;
   const tasks: ScheduledTask[] = [];
   const taskKeys = new Set<string>();
 
@@ -852,52 +851,42 @@ function buildAnalysisTasks(
     nodeIds: string[],
     minDepth: number,
     linesAmount: number,
-    priority: EngineEvaluationPriorityValue,
+    priority: EngineEvaluationPriority,
   ): void {
     for (const nodeId of nodeIds) {
-      const task = toTask(nodeId, { minDepth, linesAmount }, priority);
-      if (!task) continue;
-      if (getTerminalEvaluation(task.fen)) continue;
+      if (!tree[nodeId]) continue;
+      const fen = tree[nodeId].fen;
+      const label = tree[nodeId].san || "start";
+      const request = { minDepth, linesAmount };
 
-      const cachedEvaluation = engine.getEvaluation(task.fen, minDepth);
+      if (getTerminalEvaluation(fen)) continue;
+
+      const cachedEvaluation = engine.getEvaluation(fen, minDepth);
       if (cachedEvaluation && cachedEvaluation.lines.length >= linesAmount) {
         continue;
       }
 
-      const key = [task.nodeId, task.fen, task.request.minDepth, task.request.linesAmount, task.priority].join("|");
+      const key = [nodeId, fen, minDepth, linesAmount, priority].join("|");
       if (taskKeys.has(key)) continue;
 
       taskKeys.add(key);
-      tasks.push(task);
+      tasks.push({
+        nodeId,
+        fen: fen,
+        label: label,
+        request: request,
+        priority,
+      });
     }
   }
 
-  function toTask(
-    nodeId: string,
-    request: EvaluationRequest,
-    priority: EngineEvaluationPriorityValue,
-  ): ScheduledTask | null {
-    const node = tree[nodeId];
-    if (!node) return null;
-
-    return {
-      nodeId,
-      fen: node.fen,
-      label: node.san || "start",
-      request,
-      priority,
-    };
+  if (currentNodeId) {
+    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.IMMEDIATE);
+    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.NEXT);
   }
 
-  if (currentNodeId) addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriority.IMMEDIATE);
-
-  const nextDepth12NodeIds = hasMoves ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds] : otherNodeIds;
-  addTasksForNodes(nextDepth12NodeIds, 12, 2, EngineEvaluationPriority.BACKGROUND);
-
-  if (currentNodeId) addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriority.NEXT);
-
-  const backgroundNodeIds = hasMoves ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds] : otherNodeIds;
-  addTasksForNodes(backgroundNodeIds, 16, 1, EngineEvaluationPriority.BACKGROUND);
+  addTasksForNodes(allNodeIds, 12, 2, EngineEvaluationPriorities.BACKGROUND);
+  addTasksForNodes(allNodeIds, 16, 1, EngineEvaluationPriorities.BACKGROUND);
 
   return tasks;
 }
@@ -912,7 +901,7 @@ function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId
     fen: node.fen,
     label: node.san || "start",
     request: { minDepth: 22, linesAmount: 3 },
-    priority: EngineEvaluationPriority.IMMEDIATE,
+    priority: EngineEvaluationPriorities.IMMEDIATE,
   };
 }
 

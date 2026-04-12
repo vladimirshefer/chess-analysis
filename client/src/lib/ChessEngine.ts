@@ -1,13 +1,6 @@
-import {
-  type EngineEvaluation,
-  getTerminalEvaluation,
-  parseEngineEvaluation,
-} from "./evaluation";
+import { type EngineEvaluation, getTerminalEvaluation, parseEngineEvaluation } from "./evaluation";
 import { UniversalChessInterface } from "./UniversalChessInterface.ts";
-import {
-  type EvaluationCache,
-  sharedEvaluationCache,
-} from "./EvaluationCache.ts";
+import { type EvaluationCache, sharedEvaluationCache } from "./EvaluationCache.ts";
 
 export interface ChessEngineLine {
   /** UCI = Universal Chess Interface */
@@ -36,14 +29,13 @@ export interface EvaluationUpdate extends FullMoveEvaluation {
   isFinal: boolean;
 }
 
-export const EngineEvaluationPriority = {
+export type EngineEvaluationPriority = "IMMEDIATE" | "NEXT" | "BACKGROUND";
+
+export const EngineEvaluationPriorities: { [key in EngineEvaluationPriority]: EngineEvaluationPriority } = {
   IMMEDIATE: "IMMEDIATE",
   NEXT: "NEXT",
   BACKGROUND: "BACKGROUND",
 } as const;
-
-export type EngineEvaluationPriority =
-  (typeof EngineEvaluationPriority)[keyof typeof EngineEvaluationPriority];
 
 export interface ChessEngine {
   evaluate(
@@ -55,14 +47,10 @@ export interface ChessEngine {
 
   getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
 
-  getLines(
-    fen: string,
-    minDepth?: number,
-    amount?: number,
-  ): ChessEngineLine[] | null;
+  getLines(fen: string, minDepth?: number, amount?: number): ChessEngineLine[] | null;
 }
 
-type JobPriority = "IMMEDIATE" | "NEXT" | "BACKGROUND";
+type JobPriority = EngineEvaluationPriority;
 
 interface JobSubscriber {
   onUpdate?: (update: EvaluationUpdate) => void;
@@ -136,15 +124,9 @@ class StockfishQueue {
       if (existingJob && canReuseExistingJob(existingJob, options)) {
         existingJob.subscribers.push(subscriber);
         upgradeJobPriority(existingJob, priority);
-        if (existingJob.lastUpdate && onUpdate)
-          onUpdate(
-            trimUpdateLines(existingJob.lastUpdate, options.linesAmount),
-          );
+        if (existingJob.lastUpdate && onUpdate) onUpdate(trimUpdateLines(existingJob.lastUpdate, options.linesAmount));
 
-        if (
-          existingJob === this.currentJob &&
-          shouldPreemptCurrent(existingJob, priority, options)
-        ) {
+        if (existingJob === this.currentJob && shouldPreemptCurrent(existingJob, priority, options)) {
           existingJob.shouldRestart = true;
           this.worker.postMessage("stop");
         } else if (existingJob !== this.currentJob) {
@@ -196,9 +178,7 @@ class StockfishQueue {
     nextJob.shouldRestart = false;
     this.currentJob = nextJob;
 
-    this.worker.postMessage(
-      `setoption name MultiPV value ${nextJob.linesAmount}`,
-    );
+    this.worker.postMessage(`setoption name MultiPV value ${nextJob.linesAmount}`);
     this.worker.postMessage(`position fen ${nextJob.fen}`);
     this.worker.postMessage(`go depth ${nextJob.minDepth}`);
   }
@@ -221,14 +201,8 @@ class StockfishQueue {
     }
   }
 
-  private handleInfoMessage(
-    job: EngineJob,
-    infoLine: UniversalChessInterface.InfoLineDto,
-  ): void {
-    const engineLine = ChessEngineUciAdapter.toChessEngineLine(
-      job.fen,
-      infoLine,
-    );
+  private handleInfoMessage(job: EngineJob, infoLine: UniversalChessInterface.InfoLineDto): void {
+    const engineLine = ChessEngineUciAdapter.toChessEngineLine(job.fen, infoLine);
     if (!engineLine) return;
 
     job.collected.set(engineLine.multipv, engineLine);
@@ -250,22 +224,13 @@ class StockfishQueue {
       return;
     }
 
-    const finalResult =
-      buildFinalEvaluation(job) ?? buildTerminalEvaluation(job);
+    const finalResult = buildFinalEvaluation(job) ?? buildTerminalEvaluation(job);
     if (finalResult) {
-      this.cache.addEvaluation(
-        job.fen,
-        finalResult.depth,
-        finalResult.evaluation,
-        finalResult.lines,
-      );
+      this.cache.addEvaluation(job.fen, finalResult.depth, finalResult.evaluation, finalResult.lines);
       notifySubscribers(job, { ...finalResult, isFinal: true });
       resolveSubscribers(job, finalResult);
     } else {
-      rejectSubscribers(
-        job,
-        new Error("Engine finished without a valid evaluation"),
-      );
+      rejectSubscribers(job, new Error("Engine finished without a valid evaluation"));
     }
 
     this.currentJob = null;
@@ -335,21 +300,14 @@ class StockfishChessEngine implements ChessEngine {
     return this.cache.getEvaluation(fen, minDepth);
   }
 
-  getLines(
-    fen: string,
-    minDepth: number = 0,
-    amount: number = 1,
-  ): ChessEngineLine[] | null {
+  getLines(fen: string, minDepth: number = 0, amount: number = 1): ChessEngineLine[] | null {
     const evaluation = this.cache.getEvaluation(fen, minDepth);
     if (!evaluation || evaluation.lines.length < amount) return null;
     return evaluation.lines.slice(0, amount);
   }
 }
 
-function buildUpdate(
-  job: EngineJob,
-  isFinal: boolean,
-): EvaluationUpdate | null {
+function buildUpdate(job: EngineJob, isFinal: boolean): EvaluationUpdate | null {
   const lines = [...job.collected.values()]
     .sort(function sortByMultiPv(left, right) {
       return left.multipv - right.multipv;
@@ -423,33 +381,23 @@ function rejectSubscribers(job: EngineJob, error: unknown): void {
   });
 }
 
-function shouldPreemptCurrent(
-  job: EngineJob,
-  priority: JobPriority,
-  options: EvaluationRequest,
-): boolean {
+function shouldPreemptCurrent(job: EngineJob, priority: JobPriority, options: EvaluationRequest): boolean {
   return (
-    priority === EngineEvaluationPriority.IMMEDIATE &&
+    priority === EngineEvaluationPriorities.IMMEDIATE &&
     (getPriorityRank(priority) < getPriorityRank(job.priority) ||
       options.minDepth > job.minDepth ||
       options.linesAmount > job.linesAmount)
   );
 }
 
-function trimUpdateLines(
-  update: EvaluationUpdate,
-  amount: number,
-): EvaluationUpdate {
+function trimUpdateLines(update: EvaluationUpdate, amount: number): EvaluationUpdate {
   return {
     ...update,
     lines: update.lines.slice(0, amount),
   };
 }
 
-function trimEvaluationLines(
-  evaluation: FullMoveEvaluation,
-  amount: number,
-): FullMoveEvaluation {
+function trimEvaluationLines(evaluation: FullMoveEvaluation, amount: number): FullMoveEvaluation {
   return {
     ...evaluation,
     lines: evaluation.lines.slice(0, amount),
@@ -462,20 +410,15 @@ function upgradeJobPriority(job: EngineJob, priority: JobPriority): void {
   }
 }
 
-function canReuseExistingJob(
-  job: EngineJob,
-  options: EvaluationRequest,
-): boolean {
-  return (
-    job.minDepth >= options.minDepth && job.linesAmount >= options.linesAmount
-  );
+function canReuseExistingJob(job: EngineJob, options: EvaluationRequest): boolean {
+  return job.minDepth >= options.minDepth && job.linesAmount >= options.linesAmount;
 }
 
 function getPriorityRank(priority: JobPriority): number {
   switch (priority) {
-    case EngineEvaluationPriority.IMMEDIATE:
+    case EngineEvaluationPriorities.IMMEDIATE:
       return 0;
-    case EngineEvaluationPriority.NEXT:
+    case EngineEvaluationPriorities.NEXT:
       return 1;
     default:
       return 2;
