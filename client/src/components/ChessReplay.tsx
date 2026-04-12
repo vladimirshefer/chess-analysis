@@ -396,6 +396,7 @@ function ChessReplay() {
             return { ...previous, statusText: nextStatus };
           });
 
+          console.log("analysisEngine.evaluate", task);
           const finalEvaluation = await analysisEngine.evaluate(
             task.fen,
             task.request,
@@ -423,11 +424,12 @@ function ChessReplay() {
             return { ...previous, statusText: "Analysis Complete" };
           });
         })
-        .catch(function handleError() {
+        .catch(function handleError(e) {
           if (cancelled || analysisSessionRef.current !== session) return;
           setViewState(function update(previous) {
             return { ...previous, statusText: "Engine Error" };
           });
+          console.error(e);
         });
 
       return function cleanup() {
@@ -438,6 +440,7 @@ function ChessReplay() {
   );
 
   function syncNodeAnalysis(nodeId: string, nextAnalysis: NodeAnalysis) {
+    console.log("Setting node analysis", nextAnalysis);
     setAnalysisState(function updateAnalysis(previous) {
       const currentAnalysisEntry = previous.byNodeId[nodeId];
       const preferredAnalysis = pickPreferredAnalysis(
