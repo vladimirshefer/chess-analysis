@@ -3,6 +3,7 @@ import {
   toComparableEvaluationScore,
   type EngineEvaluation,
 } from "./evaluation";
+
 interface MoveMarkLine {
   uci: string;
   evaluation: number;

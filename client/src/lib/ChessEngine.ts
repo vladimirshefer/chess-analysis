@@ -133,12 +133,12 @@ class StockfishQueue {
       const subscriber: JobSubscriber = { onUpdate, resolve, reject };
       const existingJob = this.findJob(fen);
 
-      if (existingJob) {
+      if (existingJob && canReuseExistingJob(existingJob, options)) {
         existingJob.subscribers.push(subscriber);
-        upgradeJob(existingJob, priority, options);
+        upgradeJobPriority(existingJob, priority);
         if (existingJob.lastUpdate && onUpdate)
           onUpdate(
-            trimUpdateLines(existingJob.lastUpdate, existingJob.linesAmount),
+            trimUpdateLines(existingJob.lastUpdate, options.linesAmount),
           );
 
         if (
@@ -173,10 +173,7 @@ class StockfishQueue {
 
   private reorderPendingJobs(): void {
     this.pendingJobs.sort(function sortJobs(left, right) {
-      const priorityDiff =
-        getPriorityRank(left.priority) - getPriorityRank(right.priority);
-      if (priorityDiff !== 0) return priorityDiff;
-      return right.minDepth - left.minDepth;
+      return getPriorityRank(left.priority) - getPriorityRank(right.priority);
     });
   }
 
@@ -469,17 +466,17 @@ function trimEvaluationLines(
   };
 }
 
-function upgradeJob(
-  job: EngineJob,
-  priority: JobPriority,
-  options: EvaluationRequest,
-): void {
+function upgradeJobPriority(job: EngineJob, priority: JobPriority): void {
   if (getPriorityRank(priority) < getPriorityRank(job.priority)) {
     job.priority = priority;
   }
+}
 
-  job.minDepth = Math.max(job.minDepth, options.minDepth);
-  job.linesAmount = Math.max(job.linesAmount, options.linesAmount);
+function canReuseExistingJob(
+  job: EngineJob,
+  options: EvaluationRequest,
+): boolean {
+  return job.minDepth >= options.minDepth && job.linesAmount >= options.linesAmount;
 }
 
 function getPriorityRank(priority: JobPriority): number {

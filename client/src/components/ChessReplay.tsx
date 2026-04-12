@@ -139,16 +139,7 @@ function ChessReplay() {
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
 
   const engineRef = useRef<ChessEngine | null>(null);
-  const gameStateRef = useRef<GameState>(gameState);
-  const analysisSessionRef = useRef(0);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
-
-  useEffect(
-    function syncGameStateRef() {
-      gameStateRef.current = gameState;
-    },
-    [gameState],
-  );
 
   useEffect(function initEngine() {
     engineRef.current = getChessEngine();
@@ -370,67 +361,59 @@ function ChessReplay() {
   );
 
   useEffect(
-    function runAnalysisLoop() {
+    function runAnalysisBatch() {
       const engine = engineRef.current;
       if (!engine) return;
       const analysisEngine: ChessEngine = engine;
-
-      const session = analysisSessionRef.current + 1;
-      analysisSessionRef.current = session;
       let cancelled = false;
-
-      async function loop() {
-        while (!cancelled && analysisSessionRef.current === session) {
-          const task = scheduleNextTask(gameStateRef.current, analysisEngine);
-          if (!task) {
-            setViewState(function setComplete(previous) {
-              if (previous.statusText === "Analysis Complete") return previous;
-              return { ...previous, statusText: "Analysis Complete" };
-            });
-            return;
-          }
-
-          setViewState(function setStatus(previous) {
-            const nextStatus = `Analyzing ${task.label} (d${task.request.minDepth})...`;
-            if (previous.statusText === nextStatus) return previous;
-            return { ...previous, statusText: nextStatus };
-          });
-
-          console.log("analysisEngine.evaluate", task);
-          const finalEvaluation = await analysisEngine.evaluate(
-            task.fen,
-            task.request,
-            task.priority,
-            function onUpdate(update) {
-              if (cancelled || analysisSessionRef.current !== session) return;
-              syncNodeAnalysis(
-                task.nodeId,
-                toNodeAnalysis(task.fen, update, update.isFinal),
-              );
-            },
-          );
-
-          if (cancelled || analysisSessionRef.current !== session) return;
-          syncNodeAnalysis(
-            task.nodeId,
-            toNodeAnalysis(task.fen, finalEvaluation, true),
-          );
-        }
+      const tasks = buildAnalysisTasks(gameState, analysisEngine);
+      if (tasks.length === 0) {
+        setViewState(function setComplete(previous) {
+          if (previous.statusText === "Analysis Complete") return previous;
+          return { ...previous, statusText: "Analysis Complete" };
+        });
+        return;
       }
 
-      loop()
-        .then(function handleSuccess() {
-          setViewState(function update(previous) {
-            return { ...previous, statusText: "Analysis Complete" };
-          });
-        })
-        .catch(function handleError(e) {
-          if (cancelled || analysisSessionRef.current !== session) return;
-          setViewState(function update(previous) {
-            return { ...previous, statusText: "Engine Error" };
-          });
-          console.error(e);
+      setViewState(function setStatus(previous) {
+        return { ...previous, statusText: "Analyzing..." };
+      });
+
+      void Promise.allSettled(
+        tasks.map(function runTask(task) {
+          return analysisEngine
+            .evaluate(
+              task.fen,
+              task.request,
+              task.priority,
+              function onUpdate(update) {
+                if (cancelled) return;
+                syncNodeAnalysis(
+                  task.nodeId,
+                  toNodeAnalysis(task.fen, update, update.isFinal),
+                );
+              },
+            )
+            .then(function handleFinal(finalEvaluation) {
+              if (cancelled) return;
+              syncNodeAnalysis(
+                task.nodeId,
+                toNodeAnalysis(task.fen, finalEvaluation, true),
+              );
+            });
+        }),
+      ).then(function handleSettled(results) {
+        if (cancelled) return;
+        const hasFailures = results.some(function hasFailure(result) {
+          return result.status === "rejected";
         });
+        setViewState(function update(previous) {
+          return {
+            ...previous,
+            statusText: hasFailures ? "Engine Error" : "Analysis Complete",
+          };
+        });
+      });
 
       return function cleanup() {
         cancelled = true;
@@ -440,7 +423,6 @@ function ChessReplay() {
   );
 
   function syncNodeAnalysis(nodeId: string, nextAnalysis: NodeAnalysis) {
-    console.log("Setting node analysis", nextAnalysis);
     setAnalysisState(function updateAnalysis(previous) {
       const currentAnalysisEntry = previous.byNodeId[nodeId];
       const preferredAnalysis = pickPreferredAnalysis(
@@ -1133,10 +1115,10 @@ function getDeepestLeaf(
   return getDeepestLeaf(node.children[0], tree);
 }
 
-function scheduleNextTask(
+function buildAnalysisTasks(
   gameState: GameState,
   engine: ChessEngine,
-): ScheduledTask | null {
+): ScheduledTask[] {
   const currentNodeId = gameState.currentNodeId;
   const otherNodeIds = Object.keys(gameState.tree).filter(
     function filterNode(nodeId) {
@@ -1144,26 +1126,41 @@ function scheduleNextTask(
     },
   );
   const hasMoves = Object.keys(gameState.tree).length > 0;
+  const tasks: ScheduledTask[] = [];
+  const taskKeys = new Set<string>();
 
-  function findNode(
+  function addTasksForNodes(
     nodeIds: string[],
     minDepth: number,
     linesAmount: number,
-  ): string | null {
+    priority: EngineEvaluationPriorityValue,
+  ): void {
     for (const nodeId of nodeIds) {
-      const fen =
-        nodeId === ROOT_ANALYSIS_NODE_ID
-          ? "start"
-          : gameState.tree[nodeId]?.fen;
-      if (!fen) continue;
-      if (getTerminalEvaluation(fen)) continue;
+      const task = toTask(
+        nodeId,
+        { minDepth, linesAmount },
+        priority,
+      );
+      if (!task) continue;
+      if (getTerminalEvaluation(task.fen)) continue;
 
-      const cachedEvaluation = engine.getEvaluation(fen, minDepth);
-      if (!cachedEvaluation) return nodeId;
-      if (cachedEvaluation.lines.length < linesAmount) return nodeId;
+      const cachedEvaluation = engine.getEvaluation(task.fen, minDepth);
+      if (cachedEvaluation && cachedEvaluation.lines.length >= linesAmount) {
+        continue;
+      }
+
+      const key = [
+        task.nodeId,
+        task.fen,
+        task.request.minDepth,
+        task.request.linesAmount,
+        task.priority,
+      ].join("|");
+      if (taskKeys.has(key)) continue;
+
+      taskKeys.add(key);
+      tasks.push(task);
     }
-
-    return null;
   }
 
   function toTask(
@@ -1193,49 +1190,23 @@ function scheduleNextTask(
     };
   }
 
-  if (currentNodeId) {
-    const currentAt12 = findNode([currentNodeId], 12, 3);
-    if (currentAt12)
-      return toTask(
-        currentAt12,
-        { minDepth: 12, linesAmount: 3 },
-        EngineEvaluationPriority.IMMEDIATE,
-      );
-  }
+  if (currentNodeId)
+    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriority.IMMEDIATE);
 
   const nextDepth12NodeIds = hasMoves
     ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds]
     : otherNodeIds;
-  const othersAt12 = findNode(nextDepth12NodeIds, 12, 2);
-  if (othersAt12)
-    return toTask(
-      othersAt12,
-      { minDepth: 12, linesAmount: 2 },
-      EngineEvaluationPriority.BACKGROUND,
-    );
+  addTasksForNodes(nextDepth12NodeIds, 12, 2, EngineEvaluationPriority.BACKGROUND);
 
-  if (currentNodeId) {
-    const currentAt16 = findNode([currentNodeId], 16, 3);
-    if (currentAt16)
-      return toTask(
-        currentAt16,
-        { minDepth: 16, linesAmount: 3 },
-        EngineEvaluationPriority.NEXT,
-      );
-  }
+  if (currentNodeId)
+    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriority.NEXT);
 
   const backgroundNodeIds = hasMoves
     ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds]
     : otherNodeIds;
-  const othersAt16 = findNode(backgroundNodeIds, 16, 1);
-  if (othersAt16)
-    return toTask(
-      othersAt16,
-      { minDepth: 16, linesAmount: 1 },
-      EngineEvaluationPriority.BACKGROUND,
-    );
+  addTasksForNodes(backgroundNodeIds, 16, 1, EngineEvaluationPriority.BACKGROUND);
 
-  return null;
+  return tasks;
 }
 
 function getSelectedAnalysisTarget(gameState: GameState): ScheduledTask | null {
