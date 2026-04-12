@@ -66,13 +66,6 @@ interface NodeAnalysis {
   source: "engine-final" | "engine-live" | "seeded-from-parent";
 }
 
-interface GameState {
-  tree: Record<string, MoveNode>;
-  currentNodeId: string | null;
-  activeLineId: string | null;
-  pgnInput: string;
-}
-
 interface ScheduledTask {
   nodeId: string;
   fen: string;
@@ -92,12 +85,10 @@ const ROOT_ANALYSIS_NODE_ID = "__root__";
 function ChessReplay() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [gameState, setGameState] = useState<GameState>({
-    tree: {},
-    currentNodeId: null,
-    activeLineId: null,
-    pgnInput: "",
-  });
+  const [pgnInput, setPgnInput] = useState("");
+  const [tree, setTree] = useState<Record<string, MoveNode>>({});
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [positionAnalysisMap, setPositionAnalysisMap] = useState<Record<string, NodeAnalysis>>({});
   const [statusText, setStatusText] = useState("Interactive Mode");
   const [deepAnalysisNodeId, setDeepAnalysisNodeId] = useState<string | null>(null);
@@ -112,28 +103,18 @@ function ChessReplay() {
   }, []);
 
   function goStart() {
-    setGameState(function update(previous) {
-      if (previous.currentNodeId === null) return previous;
-      return { ...previous, currentNodeId: null };
-    });
+    setCurrentNodeId(() => null);
   }
 
   function goBack() {
-    setGameState(function update(previous) {
-      if (!previous.currentNodeId || !previous.tree[previous.currentNodeId]) return previous;
-      return {
-        ...previous,
-        currentNodeId: previous.tree[previous.currentNodeId].parentId,
-      };
+    setCurrentNodeId((previous) => {
+      if (!previous || !tree[previous]) return previous;
+      return tree[previous].parentId;
     });
   }
 
   function goForward() {
-    setGameState(function update(previous) {
-      const nextNodeId = getNextNodeId(previous.currentNodeId, previous.tree);
-      if (!nextNodeId) return previous;
-      return { ...previous, currentNodeId: nextNodeId };
-    });
+    setCurrentNodeId((previous) => getNextNodeId(previous, tree) ?? previous);
   }
 
   useEffect(() => {
@@ -167,30 +148,27 @@ function ChessReplay() {
     };
   }, []);
 
-  const fullTreePgn = useMemo(
-    function buildFullTreePgn() {
-      const roots = Object.values(gameState.tree).filter((node) => node.parentId === null);
-      if (roots.length === 0) return "";
+  const fullTreePgn = useMemo(() => {
+    const roots = Object.values(tree).filter((node) => node.parentId === null);
+    if (roots.length === 0) return "";
 
-      let result = "";
-      roots.forEach((root, index) => {
-        result +=
-          (index === 0 ? "" : "(") +
-          generatePgnString(root.id, 1, true, index !== 0, gameState.tree).trim() +
-          (index === 0 ? " " : ") ");
-      });
-      return result.trim();
-    },
-    [gameState.tree],
-  );
+    let result = "";
+    roots.forEach((root, index) => {
+      result +=
+        (index === 0 ? "" : "(") +
+        generatePgnString(root.id, 1, true, index !== 0, tree).trim() +
+        (index === 0 ? " " : ") ");
+    });
+    return result.trim();
+  }, [tree]);
 
   const visiblePath = useMemo(
     function buildVisiblePath() {
       const path: MoveNode[] = [];
-      let current = gameState.activeLineId;
+      let current = activeLineId;
 
       while (current) {
-        const node = gameState.tree[current];
+        const node = tree[current];
         if (!node) break;
         path.unshift(node);
         current = node.parentId;
@@ -198,28 +176,25 @@ function ChessReplay() {
 
       return path;
     },
-    [gameState.activeLineId, gameState.tree],
+    [activeLineId, tree],
   );
 
-  const currentAnalysis = gameState.currentNodeId ? (positionAnalysisMap[gameState.currentNodeId] ?? null) : null;
-  const moveMarksMap = useMemo(
-    () => buildMoveMarksByNodeId(gameState.tree, positionAnalysisMap),
-    [positionAnalysisMap, gameState.tree],
-  );
-  const currentMoveMark = gameState.currentNodeId ? (moveMarksMap[gameState.currentNodeId] ?? null) : null;
+  const currentAnalysis = currentNodeId ? (positionAnalysisMap[currentNodeId] ?? null) : null;
+  const moveMarksMap = useMemo(() => buildMoveMarksByNodeId(tree, positionAnalysisMap), [positionAnalysisMap, tree]);
+  const currentMoveMark = currentNodeId ? (moveMarksMap[currentNodeId] ?? null) : null;
   const currentMoveSquares = useMemo(
     function buildCurrentMoveSquares() {
-      if (!gameState.currentNodeId) return null;
+      if (!currentNodeId) return null;
 
-      const node = gameState.tree[gameState.currentNodeId];
+      const node = tree[currentNodeId];
       if (!node?.parentId) return null;
 
-      const parent = gameState.tree[node.parentId];
+      const parent = tree[node.parentId];
       if (!parent) return null;
 
       return getMoveSquares(parent.fen, node.san);
     },
-    [gameState.currentNodeId, gameState.tree],
+    [currentNodeId, tree],
   );
   const boardMarkStyles = useMemo(
     function buildBoardMarkStyles() {
@@ -236,53 +211,38 @@ function ChessReplay() {
   );
   const canGoForward = useMemo(
     function checkCanGoForward() {
-      return getNextNodeId(gameState.currentNodeId, gameState.tree) !== null;
+      return getNextNodeId(currentNodeId, tree) !== null;
     },
-    [gameState.currentNodeId, gameState.tree],
+    [currentNodeId, tree],
   );
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
 
-  useEffect(
-    function syncGeneratedPgn() {
-      if (!fullTreePgn) return;
-
-      setGameState(function updatePgn(previous) {
-        if (previous.pgnInput === fullTreePgn) return previous;
-        return { ...previous, pgnInput: fullTreePgn };
-      });
-    },
-    [fullTreePgn],
-  );
+  useEffect(() => {
+    if (!fullTreePgn) return;
+    setPgnInput(fullTreePgn);
+  }, [fullTreePgn]);
 
   useEffect(
     function keepActiveLineVisible() {
-      if (!gameState.currentNodeId) return;
+      if (!currentNodeId) return;
       if (
         visiblePath.some(function hasCurrent(node) {
-          return node.id === gameState.currentNodeId;
+          return node.id === currentNodeId;
         })
       )
         return;
-
-      setGameState(function updateActiveLine(previous) {
-        if (!previous.currentNodeId) return previous;
-        return {
-          ...previous,
-          activeLineId: getDeepestLeaf(previous.currentNodeId, previous.tree),
-        };
-      });
+      setActiveLineId(getDeepestLeaf(currentNodeId, tree));
     },
-    [gameState.currentNodeId, gameState.tree, visiblePath],
+    [currentNodeId, tree, visiblePath],
   );
 
   useEffect(
     function hydrateSelectedNodeFromCache() {
       const engine = engineRef.current;
-      const currentNodeId = gameState.currentNodeId;
       if (!engine || !currentNodeId) return;
 
-      const node = gameState.tree[currentNodeId];
+      const node = tree[currentNodeId];
       if (!node) return;
 
       const cachedEvaluation = engine.getEvaluation(node.fen, 0);
@@ -294,7 +254,7 @@ function ChessReplay() {
       const terminalAnalysis = buildTerminalNodeAnalysis(node.fen);
       if (terminalAnalysis) syncSingleNodeAnalysis(currentNodeId, terminalAnalysis);
     },
-    [gameState.currentNodeId, gameState.tree],
+    [currentNodeId, tree],
   );
 
   useEffect(
@@ -303,7 +263,7 @@ function ChessReplay() {
       if (!engine) return;
       const analysisEngine: ChessEngine = engine;
       let cancelled = false;
-      const tasks = buildAnalysisTasks(gameState, analysisEngine);
+      const tasks = buildAnalysisTasks(tree, currentNodeId, analysisEngine);
       if (tasks.length === 0) {
         setStatusText(function setComplete(previous) {
           return previous === "Analysis Complete" ? previous : "Analysis Complete";
@@ -337,7 +297,7 @@ function ChessReplay() {
         cancelled = true;
       };
     },
-    [gameState.tree, gameState.currentNodeId],
+    [tree, currentNodeId],
   );
 
   function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
@@ -356,7 +316,7 @@ function ChessReplay() {
     const engine = engineRef.current;
     if (!engine) return;
 
-    const target = getSelectedAnalysisTarget(gameState);
+    const target = getSelectedAnalysisTarget(tree, currentNodeId);
     if (!target) return;
 
     setDeepAnalysisNodeId(target.nodeId);
@@ -388,7 +348,7 @@ function ChessReplay() {
   }
 
   function makeMove(move: { from: string; to: string; promotion?: string }): { nodeId: string; fen: string } | null {
-    const currentFen = getCurrentFen(gameState.currentNodeId, gameState.tree);
+    const currentFen = getCurrentFen(currentNodeId, tree);
     const tempGame = new Chess(currentFen === "start" ? undefined : currentFen);
 
     try {
@@ -396,42 +356,40 @@ function ChessReplay() {
       if (!result) return null;
 
       const nextFen = tempGame.fen();
-      const nextNodeId = gameState.currentNodeId ? `${gameState.currentNodeId}|${result.san}` : result.san;
+      const nextNodeId = currentNodeId ? `${currentNodeId}|${result.san}` : result.san;
 
-      setGameState(function updateGame(previous) {
-        if (previous.tree[nextNodeId]) {
-          return {
-            ...previous,
-            currentNodeId: nextNodeId,
-            activeLineId: nextNodeId,
-          };
-        }
+      if (tree[nextNodeId]) {
+        setCurrentNodeId(nextNodeId);
+        setActiveLineId(nextNodeId);
+        return {
+          nodeId: nextNodeId,
+          fen: nextFen,
+        };
+      }
 
+      setTree(function updateTree(previous) {
         const nextTree: Record<string, MoveNode> = {
-          ...previous.tree,
+          ...previous,
           [nextNodeId]: {
             id: nextNodeId,
             san: result.san,
             fen: nextFen,
-            parentId: previous.currentNodeId,
+            parentId: currentNodeId,
             children: [],
           },
         };
 
-        if (previous.currentNodeId) {
-          nextTree[previous.currentNodeId] = {
-            ...previous.tree[previous.currentNodeId],
-            children: [...previous.tree[previous.currentNodeId].children, nextNodeId],
+        if (currentNodeId) {
+          nextTree[currentNodeId] = {
+            ...previous[currentNodeId],
+            children: [...previous[currentNodeId].children, nextNodeId],
           };
         }
 
-        return {
-          ...previous,
-          tree: nextTree,
-          currentNodeId: nextNodeId,
-          activeLineId: nextNodeId,
-        };
+        return nextTree;
       });
+      setCurrentNodeId(nextNodeId);
+      setActiveLineId(nextNodeId);
       return {
         nodeId: nextNodeId,
         fen: nextFen,
@@ -507,12 +465,10 @@ function ChessReplay() {
         lastNodeId = nodeId;
       });
 
-      setGameState({
-        tree: nextTree,
-        currentNodeId: lastNodeId,
-        activeLineId: lastNodeId,
-        pgnInput: pgn,
-      });
+      setTree(nextTree);
+      setCurrentNodeId(lastNodeId);
+      setActiveLineId(lastNodeId);
+      setPgnInput(pgn);
       setPlayersInfo(mergedPlayersInfo);
       setPositionAnalysisMap({});
       setStatusText("PGN Imported");
@@ -530,12 +486,10 @@ function ChessReplay() {
   }
 
   function clearTree() {
-    setGameState({
-      tree: {},
-      currentNodeId: null,
-      activeLineId: null,
-      pgnInput: "",
-    });
+    setTree({});
+    setCurrentNodeId(null);
+    setActiveLineId(null);
+    setPgnInput("");
     setPlayersInfo(null);
     setPositionAnalysisMap({});
     setStatusText("Interactive Mode");
@@ -558,7 +512,7 @@ function ChessReplay() {
           <div className="flex-1 shadow-2xl overflow-hidden ">
             <Chessboard
               id="AnalysisBoard"
-              position={gameState.currentNodeId ? gameState.tree[gameState.currentNodeId].fen : "start"}
+              position={currentNodeId ? tree[currentNodeId].fen : "start"}
               onPieceDrop={onDrop}
               boardOrientation={boardOrientation}
               animationDuration={200}
@@ -678,14 +632,14 @@ function ChessReplay() {
           <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
             {visiblePath.map(function renderNode(node, index) {
               const variations =
-                gameState.tree[node.parentId || "root"]?.children?.map(function toNode(id) {
-                  return gameState.tree[id];
+                tree[node.parentId || "root"]?.children?.map(function toNode(id) {
+                  return tree[id];
                 }) ||
-                Object.values(gameState.tree).filter(function findRoots(rootNode) {
+                Object.values(tree).filter(function findRoots(rootNode) {
                   return rootNode.parentId === null;
                 });
               const isWhite = index % 2 === 0;
-              const isFocus = node.id === gameState.currentNodeId;
+              const isFocus = node.id === currentNodeId;
               const nodeAnalysis = positionAnalysisMap[node.id];
               const moveMark = moveMarksMap[node.id];
 
@@ -697,9 +651,7 @@ function ChessReplay() {
                     </span>
                     <button
                       onClick={function selectNode() {
-                        setGameState(function update(previous) {
-                          return { ...previous, currentNodeId: node.id };
-                        });
+                        setCurrentNodeId(node.id);
                       }}
                       className={`flex-1 flex justify-between items-center p-2 rounded border transition-all ${isFocus ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300" : "bg-white hover:bg-indigo-50 border-gray-200"}`}
                     >
@@ -729,13 +681,8 @@ function ChessReplay() {
                           <button
                             key={variation.id}
                             onClick={function selectVariation() {
-                              setGameState(function update(previous) {
-                                return {
-                                  ...previous,
-                                  currentNodeId: variation.id,
-                                  activeLineId: getDeepestLeaf(variation.id, previous.tree),
-                                };
-                              });
+                              setCurrentNodeId(variation.id);
+                              setActiveLineId(getDeepestLeaf(variation.id, tree));
                             }}
                             className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
                           >
@@ -770,18 +717,15 @@ function ChessReplay() {
           <form
             onSubmit={function submitPgn(event) {
               event.preventDefault();
-              importPgn(gameState.pgnInput);
+              importPgn(pgnInput);
             }}
             className="flex flex-col gap-2"
           >
             <textarea
               className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white"
-              value={gameState.pgnInput}
-              onChange={function updatePgn(event) {
-                const nextValue = event.target.value;
-                setGameState(function update(previous) {
-                  return { ...previous, pgnInput: nextValue };
-                });
+              value={pgnInput}
+              onChange={(event) => {
+                setPgnInput(event.target.value);
               }}
             />
             <button className="inline-flex items-center justify-center gap-2 py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">
@@ -894,12 +838,15 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
   return getDeepestLeaf(node.children[0], tree);
 }
 
-function buildAnalysisTasks(gameState: GameState, engine: ChessEngine): ScheduledTask[] {
-  const currentNodeId = gameState.currentNodeId;
-  const otherNodeIds = Object.keys(gameState.tree).filter(function filterNode(nodeId) {
+function buildAnalysisTasks(
+  tree: Record<string, MoveNode>,
+  currentNodeId: string | null,
+  engine: ChessEngine,
+): ScheduledTask[] {
+  const otherNodeIds = Object.keys(tree).filter(function filterNode(nodeId) {
     return nodeId !== currentNodeId;
   });
-  const hasMoves = Object.keys(gameState.tree).length > 0;
+  const hasMoves = Object.keys(tree).length > 0;
   const tasks: ScheduledTask[] = [];
   const taskKeys = new Set<string>();
 
@@ -942,7 +889,7 @@ function buildAnalysisTasks(gameState: GameState, engine: ChessEngine): Schedule
       };
     }
 
-    const node = gameState.tree[nodeId];
+    const node = tree[nodeId];
     if (!node) return null;
 
     return {
@@ -967,8 +914,8 @@ function buildAnalysisTasks(gameState: GameState, engine: ChessEngine): Schedule
   return tasks;
 }
 
-function getSelectedAnalysisTarget(gameState: GameState): ScheduledTask | null {
-  if (!gameState.currentNodeId) {
+function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId: string | null): ScheduledTask | null {
+  if (!currentNodeId) {
     return {
       nodeId: ROOT_ANALYSIS_NODE_ID,
       fen: "start",
@@ -978,7 +925,7 @@ function getSelectedAnalysisTarget(gameState: GameState): ScheduledTask | null {
     };
   }
 
-  const node = gameState.tree[gameState.currentNodeId];
+  const node = tree[currentNodeId];
   if (!node) return null;
 
   return {
