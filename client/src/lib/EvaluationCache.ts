@@ -3,12 +3,7 @@ import type { ChessEngineLine, FullMoveEvaluation } from "./ChessEngine.ts";
 
 export interface EvaluationCache {
   getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
-  addEvaluation(
-    fen: string,
-    depth: number,
-    evaluation: EngineEvaluation,
-    lines: ChessEngineLine[],
-  ): void;
+  addEvaluation(fen: string, depth: number, evaluation: EngineEvaluation, lines: ChessEngineLine[]): void;
 }
 
 class FinalEvaluationCache implements EvaluationCache {
@@ -23,12 +18,7 @@ class FinalEvaluationCache implements EvaluationCache {
     );
   }
 
-  addEvaluation(
-    fen: string,
-    depth: number,
-    evaluation: EngineEvaluation,
-    lines: ChessEngineLine[],
-  ): void {
+  addEvaluation(fen: string, depth: number, evaluation: EngineEvaluation, lines: ChessEngineLine[]): void {
     const nextSnapshot: FullMoveEvaluation = {
       fen,
       depth,
@@ -41,10 +31,7 @@ class FinalEvaluationCache implements EvaluationCache {
     });
 
     if (existingIndex >= 0) {
-      snapshots[existingIndex] = mergeEvaluations(
-        snapshots[existingIndex],
-        nextSnapshot,
-      );
+      snapshots[existingIndex] = mergeEvaluations(snapshots[existingIndex], nextSnapshot);
     } else {
       snapshots.push(nextSnapshot);
     }
@@ -56,28 +43,17 @@ class FinalEvaluationCache implements EvaluationCache {
   }
 }
 
-function mergeEvaluations(
-  current: FullMoveEvaluation,
-  next: FullMoveEvaluation,
-): FullMoveEvaluation {
+function mergeEvaluations(current: FullMoveEvaluation, next: FullMoveEvaluation): FullMoveEvaluation {
   const mergedByMultiPv = new Map<number, ChessEngineLine>();
 
-  current.lines.forEach(function addCurrent(line) {
-    mergedByMultiPv.set(line.multipv, line);
-  });
-  next.lines.forEach(function addNext(line) {
-    mergedByMultiPv.set(line.multipv, line);
-  });
+  current.lines.forEach((line) => mergedByMultiPv.set(line.multipv, line));
+  next.lines.forEach((line) => mergedByMultiPv.set(line.multipv, line));
 
   return {
     fen: next.fen,
     depth: Math.max(current.depth, next.depth),
     evaluation: next.evaluation,
-    lines: [...mergedByMultiPv.values()].sort(
-      function sortByMultiPv(left, right) {
-        return left.multipv - right.multipv;
-      },
-    ),
+    lines: [...mergedByMultiPv.values()].sort((left, right) => left.multipv - right.multipv),
   };
 }
 

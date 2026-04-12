@@ -48,15 +48,31 @@ interface MoveNode {
 }
 
 interface DisplayEngineLine {
-  move: string;
-  uci: string;
-  pvUci: string[];
-  /** engine line */
-  pv: string;
+  /**
+   * Suggested next move.
+   * Example: "Bc2"
+   */
+  suggestedMove: string;
+  /**
+   * Suggested next move.
+   * UCI = Universal Chess Interface notation
+   * Example: "b3c2"
+   */
+  suggestedMoveUci: string;
+  /**
+   * Engine line.
+   * example: ["b3c2","h7h6","c1e3"]
+   */
+  engineLineUci: string[];
+  /**
+   * Engine line.
+   * like "Bc2 h6 Be3"
+   */
+  engineLine: string;
   score: EngineEvaluation;
   depth: number;
-  /** rank of the line */
-  multipv: number;
+  /** rank of the line. 1 = suggestion*/
+  lineRank: number;
 }
 
 interface NodeAnalysis {
@@ -407,11 +423,11 @@ function ChessReplay() {
     }
   }
 
-  function applyEngineMove(line: DisplayEngineLine) {
+  function applyEngineMove(line: DisplayEngineLine, suggestedMoveUci: string) {
     const moveResult = makeMove({
-      from: line.uci.substring(0, 2),
-      to: line.uci.substring(2, 4),
-      promotion: line.uci[4] || "q",
+      from: suggestedMoveUci.substring(0, 2),
+      to: suggestedMoveUci.substring(2, 4),
+      promotion: suggestedMoveUci[4] || "q",
     });
     if (!moveResult) return null;
 
@@ -422,7 +438,7 @@ function ChessReplay() {
       return moveResult;
     }
 
-    const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line);
+    const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
     if (seededAnalysis) {
       syncSingleNodeAnalysis(moveResult.nodeId, seededAnalysis);
     }
@@ -595,16 +611,14 @@ function ChessReplay() {
               return (
                 <button
                   key={index}
-                  onClick={function applyLine() {
-                    applyEngineMove(line);
-                  }}
+                  onClick={() => applyEngineMove(line, line.suggestedMoveUci)}
                   className="flex flex-col gap-2 px-2 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left"
                 >
                   <div className="flex items-baseline w-full gap-2">
-                    <span className="text-xs font-bold text-gray-300">{line.multipv}.</span>
-                    <span className="font-bold text-gray-800 font-mono text-nowrap">{line.move}</span>
+                    <span className="text-xs font-bold text-gray-300">{line.lineRank}.</span>
+                    <span className="font-bold text-gray-800 font-mono text-nowrap">{line.suggestedMove}</span>
                     <div className="text-xs text-gray-500 font-mono truncate grow opacity-70">
-                      {line.pv.split(" ").slice(1).join(" ")}
+                      {line.engineLine.split(" ").slice(1).join(" ")}
                     </div>
                     <div className="flex items-center gap-3">
                       <span
@@ -968,13 +982,13 @@ function toDisplayLine(baseFen: string, line: ChessEngineLine): DisplayEngineLin
   if (sanMoves.length === 0) return null;
 
   return {
-    move: sanMoves[0],
-    uci: line.uci,
-    pvUci: line.pv,
-    pv: sanMoves.join(" "),
+    suggestedMove: sanMoves[0],
+    suggestedMoveUci: line.uci,
+    engineLineUci: line.pv,
+    engineLine: sanMoves.join(" "),
     score: line.evaluation,
     depth: line.depth,
-    multipv: line.multipv,
+    lineRank: line.multipv,
   };
 }
 
@@ -1001,9 +1015,20 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
   };
 }
 
-function buildSeededNodeAnalysis(childFen: string, line: DisplayEngineLine): NodeAnalysis | null {
-  const childPvUci = line.pvUci.slice(1);
-  const childLines = childPvUci.length > 0 ? toSeededDisplayLines(childFen, childPvUci, line) : [];
+function buildSeededNodeAnalysis(
+  childFen: string,
+  line: DisplayEngineLine,
+  lineNextMovesUci: string[],
+): NodeAnalysis | null {
+  const childLines =
+    lineNextMovesUci.length > 0
+      ? toSeededDisplayLines(
+          lineNextMovesUci,
+          line.score,
+          line.depth,
+          uciToSanLine(lineNextMovesUci.join(" "), childFen),
+        )
+      : [];
 
   return {
     fen: childFen,
@@ -1029,19 +1054,23 @@ function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
   };
 }
 
-function toSeededDisplayLines(childFen: string, childPvUci: string[], line: DisplayEngineLine): DisplayEngineLine[] {
-  const sanMoves = uciToSanLine(childPvUci.join(" "), childFen);
-  if (sanMoves.length === 0) return [];
+function toSeededDisplayLines(
+  lineNextMovesUci: string[],
+  score: EngineEvaluation,
+  depth: number,
+  lineNextMovesSan: string[],
+): DisplayEngineLine[] {
+  if (lineNextMovesSan.length === 0) return [];
 
   return [
     {
-      move: sanMoves[0],
-      uci: childPvUci[0],
-      pvUci: childPvUci,
-      pv: sanMoves.join(" "),
-      score: line.score,
-      depth: line.depth,
-      multipv: 1,
+      suggestedMove: lineNextMovesSan[0],
+      suggestedMoveUci: lineNextMovesUci[0],
+      engineLineUci: lineNextMovesUci,
+      engineLine: lineNextMovesSan.join(" "),
+      score: score,
+      depth: depth,
+      lineRank: 1,
     },
   ];
 }
@@ -1066,7 +1095,7 @@ function buildMoveMarksByNodeId(
       playedEvaluation: toMoveMarkEvaluation(nodeAnalysis.evaluation),
       parentLines: parentAnalysis.lines.map(function toEngineLine(line) {
         return {
-          uci: line.uci,
+          uci: line.suggestedMoveUci,
           evaluation: toMoveMarkEvaluation(line.score),
         };
       }),
@@ -1175,13 +1204,13 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
     const leftLine = left[index];
     const rightLine = right[index];
     if (
-      leftLine.move !== rightLine.move ||
-      leftLine.uci !== rightLine.uci ||
-      leftLine.pvUci.join(" ") !== rightLine.pvUci.join(" ") ||
-      leftLine.pv !== rightLine.pv ||
+      leftLine.suggestedMove !== rightLine.suggestedMove ||
+      leftLine.suggestedMoveUci !== rightLine.suggestedMoveUci ||
+      leftLine.engineLineUci.join(" ") !== rightLine.engineLineUci.join(" ") ||
+      leftLine.engineLine !== rightLine.engineLine ||
       !areEvaluationsEqual(leftLine.score, rightLine.score) ||
       leftLine.depth !== rightLine.depth ||
-      leftLine.multipv !== rightLine.multipv
+      leftLine.lineRank !== rightLine.lineRank
     ) {
       return false;
     }
@@ -1222,16 +1251,16 @@ function mergeNodeAnalysisLines(currentAnalysis: NodeAnalysis | undefined, nextA
 
   const mergedByMultiPv = new Map<number, DisplayEngineLine>();
   nextAnalysis.lines.forEach(function addNext(line) {
-    mergedByMultiPv.set(line.multipv, line);
+    mergedByMultiPv.set(line.lineRank, line);
   });
   currentAnalysis.lines.forEach(function addMissing(line) {
-    if (!mergedByMultiPv.has(line.multipv)) mergedByMultiPv.set(line.multipv, line);
+    if (!mergedByMultiPv.has(line.lineRank)) mergedByMultiPv.set(line.lineRank, line);
   });
 
   return {
     ...nextAnalysis,
     lines: [...mergedByMultiPv.values()].sort(function sortByMultiPv(left, right) {
-      return left.multipv - right.multipv;
+      return left.lineRank - right.lineRank;
     }),
   };
 }
