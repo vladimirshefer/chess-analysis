@@ -23,9 +23,7 @@ describe("UniversalChessInterface.parseInfoLine", function suite() {
   });
 
   it("parses mate scores and lowerbound", function testCase() {
-    const parsed = UniversalChessInterface.parseInfoLine(
-      "info depth 20 score mate -3 lowerbound pv h7h8q",
-    );
+    const parsed = UniversalChessInterface.parseInfoLine("info depth 20 score mate -3 lowerbound pv h7h8q");
 
     expect(parsed).toEqual({
       depth: 20,
@@ -36,9 +34,7 @@ describe("UniversalChessInterface.parseInfoLine", function suite() {
   });
 
   it("parses upperbound when present", function testCase() {
-    const parsed = UniversalChessInterface.parseInfoLine(
-      "info depth 12 score cp -40 upperbound pv c7c5",
-    );
+    const parsed = UniversalChessInterface.parseInfoLine("info depth 12 score cp -40 upperbound pv c7c5");
 
     expect(parsed).toEqual({
       depth: 12,
@@ -49,9 +45,7 @@ describe("UniversalChessInterface.parseInfoLine", function suite() {
   });
 
   it("ignores invalid numeric tokens", function testCase() {
-    const parsed = UniversalChessInterface.parseInfoLine(
-      "info depth x multipv q score cp nope nodes n/a pv e2e4",
-    );
+    const parsed = UniversalChessInterface.parseInfoLine("info depth x multipv q score cp nope nodes n/a pv e2e4");
 
     expect(parsed).toEqual({
       principalVariation: ["e2e4"],
@@ -74,18 +68,14 @@ describe("UniversalChessInterface.parseInfoLine", function suite() {
 
 describe("UniversalChessInterface.parseEngineLine", function suite() {
   it("parses bestmove with ponder", function testCase() {
-    expect(
-      UniversalChessInterface.parseEngineLine("bestmove e2e4 ponder e7e5"),
-    ).toEqual({
+    expect(UniversalChessInterface.parseEngineLine("bestmove e2e4 ponder e7e5")).toEqual({
       type: "bestmove",
       data: { bestMove: "e2e4", ponderMove: "e7e5" },
     });
   });
 
   it("parses id lines", function testCase() {
-    expect(
-      UniversalChessInterface.parseEngineLine("id name Stockfish 16.1"),
-    ).toEqual({
+    expect(UniversalChessInterface.parseEngineLine("id name Stockfish 16.1")).toEqual({
       type: "id",
       data: { field: "name", value: "Stockfish 16.1" },
     });

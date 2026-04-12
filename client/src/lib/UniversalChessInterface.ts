@@ -6,8 +6,7 @@ export namespace UniversalChessInterface {
 
       for (let index = 0; index < line.length; index += 1) {
         const char = line[index];
-        const isWhitespace =
-          char === " " || char === "\t" || char === "\n" || char === "\r";
+        const isWhitespace = char === " " || char === "\t" || char === "\n" || char === "\r";
 
         if (isWhitespace) {
           if (current.length > 0) {
@@ -408,11 +407,7 @@ export namespace UniversalChessInterface {
     return Number.isNaN(parsed) ? undefined : parsed;
   }
 
-  function indexOfToken(
-    tokens: string[],
-    token: string,
-    startIndex: number,
-  ): number {
+  function indexOfToken(tokens: string[], token: string, startIndex: number): number {
     for (let index = startIndex; index < tokens.length; index += 1) {
       if (tokens[index] === token) return index;
     }

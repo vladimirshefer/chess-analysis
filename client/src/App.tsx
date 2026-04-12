@@ -19,10 +19,7 @@ function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <div className="flex items-center gap-6">
             <nav className="flex gap-4">
-              <Link
-                to="/"
-                className="text-gray-600 hover:text-indigo-600 font-medium transition-colors"
-              >
+              <Link to="/" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
                 Analyzer
               </Link>
               <Link
@@ -31,10 +28,7 @@ function AppShell({ children }: { children: ReactNode }) {
               >
                 Chess.com
               </Link>
-              <Link
-                to="/about"
-                className="text-gray-600 hover:text-indigo-600 font-medium transition-colors"
-              >
+              <Link to="/about" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
                 About
               </Link>
             </nav>

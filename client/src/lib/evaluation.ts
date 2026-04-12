@@ -16,28 +16,20 @@ export type EngineEvaluation =
 export function formatEvaluation(evaluation: EngineEvaluation): string {
   switch (evaluation.kind) {
     case "cp":
-      return evaluation.pawns >= 0
-        ? `+${evaluation.pawns.toFixed(1)}`
-        : evaluation.pawns.toFixed(1);
+      return evaluation.pawns >= 0 ? `+${evaluation.pawns.toFixed(1)}` : evaluation.pawns.toFixed(1);
     case "mate":
-      return evaluation.moves >= 0
-        ? `M${evaluation.moves}`
-        : `-M${Math.abs(evaluation.moves)}`;
+      return evaluation.moves >= 0 ? `M${evaluation.moves}` : `-M${Math.abs(evaluation.moves)}`;
     case "result":
       return evaluation.result;
   }
 }
 
-export function toComparableEvaluationScore(
-  evaluation: EngineEvaluation,
-): number {
+export function toComparableEvaluationScore(evaluation: EngineEvaluation): number {
   switch (evaluation.kind) {
     case "cp":
       return evaluation.pawns;
     case "mate":
-      return evaluation.moves >= 0
-        ? 1000 - Math.abs(evaluation.moves)
-        : -1000 + Math.abs(evaluation.moves);
+      return evaluation.moves >= 0 ? 1000 - Math.abs(evaluation.moves) : -1000 + Math.abs(evaluation.moves);
     case "result":
       if (evaluation.result === GameResult.WHITE_WIN) return 2000;
       if (evaluation.result === GameResult.BLACK_WIN) return -2000;
@@ -45,36 +37,20 @@ export function toComparableEvaluationScore(
   }
 }
 
-export function areEvaluationsEqual(
-  left: EngineEvaluation,
-  right: EngineEvaluation,
-): boolean {
+export function areEvaluationsEqual(left: EngineEvaluation, right: EngineEvaluation): boolean {
   if (left.kind !== right.kind) return false;
 
   switch (left.kind) {
     case "cp":
-      return (
-        left.pawns ===
-        (right as Extract<EngineEvaluation, { kind: "cp" }>).pawns
-      );
+      return left.pawns === (right as Extract<EngineEvaluation, { kind: "cp" }>).pawns;
     case "mate":
-      return (
-        left.moves ===
-        (right as Extract<EngineEvaluation, { kind: "mate" }>).moves
-      );
+      return left.moves === (right as Extract<EngineEvaluation, { kind: "mate" }>).moves;
     case "result":
-      return (
-        left.result ===
-        (right as Extract<EngineEvaluation, { kind: "result" }>).result
-      );
+      return left.result === (right as Extract<EngineEvaluation, { kind: "result" }>).result;
   }
 }
 
-export function parseEngineEvaluation(
-  fen: string,
-  cpScore?: number,
-  mateScore?: number,
-): EngineEvaluation {
+export function parseEngineEvaluation(fen: string, cpScore?: number, mateScore?: number): EngineEvaluation {
   const sideToMove = fen === "start" ? "w" : fen.split(" ")[1];
   const perspective = sideToMove === "b" ? -1 : 1;
 

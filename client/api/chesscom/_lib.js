@@ -1,9 +1,7 @@
 const DEFAULT_LIMIT = 10;
 
 export async function fetchPlayer(username) {
-  return fetchChessComJson(
-    `https://api.chess.com/pub/player/${encodeURIComponent(username)}`,
-  );
+  return fetchChessComJson(`https://api.chess.com/pub/player/${encodeURIComponent(username)}`);
 }
 
 export async function fetchRecentGamesPayload(username, limit = DEFAULT_LIMIT) {
@@ -11,10 +9,7 @@ export async function fetchRecentGamesPayload(username, limit = DEFAULT_LIMIT) {
   const archivesResponse = await fetchChessComJson(
     `https://api.chess.com/pub/player/${encodeURIComponent(username)}/games/archives`,
   );
-  const games = await collectRecentGames(
-    archivesResponse.archives || [],
-    limit,
-  );
+  const games = await collectRecentGames(archivesResponse.archives || [], limit);
 
   return {
     player: {
@@ -44,11 +39,7 @@ async function collectRecentGames(archiveUrls, limit) {
 
   for (let index = archiveUrls.length - 1; index >= 0; index -= 1) {
     const archive = await fetchChessComJson(archiveUrls[index]);
-    const archiveGames = (archive.games || [])
-      .slice()
-      .reverse()
-      .map(normalizeGame)
-      .filter(Boolean);
+    const archiveGames = (archive.games || []).slice().reverse().map(normalizeGame).filter(Boolean);
 
     recentGames.push(...archiveGames);
     if (recentGames.length >= limit) break;
@@ -58,14 +49,7 @@ async function collectRecentGames(archiveUrls, limit) {
 }
 
 function normalizeGame(game) {
-  if (
-    !game ||
-    !game.url ||
-    !game.pgn ||
-    !game.white?.username ||
-    !game.black?.username
-  )
-    return null;
+  if (!game || !game.url || !game.pgn || !game.white?.username || !game.black?.username) return null;
 
   return {
     id: game.url,
@@ -100,9 +84,7 @@ async function fetchChessComJson(url) {
   });
 
   if (!response.ok) {
-    const error = new Error(
-      payload.message || response.statusText || "Chess.com request failed",
-    );
+    const error = new Error(payload.message || response.statusText || "Chess.com request failed");
     error.status = response.status;
     throw error;
   }

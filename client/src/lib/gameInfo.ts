@@ -15,9 +15,7 @@ export interface ImportedGameInfo {
   source: "pgn" | "chesscom";
 }
 
-export function parsePgnPlayersInfo(
-  headers: Record<string, string>,
-): GamePlayersInfo | null {
+export function parsePgnPlayersInfo(headers: Record<string, string>): GamePlayersInfo | null {
   const white = {
     name: headers.White,
     rating: toInt(headers.WhiteElo),
@@ -51,9 +49,7 @@ export function mergePlayersInfo(
   };
 }
 
-export function toImportedGameInfoFromChessComGame(
-  game: ChessComClient.Dto.ChessComGameSummary,
-): ImportedGameInfo {
+export function toImportedGameInfoFromChessComGame(game: ChessComClient.Dto.ChessComGameSummary): ImportedGameInfo {
   return {
     source: "chesscom",
     players: {

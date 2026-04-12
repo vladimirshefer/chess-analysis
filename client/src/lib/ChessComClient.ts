@@ -12,16 +12,10 @@ export namespace ChessComClient {
     return getRecentGamesViaProxy(username, limit);
   }
 
-  async function getRecentGamesViaProxy(
-    username: string,
-    limit: number,
-  ): Promise<Dto.ChessComRecentGames> {
+  async function getRecentGamesViaProxy(username: string, limit: number): Promise<Dto.ChessComRecentGames> {
     const normalizedUsername = username.trim().toLowerCase();
-    const response = await fetch(
-      `/api/chesscom/player/${encodeURIComponent(normalizedUsername)}/games?limit=${limit}`,
-    );
-    const payload =
-      await parseResponse<Dto.ChessComRecentGamesResponse>(response);
+    const response = await fetch(`/api/chesscom/player/${encodeURIComponent(normalizedUsername)}/games?limit=${limit}`);
+    const payload = await parseResponse<Dto.ChessComRecentGamesResponse>(response);
     return payload;
   }
 
@@ -56,10 +50,7 @@ export namespace ChessComClient {
 
     return new Error(message);
   }
-  async function collectRecentGames(
-    archiveUrls: string[],
-    limit: number,
-  ): Promise<Dto.ChessComGameSummary[]> {
+  async function collectRecentGames(archiveUrls: string[], limit: number): Promise<Dto.ChessComGameSummary[]> {
     const recentGames: Dto.ChessComGameSummary[] = [];
 
     for (let index = archiveUrls.length - 1; index >= 0; index -= 1) {
@@ -82,16 +73,8 @@ export namespace ChessComClient {
     return recentGames.slice(0, limit);
   }
 
-  function normalizeGame(
-    game: Dto.ChessComArchiveGameResponse,
-  ): Dto.ChessComGameSummary | null {
-    if (
-      !game.url ||
-      !game.pgn ||
-      !game.white?.username ||
-      !game.black?.username
-    )
-      return null;
+  function normalizeGame(game: Dto.ChessComArchiveGameResponse): Dto.ChessComGameSummary | null {
+    if (!game.url || !game.pgn || !game.white?.username || !game.black?.username) return null;
 
     return {
       id: game.url,
@@ -119,10 +102,7 @@ export namespace ChessComClient {
     };
   }
 
-  async function getRecentGamesDirect(
-    username: string,
-    limit: number,
-  ): Promise<Dto.ChessComRecentGames> {
+  async function getRecentGamesDirect(username: string, limit: number): Promise<Dto.ChessComRecentGames> {
     const normalizedUsername = username.trim().toLowerCase();
     const player = await fetchJson<Dto.ChessComPlayerResponse>(
       `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}`,
@@ -130,10 +110,7 @@ export namespace ChessComClient {
     const archivesResponse = await fetchJson<Dto.ChessComArchivesResponse>(
       `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}/games/archives`,
     );
-    const games = await collectRecentGames(
-      archivesResponse.archives ?? [],
-      limit,
-    );
+    const games = await collectRecentGames(archivesResponse.archives ?? [], limit);
 
     return {
       player: {

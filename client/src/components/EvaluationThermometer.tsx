@@ -1,9 +1,4 @@
-import {
-  type EngineEvaluation,
-  formatEvaluation,
-  GameResult,
-  toComparableEvaluationScore,
-} from "../lib/evaluation";
+import { type EngineEvaluation, formatEvaluation, GameResult, toComparableEvaluationScore } from "../lib/evaluation";
 
 interface ThermometerSegments {
   topShare: number;
@@ -30,15 +25,11 @@ function EvaluationThermometer({
 }) {
   const segments = getThermometerSegments(evaluation, orientation);
   const label = evaluation === null ? "--" : formatEvaluation(evaluation);
-  const labelWhite =
-    evaluation === null ? "--" : formatEvaluationForWhite(evaluation);
-  const labelBlack =
-    evaluation === null ? "--" : formatEvaluationForBlack(evaluation);
+  const labelWhite = evaluation === null ? "--" : formatEvaluationForWhite(evaluation);
+  const labelBlack = evaluation === null ? "--" : formatEvaluationForBlack(evaluation);
 
   return (
-    <div
-      className={`relative shadow-inner group ${className}`.trim()}
-    >
+    <div className={`relative shadow-inner group ${className}`.trim()}>
       <div className="absolute top-1/2 -translate-y-1/2 z-20 border hidden group-hover:block border-gray-300 bg-white/95 px-1 py-0.5 text-center text-md font-mono font-bold text-gray-700 shadow-sm">
         {label}
       </div>
@@ -56,15 +47,11 @@ function EvaluationThermometer({
       </div>
       <div className="flex h-full flex-col">
         <div
-          className={
-            segments.topSide === "white" ? "bg-gray-50" : "bg-gray-900"
-          }
+          className={segments.topSide === "white" ? "bg-gray-50" : "bg-gray-900"}
           style={{ flexGrow: segments.topShare }}
         />
         <div
-          className={
-            segments.bottomSide === "white" ? "bg-gray-50" : "bg-gray-900"
-          }
+          className={segments.bottomSide === "white" ? "bg-gray-50" : "bg-gray-900"}
           style={{ flexGrow: segments.bottomShare }}
         />
       </div>
