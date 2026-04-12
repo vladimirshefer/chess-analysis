@@ -78,37 +78,12 @@ interface GameState {
   pgnInput: string;
 }
 
-interface AnalysisState {
-  byNodeId: Record<string, NodeAnalysis>;
-}
-
-interface ViewState {
-  statusText: string;
-  deepAnalysisKey: string | null;
-  boardOrientation: "white" | "black";
-}
-
-interface BoardPlayers {
-  top: PlayerCardInfo;
-  bottom: PlayerCardInfo;
-}
-
-interface PlayerCardInfo {
-  side: "white" | "black";
-  player: PlayerInfo | null;
-}
-
 interface ScheduledTask {
   nodeId: string;
   fen: string;
   label: string;
   request: EvaluationRequest;
   priority: EngineEvaluationPriorityValue;
-}
-
-interface MoveResult {
-  nodeId: string;
-  fen: string;
 }
 
 interface AnalyzerLocationState {
@@ -122,21 +97,22 @@ const ROOT_ANALYSIS_NODE_ID = "__root__";
 function ChessReplay() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [importedPgn, setImportedPgn] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     tree: {},
     currentNodeId: null,
     activeLineId: null,
     pgnInput: "",
   });
-  const [analysisState, setAnalysisState] = useState<AnalysisState>({
-    byNodeId: {},
-  });
-  const [viewState, setViewState] = useState<ViewState>({
-    statusText: "Interactive Mode",
-    deepAnalysisKey: null,
-    boardOrientation: "white",
-  });
+  const [analysisByNodeId, setAnalysisByNodeId] = useState<
+    Record<string, NodeAnalysis>
+  >({});
+  const [statusText, setStatusText] = useState("Interactive Mode");
+  const [deepAnalysisNodeId, setDeepAnalysisNodeId] = useState<string | null>(
+    null,
+  );
+  const [boardOrientation, setBoardOrientation] = useState<"white" | "black">(
+    "white",
+  );
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
 
   const engineRef = useRef<ChessEngine | null>(null);
@@ -173,21 +149,19 @@ function ChessReplay() {
   }
 
   useEffect(() => {
-      const locationState = location.state as AnalyzerLocationState | null;
-      const importedPgn = locationState?.importedPgn?.trim();
-      if (!importedPgn) return;
-      if (lastImportedRouteKeyRef.current === location.key) return;
+    const locationState = location.state as AnalyzerLocationState | null;
+    const importedPgn = locationState?.importedPgn?.trim();
+    if (!importedPgn) return;
+    if (lastImportedRouteKeyRef.current === location.key) return;
 
-      lastImportedRouteKeyRef.current = location.key;
-      importPgn(
-        importedPgn,
-        locationState?.importedGameInfo ?? null,
-        locationState?.initialBoardOrientation ?? "white",
-      );
-      navigate(location.pathname, { replace: true, state: null });
-    },
-    [location.key, location.pathname, location.state, navigate],
-  );
+    lastImportedRouteKeyRef.current = location.key;
+    importPgn(
+      importedPgn,
+      locationState?.importedGameInfo ?? null,
+      locationState?.initialBoardOrientation ?? "white",
+    );
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.key, location.pathname, location.state, navigate]);
 
   useEffect(function bindArrowNavigation() {
     function handleKeyDown(event: KeyboardEvent) {
@@ -217,7 +191,7 @@ function ChessReplay() {
       if (roots.length === 0) return "";
 
       let result = "";
-      roots.forEach(function appendRoot(root, index) {
+      roots.forEach((root, index) => {
         result +=
           (index === 0 ? "" : "(") +
           generatePgnString(
@@ -252,13 +226,13 @@ function ChessReplay() {
   );
 
   const currentAnalysis = gameState.currentNodeId
-    ? (analysisState.byNodeId[gameState.currentNodeId] ?? null)
+    ? (analysisByNodeId[gameState.currentNodeId] ?? null)
     : null;
   const moveMarksByNodeId = useMemo(
     function buildMoveMarks() {
-      return buildMoveMarksByNodeId(gameState.tree, analysisState.byNodeId);
+      return buildMoveMarksByNodeId(gameState.tree, analysisByNodeId);
     },
-    [analysisState.byNodeId, gameState.tree],
+    [analysisByNodeId, gameState.tree],
   );
   const currentMoveMark = gameState.currentNodeId
     ? (moveMarksByNodeId[gameState.currentNodeId] ?? null)
@@ -297,9 +271,9 @@ function ChessReplay() {
     [gameState.currentNodeId, gameState.tree],
   );
 
-  const boardPlayers = useMemo(
-    () => getDisplayedPlayersInfo(playersInfo, viewState.boardOrientation),
-    [playersInfo, viewState.boardOrientation],
+  const displayedPlayersInfo = getDisplayedPlayersInfo(
+    playersInfo,
+    boardOrientation,
   );
 
   useEffect(
@@ -367,16 +341,15 @@ function ChessReplay() {
       let cancelled = false;
       const tasks = buildAnalysisTasks(gameState, analysisEngine);
       if (tasks.length === 0) {
-        setViewState(function setComplete(previous) {
-          if (previous.statusText === "Analysis Complete") return previous;
-          return { ...previous, statusText: "Analysis Complete" };
+        setStatusText(function setComplete(previous) {
+          return previous === "Analysis Complete"
+            ? previous
+            : "Analysis Complete";
         });
         return;
       }
 
-      setViewState(function setStatus(previous) {
-        return { ...previous, statusText: "Analyzing..." };
-      });
+      setStatusText("Analyzing...");
 
       void Promise.allSettled(
         tasks.map(function runTask(task) {
@@ -406,12 +379,7 @@ function ChessReplay() {
         const hasFailures = results.some(function hasFailure(result) {
           return result.status === "rejected";
         });
-        setViewState(function update(previous) {
-          return {
-            ...previous,
-            statusText: hasFailures ? "Engine Error" : "Analysis Complete",
-          };
-        });
+        setStatusText(hasFailures ? "Engine Error" : "Analysis Complete");
       });
 
       return function cleanup() {
@@ -422,8 +390,8 @@ function ChessReplay() {
   );
 
   function syncNodeAnalysis(nodeId: string, nextAnalysis: NodeAnalysis) {
-    setAnalysisState(function updateAnalysis(previous) {
-      const currentAnalysisEntry = previous.byNodeId[nodeId];
+    setAnalysisByNodeId(function updateAnalysis(previous) {
+      const currentAnalysisEntry = previous[nodeId];
       const preferredAnalysis = pickPreferredAnalysis(
         currentAnalysisEntry,
         nextAnalysis,
@@ -432,10 +400,7 @@ function ChessReplay() {
         return previous;
       return {
         ...previous,
-        byNodeId: {
-          ...previous.byNodeId,
-          [nodeId]: preferredAnalysis,
-        },
+        [nodeId]: preferredAnalysis,
       };
     });
   }
@@ -447,13 +412,8 @@ function ChessReplay() {
     const target = getSelectedAnalysisTarget(gameState);
     if (!target) return;
 
-    setViewState(function update(previous) {
-      return {
-        ...previous,
-        deepAnalysisKey: target.nodeId,
-        statusText: `Analyzing ${target.label} (d22)...`,
-      };
-    });
+    setDeepAnalysisNodeId(target.nodeId);
+    setStatusText(`Analyzing ${target.label} (d22)...`);
 
     void engine
       .evaluate(
@@ -474,21 +434,16 @@ function ChessReplay() {
         );
       })
       .catch(function handleDeepError() {
-        setViewState(function update(previous) {
-          return { ...previous, statusText: "Engine Error" };
-        });
+        setStatusText("Engine Error");
       })
       .finally(function clearDeepState() {
-        setViewState(function update(previous) {
-          if (previous.deepAnalysisKey !== target.nodeId) return previous;
-          return {
-            ...previous,
-            deepAnalysisKey: null,
-            statusText:
-              previous.statusText === `Analyzing ${target.label} (d22)...`
-                ? "Analysis Complete"
-                : previous.statusText,
-          };
+        setDeepAnalysisNodeId(function clearCurrent(previous) {
+          return previous === target.nodeId ? null : previous;
+        });
+        setStatusText(function clearStatus(previous) {
+          return previous === `Analyzing ${target.label} (d22)...`
+            ? "Analysis Complete"
+            : previous;
         });
       });
   }
@@ -497,7 +452,7 @@ function ChessReplay() {
     from: string;
     to: string;
     promotion?: string;
-  }): MoveResult | null {
+  }): { nodeId: string; fen: string } | null {
     const currentFen = getCurrentFen(gameState.currentNodeId, gameState.tree);
     const tempGame = new Chess(currentFen === "start" ? undefined : currentFen);
 
@@ -594,7 +549,6 @@ function ChessReplay() {
     importedGameInfo: ImportedGameInfo | null = null,
     initialBoardOrientation: "white" | "black" = "white",
   ) {
-    setImportedPgn(pgn);
     const tempGame = new Chess();
 
     try {
@@ -639,19 +593,12 @@ function ChessReplay() {
         pgnInput: pgn,
       });
       setPlayersInfo(mergedPlayersInfo);
-      setAnalysisState({ byNodeId: {} });
-      setViewState(function update(previous) {
-        return {
-          ...previous,
-          statusText: "PGN Imported",
-          deepAnalysisKey: null,
-          boardOrientation: initialBoardOrientation,
-        };
-      });
+      setAnalysisByNodeId({});
+      setStatusText("PGN Imported");
+      setDeepAnalysisNodeId(null);
+      setBoardOrientation(initialBoardOrientation);
     } catch {
-      setViewState(function update(previous) {
-        return { ...previous, statusText: "Invalid PGN" };
-      });
+      setStatusText("Invalid PGN");
     }
   }
 
@@ -669,34 +616,22 @@ function ChessReplay() {
       pgnInput: "",
     });
     setPlayersInfo(null);
-    setAnalysisState({ byNodeId: {} });
-    setViewState({
-      statusText: "Interactive Mode",
-      deepAnalysisKey: null,
-      boardOrientation: "white",
-    });
-  }
-
-  function toggleBoardOrientation() {
-    setViewState(function update(previous) {
-      return {
-        ...previous,
-        boardOrientation:
-          previous.boardOrientation === "white" ? "black" : "white",
-      };
-    });
+    setAnalysisByNodeId({});
+    setStatusText("Interactive Mode");
+    setDeepAnalysisNodeId(null);
+    setBoardOrientation("white");
   }
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
       <div className="flex-1 flex flex-col items-center gap-2">
         <div className="w-full max-w-120">
-          <PlayerCard info={boardPlayers.top} />
+          <PlayerCard info={displayedPlayersInfo.top} />
         </div>
         <div className="w-full max-w-130 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
           <EvaluationThermometer
             evaluation={currentAnalysis?.evaluation ?? null}
-            orientation={viewState.boardOrientation}
+            orientation={boardOrientation}
             className="w-6 min-h-120"
           />
           <div className="flex-1 shadow-2xl overflow-hidden ">
@@ -708,14 +643,14 @@ function ChessReplay() {
                   : "start"
               }
               onPieceDrop={onDrop}
-              boardOrientation={viewState.boardOrientation}
+              boardOrientation={boardOrientation}
               animationDuration={200}
               customSquareStyles={boardMarkStyles}
             />
           </div>
         </div>
         <div className="w-full max-w-120">
-          <PlayerCard info={boardPlayers.bottom} />
+          <PlayerCard info={displayedPlayersInfo.bottom} />
         </div>
 
         <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
@@ -739,16 +674,20 @@ function ChessReplay() {
             <RenderIcon iconType={FaChevronRight} className="text-sm" />
           </button>
           <button
-            onClick={toggleBoardOrientation}
+            onClick={function () {
+              setBoardOrientation((previous) =>
+                previous === "white" ? "black" : "white",
+              );
+            }}
             aria-label={
-              viewState.boardOrientation === "white"
+              boardOrientation === "white"
                 ? "View board as black"
                 : "View board as white"
             }
             title={
-              viewState.boardOrientation === "white"
-                ? "View as Black"
-                : "View as White"
+              boardOrientation === "white"
+                ? "View board as Black"
+                : "View board as White"
             }
             className="inline-flex items-center justify-center p-4 bg-gray-800 hover:bg-black text-white rounded font-bold"
           >
@@ -778,7 +717,7 @@ function ChessReplay() {
               </div>
               <button
                 onClick={runDeepAnalysis}
-                disabled={viewState.deepAnalysisKey !== null}
+                disabled={deepAnalysisNodeId !== null}
                 className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <RenderIcon
@@ -834,9 +773,7 @@ function ChessReplay() {
               );
             })}
           </div>
-          <div className="mt-3 text-[11px] text-gray-400">
-            {viewState.statusText}
-          </div>
+          <div className="mt-3 text-[11px] text-gray-400">{statusText}</div>
         </div>
 
         <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
@@ -865,7 +802,7 @@ function ChessReplay() {
                 );
               const isWhite = index % 2 === 0;
               const isFocus = node.id === gameState.currentNodeId;
-              const nodeAnalysis = analysisState.byNodeId[node.id];
+              const nodeAnalysis = analysisByNodeId[node.id];
               const moveMark = moveMarksByNodeId[node.id];
 
               return (
@@ -991,7 +928,11 @@ function ChessReplay() {
   );
 }
 
-function PlayerCard({ info }: { info: PlayerCardInfo }) {
+function PlayerCard({
+  info,
+}: {
+  info: { side: "white" | "black"; player: PlayerInfo | null };
+}) {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-1 flex items-center justify-between gap-4">
       <div className={"flex items-center gap-2"}>
@@ -999,7 +940,9 @@ function PlayerCard({ info }: { info: PlayerCardInfo }) {
           {info.player?.name ?? info?.side ?? "Unknown"}
         </span>
         {!!info.player?.rating && (
-          <span className="text-sm font-mono font-bold text-gray-500">({info.player.rating})</span>
+          <span className="text-sm font-mono font-bold text-gray-500">
+            ({info.player.rating})
+          </span>
         )}
       </div>
     </div>
@@ -1063,7 +1006,10 @@ function getCurrentFen(
 function getDisplayedPlayersInfo(
   playersInfo: GamePlayersInfo | null,
   orientation: "white" | "black",
-): BoardPlayers {
+): {
+  top: { side: "white" | "black"; player: PlayerInfo | null };
+  bottom: { side: "white" | "black"; player: PlayerInfo | null };
+} {
   if (orientation === "black") {
     return {
       top: { side: "white", player: playersInfo?.white ?? null },
@@ -1130,11 +1076,7 @@ function buildAnalysisTasks(
     priority: EngineEvaluationPriorityValue,
   ): void {
     for (const nodeId of nodeIds) {
-      const task = toTask(
-        nodeId,
-        { minDepth, linesAmount },
-        priority,
-      );
+      const task = toTask(nodeId, { minDepth, linesAmount }, priority);
       if (!task) continue;
       if (getTerminalEvaluation(task.fen)) continue;
 
@@ -1185,12 +1127,22 @@ function buildAnalysisTasks(
   }
 
   if (currentNodeId)
-    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriority.IMMEDIATE);
+    addTasksForNodes(
+      [currentNodeId],
+      12,
+      3,
+      EngineEvaluationPriority.IMMEDIATE,
+    );
 
   const nextDepth12NodeIds = hasMoves
     ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds]
     : otherNodeIds;
-  addTasksForNodes(nextDepth12NodeIds, 12, 2, EngineEvaluationPriority.BACKGROUND);
+  addTasksForNodes(
+    nextDepth12NodeIds,
+    12,
+    2,
+    EngineEvaluationPriority.BACKGROUND,
+  );
 
   if (currentNodeId)
     addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriority.NEXT);
@@ -1198,7 +1150,12 @@ function buildAnalysisTasks(
   const backgroundNodeIds = hasMoves
     ? [ROOT_ANALYSIS_NODE_ID, ...otherNodeIds]
     : otherNodeIds;
-  addTasksForNodes(backgroundNodeIds, 16, 1, EngineEvaluationPriority.BACKGROUND);
+  addTasksForNodes(
+    backgroundNodeIds,
+    16,
+    1,
+    EngineEvaluationPriority.BACKGROUND,
+  );
 
   return tasks;
 }
@@ -1475,10 +1432,6 @@ function getMoveMarkBackground(mark: MoveMark): string {
     default:
       return "rgba(107, 114, 128, 0.18)";
   }
-}
-
-function capitalizeSide(side: "white" | "black"): string {
-  return side.charAt(0).toUpperCase() + side.slice(1);
 }
 
 function areNodeAnalysesEqual(
