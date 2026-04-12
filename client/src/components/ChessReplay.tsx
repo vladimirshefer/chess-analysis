@@ -122,6 +122,7 @@ const ROOT_ANALYSIS_NODE_ID = "__root__";
 function ChessReplay() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [importedPgn, setImportedPgn] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState>({
     tree: {},
     currentNodeId: null,
@@ -171,8 +172,7 @@ function ChessReplay() {
     });
   }
 
-  useEffect(
-    function importPgnFromRouteState() {
+  useEffect(() => {
       const locationState = location.state as AnalyzerLocationState | null;
       const importedPgn = locationState?.importedPgn?.trim();
       if (!importedPgn) return;
@@ -296,10 +296,9 @@ function ChessReplay() {
     },
     [gameState.currentNodeId, gameState.tree],
   );
+
   const boardPlayers = useMemo(
-    function buildBoardPlayers() {
-      return getDisplayedPlayersInfo(playersInfo, viewState.boardOrientation);
-    },
+    () => getDisplayedPlayersInfo(playersInfo, viewState.boardOrientation),
     [playersInfo, viewState.boardOrientation],
   );
 
@@ -595,6 +594,7 @@ function ChessReplay() {
     importedGameInfo: ImportedGameInfo | null = null,
     initialBoardOrientation: "white" | "black" = "white",
   ) {
+    setImportedPgn(pgn);
     const tempGame = new Chess();
 
     try {
@@ -994,16 +994,13 @@ function ChessReplay() {
 
 function PlayerCard({ info }: { info: PlayerCardInfo }) {
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-1 flex items-center justify-between gap-4">
       <div>
-        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-400">
-          {info.side}
-        </div>
         <div className="text-sm font-bold text-gray-900">
           {info.player?.name ?? capitalizeSide(info.side)}
         </div>
       </div>
-      {typeof info.player?.rating === "number" && (
+      {!!info.player?.rating && (
         <div className="text-sm font-mono font-bold text-gray-500">
           {info.player.rating}
         </div>
