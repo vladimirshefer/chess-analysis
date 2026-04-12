@@ -81,7 +81,6 @@ interface NodeAnalysis {
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
-  source: "engine-final" | "engine-live" | "seeded-from-parent";
 }
 
 interface ScheduledTask {
@@ -973,7 +972,6 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
-    source: isFinal ? "engine-final" : "engine-live",
   };
 }
 
@@ -998,7 +996,6 @@ function buildSeededNodeAnalysis(
     depth: line.depth,
     lines: childLines,
     isFinal: false,
-    source: "seeded-from-parent",
   };
 }
 
@@ -1012,7 +1009,6 @@ function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
     depth: 0,
     lines: [],
     isFinal: true,
-    source: "engine-final",
   };
 }
 
@@ -1153,7 +1149,6 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
     areEvaluationsEqual(left.evaluation, right.evaluation) &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
-    left.source === right.source &&
     areDisplayLinesEqual(left.lines, right.lines)
   );
 }
