@@ -714,6 +714,9 @@ function ChessReplay() {
             />
           </div>
         </div>
+        <div className="w-full max-w-120">
+          <PlayerCard info={boardPlayers.bottom} />
+        </div>
 
         <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
           <button
@@ -751,10 +754,6 @@ function ChessReplay() {
           >
             <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
-        </div>
-
-        <div className="w-full max-w-120 mt-4">
-          <PlayerCard info={boardPlayers.bottom} />
         </div>
       </div>
 
@@ -995,16 +994,14 @@ function ChessReplay() {
 function PlayerCard({ info }: { info: PlayerCardInfo }) {
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-1 flex items-center justify-between gap-4">
-      <div>
-        <div className="text-sm font-bold text-gray-900">
-          {info.player?.name ?? capitalizeSide(info.side)}
-        </div>
+      <div className={"flex items-center gap-2"}>
+        <span className="text-sm font-bold text-gray-900">
+          {info.player?.name ?? info?.side ?? "Unknown"}
+        </span>
+        {!!info.player?.rating && (
+          <span className="text-sm font-mono font-bold text-gray-500">({info.player.rating})</span>
+        )}
       </div>
-      {!!info.player?.rating && (
-        <div className="text-sm font-mono font-bold text-gray-500">
-          {info.player.rating}
-        </div>
-      )}
     </div>
   );
 }
