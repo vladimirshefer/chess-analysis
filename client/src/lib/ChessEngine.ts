@@ -154,8 +154,16 @@ class StockfishQueue {
         return;
       }
 
-      const job = createJob(fen, priority, options, subscriber);
-      this.pendingJobs.push(job);
+      this.pendingJobs.push({
+        fen,
+        minDepth: options.minDepth,
+        linesAmount: options.linesAmount,
+        priority,
+        subscribers: [subscriber],
+        collected: new Map<number, ChessEngineLine>(),
+        lastUpdate: null,
+        shouldRestart: false,
+      });
       this.reorderPendingJobs();
       this.processQueue();
     });
@@ -338,24 +346,6 @@ class StockfishChessEngine implements ChessEngine {
   }
 }
 
-function createJob(
-  fen: string,
-  priority: JobPriority,
-  options: EvaluationRequest,
-  subscriber: JobSubscriber,
-): EngineJob {
-  return {
-    fen,
-    minDepth: options.minDepth,
-    linesAmount: options.linesAmount,
-    priority,
-    subscribers: [subscriber],
-    collected: new Map<number, ChessEngineLine>(),
-    lastUpdate: null,
-    shouldRestart: false,
-  };
-}
-
 function buildUpdate(
   job: EngineJob,
   isFinal: boolean,
@@ -476,7 +466,9 @@ function canReuseExistingJob(
   job: EngineJob,
   options: EvaluationRequest,
 ): boolean {
-  return job.minDepth >= options.minDepth && job.linesAmount >= options.linesAmount;
+  return (
+    job.minDepth >= options.minDepth && job.linesAmount >= options.linesAmount
+  );
 }
 
 function getPriorityRank(priority: JobPriority): number {
