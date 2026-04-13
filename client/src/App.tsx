@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, Route, Routes } from "react-router-dom";
-import ChessReplay from "./components/ChessReplay";
 import { AboutPage } from "./pages/AboutPage";
+import AnalyzerPage from "./pages/AnalyzerPage";
 import ChessComImportPage from "./pages/ChessComImportPage";
 
 function AppShell({ children }: { children: ReactNode }) {
@@ -50,7 +50,7 @@ function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<ChessReplay />} />
+        <Route path="/" element={<AnalyzerPage />} />
         <Route path="/import/chess-com" element={<ChessComImportPage />} />
         <Route path="/about" element={<AboutPage />} />
       </Routes>

@@ -12,6 +12,7 @@ import {
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Chessboard } from "react-chessboard";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
 import {
   type ChessEngine,
   type ChessEngineLine,
@@ -100,6 +101,7 @@ interface AnalyzerLocationState {
 }
 
 const ROOT_ANALYSIS_NODE_ID = "__root__";
+const TRACKED_PLAN_PIECES_PER_SIDE = 2;
 
 function ChessReplay() {
   const location = useLocation();
@@ -112,6 +114,7 @@ function ChessReplay() {
   const [statusText, setStatusText] = useState("Interactive Mode");
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
+  const [showPlans, setShowPlans] = useState(false);
 
   const engineRef = useRef<ChessEngine | null>(null);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
@@ -230,6 +233,22 @@ function ChessReplay() {
       },
     };
   }, [currentMoveMark, currentMoveSquares]);
+  const currentFen = useMemo(
+    () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
+    [currentNodeId, tree],
+  );
+  const planArrows = useMemo(
+    function buildPlanArrows() {
+      if (!showPlans) return [];
+      if (!currentAnalysis || currentAnalysis.lines.length === 0) return [];
+
+      const topLine = currentAnalysis.lines.find((line) => line.lineRank === 1);
+      if (!topLine || topLine.engineLineUci.length === 0) return [];
+
+      return AnalyzerPageEnginePlan.toPlanArrows(currentFen, topLine.engineLineUci, TRACKED_PLAN_PIECES_PER_SIDE);
+    },
+    [currentAnalysis, currentFen, showPlans],
+  );
   const canGoForward = useMemo(
     function checkCanGoForward() {
       return getNextNodeId(currentNodeId, tree) !== null;
@@ -349,11 +368,6 @@ function ChessReplay() {
         console.error("Engine Error", e);
       });
   }
-
-  const currentFen = useMemo(
-    () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
-    [currentNodeId, tree],
-  );
 
   function makeMove(move: { from: string; to: string; promotion?: string }): { nodeId: string; fen: string } | null {
     const tempGame = new Chess(currentFen);
@@ -520,6 +534,7 @@ function ChessReplay() {
               onPieceDrop={onDrop}
               boardOrientation={boardOrientation}
               animationDuration={200}
+              customArrows={planArrows}
               customSquareStyles={boardMarkStyles}
             />
           </div>
@@ -568,6 +583,17 @@ function ChessReplay() {
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={function togglePlans() {
+                  setShowPlans(function toggle(previous) {
+                    return !previous;
+                  });
+                }}
+                title={"Show engine plan arrows"}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded border ${showPlans ? "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100" : "text-gray-600 border-gray-300 bg-white hover:bg-gray-100"}`}
+              >
+                Show plans
+              </button>
               <span className="text-xs uppercase text-gray-400 font-bold">Eval</span>
               <div className="text-sm font-mono text-indigo-500">
                 {currentAnalysis ? formatEvaluation(currentAnalysis.evaluation) : "--"}
