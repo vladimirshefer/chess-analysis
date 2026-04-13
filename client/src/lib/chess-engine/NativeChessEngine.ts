@@ -82,10 +82,7 @@ export class NativeChessEngine implements ChessEngine {
     }
   }
 
-  private handleInfoLine(
-    activeEvaluation: RunningEvaluation,
-    infoLine: UniversalChessInterface.InfoLineDto,
-  ): void {
+  private handleInfoLine(activeEvaluation: RunningEvaluation, infoLine: UniversalChessInterface.InfoLineDto): void {
     const line = toChessEngineLine(activeEvaluation.fen, infoLine);
     if (!line) return;
 
@@ -122,10 +119,7 @@ function createStockfishWorker(): Worker {
   return new Worker("/stockfish/stockfish.js");
 }
 
-function toChessEngineLine(
-  fen: string,
-  infoLine: UniversalChessInterface.InfoLineDto,
-): ChessEngineLine | null {
+function toChessEngineLine(fen: string, infoLine: UniversalChessInterface.InfoLineDto): ChessEngineLine | null {
   const depth = infoLine.depth ?? 0;
   if (depth <= 0) return null;
 

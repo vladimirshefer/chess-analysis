@@ -62,7 +62,11 @@ describe("QueuedChessEngine", function suite() {
       { minDepth: 12, linesAmount: 1 },
       EngineEvaluationPriorities.BACKGROUND,
     );
-    const secondPromise = engine.evaluate("fen-b", { minDepth: 12, linesAmount: 1 }, EngineEvaluationPriorities.IMMEDIATE);
+    const secondPromise = engine.evaluate(
+      "fen-b",
+      { minDepth: 12, linesAmount: 1 },
+      EngineEvaluationPriorities.IMMEDIATE,
+    );
     const thirdPromise = engine.evaluate("fen-c", { minDepth: 12, linesAmount: 1 }, EngineEvaluationPriorities.NEXT);
 
     expect(delegate.calls).toHaveLength(1);
