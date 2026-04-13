@@ -33,6 +33,7 @@ import {
   type EngineEvaluation,
   formatEvaluation,
   getTerminalEvaluation,
+  START,
   toComparableEvaluationScore,
 } from "../lib/evaluation";
 import { classifyMoveMark, MoveMark, type MoveMarkResult, toMoveMarkEvaluation } from "../lib/moveMarks";
@@ -355,7 +356,7 @@ function ChessReplay() {
 
   function makeMove(move: { from: string; to: string; promotion?: string }): { nodeId: string; fen: string } | null {
     const currentFen = getCurrentFen(currentNodeId, tree);
-    const tempGame = new Chess(currentFen === "start" ? undefined : currentFen);
+    const tempGame = new Chess(currentFen === START ? undefined : currentFen);
 
     try {
       const result = tempGame.move(move);
@@ -516,7 +517,7 @@ function ChessReplay() {
           <div className="flex-1 shadow-2xl overflow-hidden ">
             <Chessboard
               id="AnalysisBoard"
-              position={currentNodeId ? tree[currentNodeId].fen : "start"}
+              position={currentNodeId ? tree[currentNodeId].fen : START}
               onPieceDrop={onDrop}
               boardOrientation={boardOrientation}
               animationDuration={200}
@@ -786,7 +787,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 function getCurrentFen(nodeId: string | null, tree: Record<string, MoveNode>): string {
-  return nodeId ? (tree[nodeId]?.fen ?? "start") : "start";
+  return nodeId ? (tree[nodeId]?.fen ?? START) : START;
 }
 
 function getDisplayedPlayersInfo(
@@ -856,7 +857,7 @@ function buildAnalysisTasks(
     for (const nodeId of nodeIds) {
       if (!tree[nodeId]) continue;
       const fen = tree[nodeId].fen;
-      const label = tree[nodeId].san || "start";
+      const label = tree[nodeId].san || START;
       const request = { minDepth, linesAmount };
 
       if (getTerminalEvaluation(fen)) continue;
@@ -899,14 +900,14 @@ function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId
   return {
     nodeId: node.id,
     fen: node.fen,
-    label: node.san || "start",
+    label: node.san || START,
     request: { minDepth: 22, linesAmount: 3 },
     priority: EngineEvaluationPriorities.IMMEDIATE,
   };
 }
 
 function uciToSanLine(uciString: string, baseFen: string): string[] {
-  const tempGame = new Chess(baseFen === "start" ? undefined : baseFen);
+  const tempGame = new Chess(baseFen === START ? undefined : baseFen);
   const uciMoves = uciString.split(" ");
   const sanMoves: string[] = [];
 
@@ -1031,7 +1032,7 @@ function buildMoveMarksByNodeId(
   Object.values(tree).forEach(function classifyNode(node) {
     const parentAnalysis = node.parentId ? analysesByNodeId[node.parentId] : analysesByNodeId[ROOT_ANALYSIS_NODE_ID];
     const nodeAnalysis = analysesByNodeId[node.id];
-    const parentFen = node.parentId ? tree[node.parentId]?.fen : "start";
+    const parentFen = node.parentId ? tree[node.parentId]?.fen : START;
     if (!parentFen) return;
     if (!parentAnalysis?.isFinal || !nodeAnalysis?.isFinal) return;
     if (parentAnalysis.lines.length === 0) return;
@@ -1055,7 +1056,7 @@ function buildMoveMarksByNodeId(
 }
 
 function getMoveSquares(baseFen: string, san: string): { from: string; to: string } | null {
-  const tempGame = new Chess(baseFen === "start" ? undefined : baseFen);
+  const tempGame = new Chess(baseFen === START ? undefined : baseFen);
 
   try {
     const move = tempGame.move(san);

@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { toComparableEvaluationScore, type EngineEvaluation } from "./evaluation";
+import { toComparableEvaluationScore, type EngineEvaluation, START } from "./evaluation";
 
 interface MoveMarkLine {
   uci: string;
@@ -64,7 +64,7 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
 }
 
 function getSideToMove(fen: string): "w" | "b" {
-  if (fen === "start") return "w";
+  if (fen === START) return "w";
   return fen.split(" ")[1] === "b" ? "b" : "w";
 }
 
@@ -97,7 +97,7 @@ function lineMatchesSan(playedMoveSan: string, parentFen: string, line: MoveMark
 
 function getFirstMoveSan(parentFen: string, line: MoveMarkLine): string | null {
   try {
-    const chess = new Chess(parentFen === "start" ? undefined : parentFen);
+    const chess = new Chess(parentFen === START ? undefined : parentFen);
     const firstMove = line.uci;
     if (!firstMove) return null;
 

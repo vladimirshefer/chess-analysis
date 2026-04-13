@@ -50,8 +50,11 @@ export function areEvaluationsEqual(left: EngineEvaluation, right: EngineEvaluat
   }
 }
 
+export const START = "start";
+export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 export function parseEngineEvaluation(fen: string, cpScore?: number, mateScore?: number): EngineEvaluation {
-  const sideToMove = fen === "start" ? "w" : fen.split(" ")[1];
+  const sideToMove = fen === START ? "w" : fen.split(" ")[1];
   const perspective = sideToMove === "b" ? -1 : 1;
 
   if (typeof cpScore === "number") {
@@ -72,11 +75,11 @@ export function parseEngineEvaluation(fen: string, cpScore?: number, mateScore?:
 }
 
 export function getTerminalEvaluation(fen: string): EngineEvaluation | null {
-  const chess = new Chess(fen === "start" ? undefined : fen);
+  const chess = new Chess(fen === START ? undefined : fen);
   if (!chess.isGameOver()) return null;
 
   if (chess.isCheckmate()) {
-    const sideToMove = fen === "start" ? "w" : fen.split(" ")[1];
+    const sideToMove = fen === START ? "w" : fen.split(" ")[1];
     return {
       kind: "result",
       result: sideToMove === "w" ? GameResult.BLACK_WIN : GameResult.WHITE_WIN,
