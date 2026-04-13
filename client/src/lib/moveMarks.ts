@@ -64,7 +64,6 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
 }
 
 function getSideToMove(fen: string): "w" | "b" {
-  if (fen === START) return "w";
   return fen.split(" ")[1] === "b" ? "b" : "w";
 }
 

@@ -34,6 +34,7 @@ import {
   formatEvaluation,
   getTerminalEvaluation,
   START,
+  START_FEN,
   toComparableEvaluationScore,
 } from "../lib/evaluation";
 import { classifyMoveMark, MoveMark, type MoveMarkResult, toMoveMarkEvaluation } from "../lib/moveMarks";
@@ -246,12 +247,7 @@ function ChessReplay() {
   useEffect(
     function keepActiveLineVisible() {
       if (!currentNodeId) return;
-      if (
-        visiblePath.some(function hasCurrent(node) {
-          return node.id === currentNodeId;
-        })
-      )
-        return;
+      if (visiblePath.some((node) => node.id === currentNodeId)) return;
       setActiveLineId(getDeepestLeaf(currentNodeId, tree));
     },
     [currentNodeId, tree, visiblePath],
@@ -354,9 +350,13 @@ function ChessReplay() {
       });
   }
 
+  const currentFen = useMemo(
+    () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
+    [currentNodeId, tree],
+  );
+
   function makeMove(move: { from: string; to: string; promotion?: string }): { nodeId: string; fen: string } | null {
-    const currentFen = getCurrentFen(currentNodeId, tree);
-    const tempGame = new Chess(currentFen === START ? undefined : currentFen);
+    const tempGame = new Chess(currentFen);
 
     try {
       const result = tempGame.move(move);
@@ -473,7 +473,6 @@ function ChessReplay() {
       });
 
       setTree(nextTree);
-      setCurrentNodeId(lastNodeId);
       setActiveLineId(lastNodeId);
       setPgnInput(pgn);
       setPlayersInfo(mergedPlayersInfo);
@@ -517,7 +516,7 @@ function ChessReplay() {
           <div className="flex-1 shadow-2xl overflow-hidden ">
             <Chessboard
               id="AnalysisBoard"
-              position={currentNodeId ? tree[currentNodeId].fen : START}
+              position={currentNodeId ? tree[currentNodeId].fen : START_FEN}
               onPieceDrop={onDrop}
               boardOrientation={boardOrientation}
               animationDuration={200}
@@ -786,10 +785,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('[contenteditable="true"]'));
 }
 
-function getCurrentFen(nodeId: string | null, tree: Record<string, MoveNode>): string {
-  return nodeId ? (tree[nodeId]?.fen ?? START) : START;
-}
-
 function getDisplayedPlayersInfo(
   playersInfo: GamePlayersInfo | null,
   orientation: "white" | "black",
@@ -857,7 +852,7 @@ function buildAnalysisTasks(
     for (const nodeId of nodeIds) {
       if (!tree[nodeId]) continue;
       const fen = tree[nodeId].fen;
-      const label = tree[nodeId].san || START;
+      const label = tree[nodeId].san || "___";
       const request = { minDepth, linesAmount };
 
       if (getTerminalEvaluation(fen)) continue;
@@ -900,14 +895,14 @@ function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId
   return {
     nodeId: node.id,
     fen: node.fen,
-    label: node.san || START,
+    label: node.san || "___",
     request: { minDepth: 22, linesAmount: 3 },
     priority: EngineEvaluationPriorities.IMMEDIATE,
   };
 }
 
 function uciToSanLine(uciString: string, baseFen: string): string[] {
-  const tempGame = new Chess(baseFen === START ? undefined : baseFen);
+  const tempGame = new Chess(baseFen);
   const uciMoves = uciString.split(" ");
   const sanMoves: string[] = [];
 
@@ -944,21 +939,13 @@ function toDisplayLine(baseFen: string, line: ChessEngineLine): DisplayEngineLin
 }
 
 function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngineLine[] {
-  return lines
-    .map(function mapLine(line) {
-      return toDisplayLine(baseFen, line);
-    })
-    .filter(function filterLine(line): line is DisplayEngineLine {
-      return line !== null;
-    });
+  return lines.map((line) => toDisplayLine(baseFen, line)).filter((line) => line !== null);
 }
 
 function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal: boolean): NodeAnalysis {
-  const terminalEvaluation = getTerminalEvaluation(evaluation.fen);
-
   return {
     fen: evaluation.fen,
-    evaluation: terminalEvaluation ?? evaluation.evaluation,
+    evaluation: evaluation.evaluation,
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
@@ -1032,7 +1019,7 @@ function buildMoveMarksByNodeId(
   Object.values(tree).forEach(function classifyNode(node) {
     const parentAnalysis = node.parentId ? analysesByNodeId[node.parentId] : analysesByNodeId[ROOT_ANALYSIS_NODE_ID];
     const nodeAnalysis = analysesByNodeId[node.id];
-    const parentFen = node.parentId ? tree[node.parentId]?.fen : START;
+    const parentFen = node.parentId ? tree[node.parentId]?.fen : START_FEN;
     if (!parentFen) return;
     if (!parentAnalysis?.isFinal || !nodeAnalysis?.isFinal) return;
     if (parentAnalysis.lines.length === 0) return;

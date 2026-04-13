@@ -1,4 +1,5 @@
 import { Chess } from "chess.js";
+import { ForsythEdwardsNotation } from "./ForsythEdwardsNotation.ts";
 
 export const GameResult = {
   WHITE_WIN: "1-0",
@@ -54,7 +55,7 @@ export const START = "start";
 export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 export function parseEngineEvaluation(fen: string, cpScore?: number, mateScore?: number): EngineEvaluation {
-  const sideToMove = fen === START ? "w" : fen.split(" ")[1];
+  const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
   const perspective = sideToMove === "b" ? -1 : 1;
 
   if (typeof cpScore === "number") {
@@ -75,11 +76,11 @@ export function parseEngineEvaluation(fen: string, cpScore?: number, mateScore?:
 }
 
 export function getTerminalEvaluation(fen: string): EngineEvaluation | null {
-  const chess = new Chess(fen === START ? undefined : fen);
+  const chess = new Chess(fen);
   if (!chess.isGameOver()) return null;
 
   if (chess.isCheckmate()) {
-    const sideToMove = fen === START ? "w" : fen.split(" ")[1];
+    const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
     return {
       kind: "result",
       result: sideToMove === "w" ? GameResult.BLACK_WIN : GameResult.WHITE_WIN,
