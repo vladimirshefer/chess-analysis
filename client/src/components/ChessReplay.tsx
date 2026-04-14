@@ -102,6 +102,11 @@ interface AnalyzerLocationState {
 
 const ROOT_ANALYSIS_NODE_ID = "__root__";
 const TRACKED_PLAN_PIECES_PER_SIDE = 2;
+const MAX_PLAN_ARROWS = 5;
+const PLAN_CAPTURE_SQUARE_STYLE = {
+  backgroundColor: "rgba(220, 38, 38, 0.45)",
+  boxShadow: "inset 0 0 0 3px rgba(185, 28, 28, 0.85)",
+};
 
 function ChessReplay() {
   const location = useLocation();
@@ -237,17 +242,47 @@ function ChessReplay() {
     () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
     [currentNodeId, tree],
   );
-  const planArrows = useMemo(
-    function buildPlanArrows() {
-      if (!showPlans) return [];
-      if (!currentAnalysis || currentAnalysis.lines.length === 0) return [];
+  const planView = useMemo(
+    function buildPlanView() {
+      if (!showPlans)
+        return AnalyzerPageEnginePlan.toPlanView(currentFen, [], TRACKED_PLAN_PIECES_PER_SIDE, MAX_PLAN_ARROWS);
+      if (!currentAnalysis || currentAnalysis.lines.length === 0) {
+        return AnalyzerPageEnginePlan.toPlanView(currentFen, [], TRACKED_PLAN_PIECES_PER_SIDE, MAX_PLAN_ARROWS);
+      }
 
-      const topLine = currentAnalysis.lines.find((line) => line.lineRank === 1);
-      if (!topLine || topLine.engineLineUci.length === 0) return [];
+      const topLine = currentAnalysis.lines.find(function findTopLine(line) {
+        return line.lineRank === 1;
+      });
+      if (!topLine || topLine.engineLineUci.length === 0) {
+        return AnalyzerPageEnginePlan.toPlanView(currentFen, [], TRACKED_PLAN_PIECES_PER_SIDE, MAX_PLAN_ARROWS);
+      }
 
-      return AnalyzerPageEnginePlan.toPlanArrows(currentFen, topLine.engineLineUci, TRACKED_PLAN_PIECES_PER_SIDE);
+      return AnalyzerPageEnginePlan.toPlanView(
+        currentFen,
+        topLine.engineLineUci,
+        TRACKED_PLAN_PIECES_PER_SIDE,
+        MAX_PLAN_ARROWS,
+      );
     },
     [currentAnalysis, currentFen, showPlans],
+  );
+  const boardSquareStyles = useMemo(
+    function buildBoardSquareStyles() {
+      if (planView.captureSquares.length === 0) return boardMarkStyles;
+
+      const planCaptureStyles = planView.captureSquares.reduce<
+        Record<string, { backgroundColor: string; boxShadow: string }>
+      >(function collectCaptureStyles(result, square) {
+        result[square] = PLAN_CAPTURE_SQUARE_STYLE;
+        return result;
+      }, {});
+
+      return {
+        ...boardMarkStyles,
+        ...planCaptureStyles,
+      };
+    },
+    [boardMarkStyles, planView.captureSquares],
   );
   const canGoForward = useMemo(
     function checkCanGoForward() {
@@ -534,8 +569,8 @@ function ChessReplay() {
               onPieceDrop={onDrop}
               boardOrientation={boardOrientation}
               animationDuration={200}
-              customArrows={planArrows}
-              customSquareStyles={boardMarkStyles}
+              customArrows={planView.arrows}
+              customSquareStyles={boardSquareStyles}
             />
           </div>
         </div>
