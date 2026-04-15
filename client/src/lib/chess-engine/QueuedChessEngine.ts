@@ -1,8 +1,8 @@
 import {
   type ChessEngine,
   type ChessEngineLine,
-  type EngineEvaluationPriority,
   EngineEvaluationPriorities,
+  type EngineEvaluationPriority,
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
@@ -63,7 +63,7 @@ export class QueuedChessEngine implements ChessEngine {
         existingJob.subscribers.push(subscriber);
         upgradeJobPriority(existingJob, priority);
         if (existingJob.lastUpdate && onUpdate) {
-          notifyUpdateSafely(onUpdate, trimUpdateLines(existingJob.lastUpdate, options.linesAmount));
+          notifyUpdateSafely(onUpdate, existingJob.lastUpdate);
         }
 
         if (existingJob !== this.currentJob) {
