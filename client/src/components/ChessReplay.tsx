@@ -560,9 +560,9 @@ function ChessReplay() {
           <EvaluationThermometer
             evaluation={currentAnalysis?.evaluation ?? null}
             orientation={boardOrientation}
-            className="w-6 min-h-120"
+            className="w-6 self-stretch"
           />
-          <div className="flex-1 shadow-2xl overflow-hidden ">
+          <div className="flex-1 min-w-0 shadow-2xl overflow-hidden">
             <Chessboard
               id="AnalysisBoard"
               position={currentNodeId ? tree[currentNodeId].fen : START_FEN}
