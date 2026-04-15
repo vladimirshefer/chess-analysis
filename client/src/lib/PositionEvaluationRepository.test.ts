@@ -55,7 +55,7 @@ namespace IndexedDbTestMock {
 
     (globalThis as { IDBKeyRange?: typeof IDBKeyRange }).IDBKeyRange = {
       // Test mock: only `value` is required by this fake IndexedDB implementation.
-      only: (value: any): IDBKeyRange => ({ value } as unknown as IDBKeyRange),
+      only: (value: any): IDBKeyRange => ({ value }) as unknown as IDBKeyRange,
     } as typeof IDBKeyRange;
   }
 

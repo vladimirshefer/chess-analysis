@@ -90,10 +90,7 @@ export class PersistentChessEngine implements ChessEngine {
   }
 }
 
-function toFullMoveEvaluation(
-  fen: string,
-  record: PositionEvaluations.PositionEvaluationRecord,
-): FullMoveEvaluation {
+function toFullMoveEvaluation(fen: string, record: PositionEvaluations.PositionEvaluationRecord): FullMoveEvaluation {
   const lines: ChessEngineLine[] = record.variationLines.map(function toLine(line, index) {
     const pv = [...line.principalVariationMoves];
     return {
