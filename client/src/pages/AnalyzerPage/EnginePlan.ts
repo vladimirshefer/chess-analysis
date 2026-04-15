@@ -1,5 +1,8 @@
 import { Chess, type Square } from "chess.js";
 
+const TRACKED_PLAN_PIECES_PER_SIDE = 2;
+const MAX_PLAN_ARROWS = 5;
+
 export namespace AnalyzerPageEnginePlan {
   export type UciMove = string;
   export type CustomArrow = [Square, Square];
@@ -15,13 +18,8 @@ export namespace AnalyzerPageEnginePlan {
     square: string;
   }
 
-  export function toPlanView(
-    fen: string,
-    lineUci: UciMove[],
-    trackedPiecesPerSide: number,
-    maxArrows: number,
-  ): PlanView {
-    if (!fen || lineUci.length === 0 || trackedPiecesPerSide <= 0 || maxArrows <= 0) {
+  export function toPlanView(fen: string, lineUci: UciMove[]): PlanView {
+    if (!fen || lineUci.length === 0) {
       return emptyPlanView();
     }
 
@@ -40,7 +38,7 @@ export namespace AnalyzerPageEnginePlan {
     const captureSquares: Square[] = [];
 
     for (const uciMove of lineUci) {
-      if (arrows.length >= maxArrows) break;
+      if (arrows.length >= MAX_PLAN_ARROWS) break;
       if (uciMove.length < 4) return emptyPlanView();
 
       const from = uciMove.substring(0, 2) as Square;
@@ -76,7 +74,7 @@ export namespace AnalyzerPageEnginePlan {
         continue;
       }
 
-      if (trackedPieces.length >= trackedPiecesPerSide) continue;
+      if (trackedPieces.length >= TRACKED_PLAN_PIECES_PER_SIDE) continue;
 
       trackedPieces.push({
         color: movingPiece.color,

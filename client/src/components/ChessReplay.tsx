@@ -101,8 +101,6 @@ interface AnalyzerLocationState {
 }
 
 const ROOT_ANALYSIS_NODE_ID = "__root__";
-const TRACKED_PLAN_PIECES_PER_SIDE = 2;
-const MAX_PLAN_ARROWS = 5;
 const PLAN_CAPTURE_SQUARE_STYLE = {
   backgroundColor: "rgba(220, 38, 38, 0.45)",
   boxShadow: "inset 0 0 0 3px rgba(185, 28, 28, 0.85)",
@@ -244,25 +242,19 @@ function ChessReplay() {
   );
   const planView = useMemo(
     function buildPlanView() {
-      if (!showPlans)
-        return AnalyzerPageEnginePlan.toPlanView(currentFen, [], TRACKED_PLAN_PIECES_PER_SIDE, MAX_PLAN_ARROWS);
+      if (!showPlans) return AnalyzerPageEnginePlan.toPlanView(currentFen, []);
       if (!currentAnalysis || currentAnalysis.lines.length === 0) {
-        return AnalyzerPageEnginePlan.toPlanView(currentFen, [], TRACKED_PLAN_PIECES_PER_SIDE, MAX_PLAN_ARROWS);
+        return AnalyzerPageEnginePlan.toPlanView(currentFen, []);
       }
 
       const topLine = currentAnalysis.lines.find(function findTopLine(line) {
         return line.lineRank === 1;
       });
       if (!topLine || topLine.engineLineUci.length === 0) {
-        return AnalyzerPageEnginePlan.toPlanView(currentFen, [], TRACKED_PLAN_PIECES_PER_SIDE, MAX_PLAN_ARROWS);
+        return AnalyzerPageEnginePlan.toPlanView(currentFen, []);
       }
 
-      return AnalyzerPageEnginePlan.toPlanView(
-        currentFen,
-        topLine.engineLineUci,
-        TRACKED_PLAN_PIECES_PER_SIDE,
-        MAX_PLAN_ARROWS,
-      );
+      return AnalyzerPageEnginePlan.toPlanView(currentFen, topLine.engineLineUci);
     },
     [currentAnalysis, currentFen, showPlans],
   );
@@ -938,12 +930,10 @@ function buildAnalysisTasks(
   }
 
   if (currentNodeId) {
-    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.IMMEDIATE);
     addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.NEXT);
   }
 
   addTasksForNodes(allNodeIds, 12, 2, EngineEvaluationPriorities.BACKGROUND);
-  addTasksForNodes(allNodeIds, 16, 1, EngineEvaluationPriorities.BACKGROUND);
 
   return tasks;
 }
