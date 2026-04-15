@@ -40,29 +40,31 @@ export class NativeChessEngine implements ChessEngine {
       return Promise.reject(new Error("NativeChessEngine is busy. Wrap it with QueuedChessEngine."));
     }
 
+    const linesAmount = Math.max(1, Math.trunc(options.linesAmount));
+
     return new Promise<FullMoveEvaluation>((resolve, reject) => {
       this.currentEvaluation = {
         fen,
         minDepth: options.minDepth,
-        linesAmount: options.linesAmount,
+        linesAmount,
         onUpdate,
         resolve,
         reject,
         collectedByMultiPv: new Map<number, ChessEngineLine>(),
       };
 
-      this.worker.postMessage(`setoption name MultiPV value ${options.linesAmount}`);
+      this.worker.postMessage(`setoption name MultiPV value ${linesAmount}`);
       this.worker.postMessage(`position fen ${fen}`);
       this.worker.postMessage(`go depth ${options.minDepth}`);
     });
   }
 
-  getEvaluation(_fen: string, _minDepth: number = 0): FullMoveEvaluation | null {
-    return null;
+  async getEvaluation(_fen: string, _minDepth: number = 0): Promise<FullMoveEvaluation | null> {
+    return Promise.resolve(null);
   }
 
-  getLines(_fen: string, _minDepth: number = 0, _amount: number = 1): ChessEngineLine[] | null {
-    return null;
+  async getLines(_fen: string, _minDepth: number = 0, _amount: number = 1): Promise<ChessEngineLine[] | null> {
+    return Promise.resolve(null);
   }
 
   private handleMessage(event: MessageEvent<string>): void {

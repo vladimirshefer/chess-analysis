@@ -231,8 +231,7 @@ function ChessReplay() {
 
     return {
       [currentMoveSquares.to]: {
-        boxShadow: `inset 0 0 0 4px ${getMoveMarkColor(currentMoveMark.mark)}`,
-        backgroundColor: getMoveMarkBackground(currentMoveMark.mark),
+        ...getMoveMarkSquareStyle(currentMoveMark.mark),
       },
     };
   }, [currentMoveMark, currentMoveSquares]);
@@ -307,14 +306,25 @@ function ChessReplay() {
       const node = tree[currentNodeId];
       if (!node) return;
 
-      const cachedEvaluation = engine.getEvaluation(node.fen, 0);
-      if (cachedEvaluation) {
-        syncSingleNodeAnalysis(currentNodeId, toNodeAnalysis(node.fen, cachedEvaluation, true));
-        return;
-      }
+      let cancelled = false;
+      void (async () => {
+        const cachedEvaluation = await engine.getEvaluation(node.fen, 0);
+        if (cancelled) return;
+        if (cachedEvaluation) {
+          syncSingleNodeAnalysis(currentNodeId, toNodeAnalysis(node.fen, cachedEvaluation, true));
+          return;
+        }
 
-      const terminalAnalysis = buildTerminalNodeAnalysis(node.fen);
-      if (terminalAnalysis) syncSingleNodeAnalysis(currentNodeId, terminalAnalysis);
+        const terminalAnalysis = buildTerminalNodeAnalysis(node.fen);
+        if (terminalAnalysis) syncSingleNodeAnalysis(currentNodeId, terminalAnalysis);
+      })().catch((error) => {
+        if (cancelled) return;
+        console.error("Failed to hydrate selected node analysis", error);
+      });
+
+      return function cleanup() {
+        cancelled = true;
+      };
     },
     [currentNodeId, tree],
   );
@@ -324,28 +334,31 @@ function ChessReplay() {
     if (!engine) return;
 
     let cancelled = false;
-    const tasks = buildAnalysisTasks(tree, currentNodeId, engine);
-    if (tasks.length === 0) {
-      setStatusText("Nothing to analyze");
-      return;
-    }
+    void (async () => {
+      const tasks = buildAnalysisTasks(tree, currentNodeId);
+      if (cancelled) return;
+      if (tasks.length === 0) {
+        setStatusText("Nothing to analyze");
+        return;
+      }
 
-    setStatusText("Analyzing...");
+      setStatusText("Analyzing...");
 
-    void Promise.allSettled(
-      tasks.map((task) =>
-        engine
-          .evaluate(task.fen, task.request, task.priority, (update) => {
-            if (cancelled) return;
-            syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
-            setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
-          })
-          .then((finalEvaluation) => {
-            if (cancelled) return;
-            syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
-          }),
-      ),
-    ).then((results) => {
+      const results = await Promise.allSettled(
+        tasks.map((task) =>
+          engine
+            .evaluate(task.fen, task.request, task.priority, (update) => {
+              if (cancelled) return;
+              syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
+              setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
+            })
+            .then((finalEvaluation) => {
+              if (cancelled) return;
+              syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
+            }),
+        ),
+      );
+
       if (cancelled) return;
       const hasFailures = results.some((result) => result.status === "rejected");
       if (hasFailures) {
@@ -354,6 +367,10 @@ function ChessReplay() {
       } else {
         setStatusText("Analysis Complete");
       }
+    })().catch((error) => {
+      if (cancelled) return;
+      setStatusText("Engine Error");
+      console.error("Engine Error", error);
     });
 
     return () => {
@@ -447,27 +464,31 @@ function ChessReplay() {
     }
   }
 
-  function applyEngineMove(line: DisplayEngineLine, suggestedMoveUci: string) {
+  async function applyEngineMove(line: DisplayEngineLine, suggestedMoveUci: string): Promise<void> {
     const moveResult = makeMove({
       from: suggestedMoveUci.substring(0, 2),
       to: suggestedMoveUci.substring(2, 4),
       promotion: suggestedMoveUci[4] || "q",
     });
-    if (!moveResult) return null;
+    if (!moveResult) return;
 
     const engine = engineRef.current;
-    const cachedEvaluation = engine?.getEvaluation(moveResult.fen, 0);
-    if (cachedEvaluation) {
-      syncSingleNodeAnalysis(moveResult.nodeId, toNodeAnalysis(moveResult.fen, cachedEvaluation, true));
-      return moveResult;
-    }
+    if (!engine) return;
 
-    const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
-    if (seededAnalysis) {
-      syncSingleNodeAnalysis(moveResult.nodeId, seededAnalysis);
-    }
+    try {
+      const cachedEvaluation = await engine.getEvaluation(moveResult.fen, 0);
+      if (cachedEvaluation) {
+        syncSingleNodeAnalysis(moveResult.nodeId, toNodeAnalysis(moveResult.fen, cachedEvaluation, true));
+        return;
+      }
 
-    return moveResult;
+      const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
+      if (seededAnalysis) {
+        syncSingleNodeAnalysis(moveResult.nodeId, seededAnalysis);
+      }
+    } catch (error) {
+      console.error("Failed to seed analysis after applying engine move", error);
+    }
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
@@ -643,7 +664,9 @@ function ChessReplay() {
               return (
                 <button
                   key={index}
-                  onClick={() => applyEngineMove(line, line.suggestedMoveUci)}
+                  onClick={() => {
+                    void applyEngineMove(line, line.suggestedMoveUci);
+                  }}
                   className="flex flex-col gap-2 px-2 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left"
                 >
                   <div className="flex items-baseline w-full gap-2">
@@ -884,11 +907,7 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
   return getDeepestLeaf(node.children[0], tree);
 }
 
-function buildAnalysisTasks(
-  tree: Record<string, MoveNode>,
-  currentNodeId: string | null,
-  engine: ChessEngine,
-): ScheduledTask[] {
+function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: string | null): ScheduledTask[] {
   const allNodeIds = Object.keys(tree);
   allNodeIds.filter(function filterNode(nodeId) {
     return nodeId !== currentNodeId;
@@ -910,11 +929,6 @@ function buildAnalysisTasks(
 
       if (getTerminalEvaluation(fen)) continue;
 
-      const cachedEvaluation = engine.getEvaluation(fen, minDepth);
-      if (cachedEvaluation && cachedEvaluation.lines.length >= linesAmount) {
-        continue;
-      }
-
       const key = [nodeId, fen, minDepth, linesAmount, priority].join("|");
       if (taskKeys.has(key)) continue;
 
@@ -933,7 +947,7 @@ function buildAnalysisTasks(
     addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.NEXT);
   }
 
-  addTasksForNodes(allNodeIds, 12, 2, EngineEvaluationPriorities.BACKGROUND);
+  addTasksForNodes(allNodeIds, 12, 1, EngineEvaluationPriorities.BACKGROUND);
 
   return tasks;
 }

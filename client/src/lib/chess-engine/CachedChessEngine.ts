@@ -38,7 +38,7 @@ export class CachedChessEngine implements ChessEngine {
 
     const cached = this.cache.getEvaluation(fen, options.minDepth);
     if (cached && cached.lines.length >= options.linesAmount) {
-      const cachedResult = cached;
+      const cachedResult = trimEvaluationLines(cached, options.linesAmount);
       if (onUpdate) notifyUpdateSafely(onUpdate, { ...cachedResult, isFinal: true });
       return Promise.resolve(cachedResult);
     }
@@ -48,14 +48,14 @@ export class CachedChessEngine implements ChessEngine {
     return result;
   }
 
-  getEvaluation(fen: string, minDepth: number = 0): FullMoveEvaluation | null {
-    return this.cache.getEvaluation(fen, minDepth);
+  async getEvaluation(fen: string, minDepth: number = 0): Promise<FullMoveEvaluation | null> {
+    return Promise.resolve(this.cache.getEvaluation(fen, minDepth));
   }
 
-  getLines(fen: string, minDepth: number = 0, amount: number = 1): ChessEngineLine[] | null {
+  async getLines(fen: string, minDepth: number = 0, amount: number = 1): Promise<ChessEngineLine[] | null> {
     const evaluation = this.cache.getEvaluation(fen, minDepth);
     if (!evaluation || evaluation.lines.length < amount) return null;
-    return evaluation.lines.slice(0, amount);
+    return Promise.resolve(evaluation.lines.slice(0, amount));
   }
 }
 

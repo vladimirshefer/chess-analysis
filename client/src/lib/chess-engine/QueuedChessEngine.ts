@@ -41,11 +41,11 @@ export class QueuedChessEngine implements ChessEngine {
     return this.requestEvaluation(fen, options, priority, onUpdate);
   }
 
-  getEvaluation(fen: string, minDepth: number = 0): FullMoveEvaluation | null {
+  async getEvaluation(fen: string, minDepth: number = 0): Promise<FullMoveEvaluation | null> {
     return this.delegate.getEvaluation(fen, minDepth);
   }
 
-  getLines(fen: string, minDepth: number = 0, amount: number = 1): ChessEngineLine[] | null {
+  async getLines(fen: string, minDepth: number = 0, amount: number = 1): Promise<ChessEngineLine[] | null> {
     return this.delegate.getLines(fen, minDepth, amount);
   }
 
@@ -119,7 +119,7 @@ export class QueuedChessEngine implements ChessEngine {
         },
         nextJob.priority,
         (update) => {
-          const trimmed = trimUpdateLines(update, nextJob.linesAmount);
+          const trimmed = update;
           nextJob.lastUpdate = trimmed;
           notifySubscribers(nextJob, trimmed);
         },
@@ -127,14 +127,14 @@ export class QueuedChessEngine implements ChessEngine {
       .then((finalResult) => {
         if (!nextJob.lastUpdate?.isFinal) {
           const finalUpdate: EvaluationUpdate = {
-            ...trimEvaluationLines(finalResult, nextJob.linesAmount),
+            ...finalResult,
             isFinal: true,
           };
           nextJob.lastUpdate = finalUpdate;
           notifySubscribers(nextJob, finalUpdate);
         }
 
-        resolveSubscribers(nextJob, trimEvaluationLines(finalResult, nextJob.linesAmount));
+        resolveSubscribers(nextJob, finalResult);
       })
       .catch((error) => {
         rejectSubscribers(nextJob, error);
@@ -147,7 +147,7 @@ export class QueuedChessEngine implements ChessEngine {
 }
 
 function notifySubscribers(job: QueueJob, update: EvaluationUpdate): void {
-  const trimmedUpdate = trimUpdateLines(update, job.linesAmount);
+  const trimmedUpdate = update;
   job.subscribers.forEach(function notify(subscriber) {
     if (!subscriber.onUpdate) return;
     notifyUpdateSafely(subscriber.onUpdate, trimmedUpdate);
@@ -155,7 +155,7 @@ function notifySubscribers(job: QueueJob, update: EvaluationUpdate): void {
 }
 
 function resolveSubscribers(job: QueueJob, result: FullMoveEvaluation): void {
-  const trimmedResult = trimEvaluationLines(result, job.linesAmount);
+  const trimmedResult = result;
   job.subscribers.forEach(function resolve(subscriber) {
     subscriber.resolve(trimmedResult);
   });
@@ -173,20 +173,6 @@ function notifyUpdateSafely(callback: (update: EvaluationUpdate) => void, update
   } catch (error) {
     console.error("Failed to deliver engine update to subscriber", error);
   }
-}
-
-function trimUpdateLines(update: EvaluationUpdate, amount: number): EvaluationUpdate {
-  return {
-    ...update,
-    lines: update.lines.slice(0, amount),
-  };
-}
-
-function trimEvaluationLines(evaluation: FullMoveEvaluation, amount: number): FullMoveEvaluation {
-  return {
-    ...evaluation,
-    lines: evaluation.lines.slice(0, amount),
-  };
 }
 
 function canReuseExistingJob(job: QueueJob, options: EvaluationRequest): boolean {

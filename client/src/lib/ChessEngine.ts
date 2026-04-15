@@ -1,6 +1,7 @@
 import { sharedEvaluationCache } from "./EvaluationCache.ts";
 import { CachedChessEngine } from "./chess-engine/CachedChessEngine.ts";
 import { NativeChessEngine } from "./chess-engine/NativeChessEngine.ts";
+import { PersistentChessEngine } from "./chess-engine/PersistentChessEngine.ts";
 import { QueuedChessEngine } from "./chess-engine/QueuedChessEngine.ts";
 import type { EngineEvaluation } from "./evaluation";
 
@@ -47,13 +48,15 @@ export interface ChessEngine {
     onUpdate?: (update: EvaluationUpdate) => void,
   ): Promise<FullMoveEvaluation>;
 
-  getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
+  getEvaluation(fen: string, minDepth?: number): Promise<FullMoveEvaluation | null>;
 
-  getLines(fen: string, minDepth?: number, amount?: number): ChessEngineLine[] | null;
+  getLines(fen: string, minDepth?: number, amount?: number): Promise<ChessEngineLine[] | null>;
 }
 
 export function createChessEngine(): ChessEngine {
-  return new CachedChessEngine(new QueuedChessEngine(new NativeChessEngine()), sharedEvaluationCache);
+  return new PersistentChessEngine(
+    new CachedChessEngine(new QueuedChessEngine(new NativeChessEngine()), sharedEvaluationCache),
+  );
 }
 
 let singleton: ChessEngine | null = null;

@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 import { createEvaluationCache } from "../EvaluationCache.ts";
 import {
   type ChessEngine,
+  type ChessEngineLine,
   type EngineEvaluationPriority,
   EngineEvaluationPriorities,
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
 } from "../ChessEngine.ts";
+import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
+import { GameResult } from "../evaluation.ts";
 import { CachedChessEngine } from "./CachedChessEngine.ts";
+import { PersistentChessEngine } from "./PersistentChessEngine.ts";
 import { QueuedChessEngine } from "./QueuedChessEngine.ts";
 
 describe("CachedChessEngine", function suite() {
@@ -49,6 +53,122 @@ describe("CachedChessEngine", function suite() {
     expect(second.depth).toBe(14);
     expect(delegate.evaluateCallCount).toBe(1);
     expect(cache.getEvaluation(fen, 14)).not.toBeNull();
+  });
+});
+
+describe("PersistentChessEngine", function suite() {
+  it("returns persisted result without calling delegate", async function testCase() {
+    const fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const repository = new TestDoubles.FakeRepository([
+      {
+        positionFen: fen,
+        engineId: "stockfish.js-16.1-lite",
+        searchDepth: 14,
+        evaluation: 35,
+        variationLines: [
+          {
+            principalVariationMoves: ["e2e4", "e7e5"],
+            evaluation: 35,
+          },
+          {
+            principalVariationMoves: ["d2d4", "d7d5"],
+            evaluation: 20,
+          },
+        ],
+      },
+    ]);
+    const delegate = new TestDoubles.NoopEngine();
+    const engine = new PersistentChessEngine(delegate, repository);
+    const onUpdate = vi.fn();
+
+    const result = await engine.evaluate(
+      fen,
+      { minDepth: 12, linesAmount: 1 },
+      EngineEvaluationPriorities.IMMEDIATE,
+      onUpdate,
+    );
+
+    expect(delegate.evaluateCallCount).toBe(0);
+    expect(result.depth).toBe(14);
+    expect(result.lines).toHaveLength(1);
+    expect(onUpdate).toHaveBeenCalledOnce();
+    expect(onUpdate.mock.calls[0][0].isFinal).toBe(true);
+    expect(repository.saveCalls).toHaveLength(0);
+  });
+
+  it("delegates on cache miss and stores final result", async function testCase() {
+    const fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    const repository = new TestDoubles.FakeRepository([]);
+    const delegate = new TestDoubles.ControlledEngine();
+    const engine = new PersistentChessEngine(delegate, repository);
+    const onUpdate = vi.fn();
+
+    const evaluationPromise = engine.evaluate(
+      fen,
+      { minDepth: 12, linesAmount: 2 },
+      EngineEvaluationPriorities.BACKGROUND,
+      onUpdate,
+    );
+    await flushMicrotasks();
+
+    delegate.emitUpdate(0, {
+      ...createEvaluation(fen, 6, 2),
+      isFinal: false,
+    });
+    expect(repository.saveCalls).toHaveLength(0);
+
+    delegate.resolveCall(0, createEvaluation(fen, 12, 2));
+    const result = await evaluationPromise;
+    await flushMicrotasks();
+
+    expect(result.depth).toBe(12);
+    expect(onUpdate).toHaveBeenCalled();
+    expect(repository.saveCalls).toHaveLength(1);
+    expect(repository.saveCalls[0].searchDepth).toBe(12);
+  });
+
+  it("decodes terminal persisted values into result evaluations", async function testCase() {
+    const whiteToMoveFen = "7k/6Q1/6K1/8/8/8/8/8 w - - 0 1";
+    const blackToMoveFen = "6k1/6Q1/6K1/8/8/8/8/8 b - - 0 1";
+    const repository = new TestDoubles.FakeRepository([
+      {
+        positionFen: whiteToMoveFen,
+        engineId: "stockfish.js-16.1-lite",
+        searchDepth: 0,
+        evaluation: 2_000_000,
+        variationLines: [
+          {
+            principalVariationMoves: ["g7h8q"],
+            evaluation: 2_000_000,
+          },
+        ],
+      },
+      {
+        positionFen: blackToMoveFen,
+        engineId: "stockfish.js-16.1-lite",
+        searchDepth: 0,
+        evaluation: -2_000_000,
+        variationLines: [
+          {
+            principalVariationMoves: ["g8h8"],
+            evaluation: -2_000_000,
+          },
+        ],
+      },
+    ]);
+    const engine = new PersistentChessEngine(new TestDoubles.NoopEngine(), repository);
+
+    const whiteResult = await engine.getEvaluation(whiteToMoveFen, 0);
+    const blackResult = await engine.getEvaluation(blackToMoveFen, 0);
+
+    expect(whiteResult?.evaluation).toEqual({
+      kind: "result",
+      result: GameResult.WHITE_WIN,
+    });
+    expect(blackResult?.evaluation).toEqual({
+      kind: "result",
+      result: GameResult.WHITE_WIN,
+    });
   });
 });
 
@@ -168,12 +288,12 @@ namespace TestDoubles {
       return Promise.reject(new Error("NoopEngine.evaluate should not be called"));
     }
 
-    getEvaluation(_fen: string, _minDepth: number = 0): FullMoveEvaluation | null {
-      return null;
+    getEvaluation(_fen: string, _minDepth: number = 0): Promise<FullMoveEvaluation | null> {
+      return Promise.resolve(null);
     }
 
-    getLines(_fen: string, _minDepth: number = 0, _amount: number = 1) {
-      return null;
+    getLines(_fen: string, _minDepth: number = 0, _amount: number = 1): Promise<ChessEngineLine[] | null> {
+      return Promise.resolve(null);
     }
   }
 
@@ -195,12 +315,12 @@ namespace TestDoubles {
       return Promise.resolve(this.result);
     }
 
-    getEvaluation(_fen: string, _minDepth: number = 0): FullMoveEvaluation | null {
-      return null;
+    getEvaluation(_fen: string, _minDepth: number = 0): Promise<FullMoveEvaluation | null> {
+      return Promise.resolve(null);
     }
 
-    getLines(_fen: string, _minDepth: number = 0, _amount: number = 1) {
-      return null;
+    getLines(_fen: string, _minDepth: number = 0, _amount: number = 1): Promise<ChessEngineLine[] | null> {
+      return Promise.resolve(null);
     }
   }
 
@@ -242,12 +362,82 @@ namespace TestDoubles {
       this.calls[callIndex]?.resolve(result);
     }
 
-    getEvaluation(_fen: string, _minDepth: number = 0): FullMoveEvaluation | null {
-      return null;
+    getEvaluation(_fen: string, _minDepth: number = 0): Promise<FullMoveEvaluation | null> {
+      return Promise.resolve(null);
     }
 
-    getLines(_fen: string, _minDepth: number = 0, _amount: number = 1) {
-      return null;
+    getLines(_fen: string, _minDepth: number = 0, _amount: number = 1): Promise<ChessEngineLine[] | null> {
+      return Promise.resolve(null);
     }
   }
+
+  export class FakeRepository implements PositionEvaluations.Repository {
+    private records: PositionEvaluations.PositionEvaluationRecord[];
+    readonly saveCalls: PositionEvaluations.PositionEvaluationRecord[] = [];
+
+    constructor(records: PositionEvaluations.PositionEvaluationRecord[]) {
+      this.records = [...records];
+    }
+
+    async getAllByPosition(positionFen: string): Promise<PositionEvaluations.PositionEvaluationRecord[]> {
+      return Promise.resolve(
+        this.records
+          .filter(function byFen(record) {
+            return record.positionFen === positionFen;
+          })
+          .map(cloneRecord),
+      );
+    }
+
+    async getBestForRequest(
+      positionFen: string,
+      minimumDepth: number,
+      minimumLineCount: number,
+    ): Promise<PositionEvaluations.PositionEvaluationRecord | null> {
+      const candidates = this.records.filter(function byConstraints(record) {
+        return (
+          record.positionFen === positionFen &&
+          record.searchDepth >= minimumDepth &&
+          record.variationLines.length >= minimumLineCount
+        );
+      });
+
+      if (candidates.length === 0) return Promise.resolve(null);
+
+      candidates.sort(function byBest(left, right) {
+        if (left.evaluation !== right.evaluation) return right.evaluation - left.evaluation;
+        return right.searchDepth - left.searchDepth;
+      });
+      return Promise.resolve(cloneRecord(candidates[0]));
+    }
+
+    async saveEvaluation(record: PositionEvaluations.PositionEvaluationRecord): Promise<void> {
+      const cloned = cloneRecord(record);
+      this.saveCalls.push(cloned);
+      this.records.push(cloned);
+    }
+
+    async deleteAllForPosition(positionFen: string): Promise<void> {
+      this.records = this.records.filter(function keep(record) {
+        return record.positionFen !== positionFen;
+      });
+    }
+  }
+}
+
+function cloneRecord(
+  record: PositionEvaluations.PositionEvaluationRecord,
+): PositionEvaluations.PositionEvaluationRecord {
+  return {
+    positionFen: record.positionFen,
+    engineId: record.engineId,
+    searchDepth: record.searchDepth,
+    evaluation: record.evaluation,
+    variationLines: record.variationLines.map(function cloneLine(line) {
+      return {
+        principalVariationMoves: [...line.principalVariationMoves],
+        evaluation: line.evaluation,
+      };
+    }),
+  };
 }
