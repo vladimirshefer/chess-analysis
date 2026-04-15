@@ -261,17 +261,23 @@ function ChessReplay() {
     function buildBoardSquareStyles() {
       if (planView.captureSquares.length === 0) return boardMarkStyles;
 
-      const planCaptureStyles = planView.captureSquares.reduce<
-        Record<string, { backgroundColor: string; boxShadow: string }>
-      >(function collectCaptureStyles(result, square) {
-        result[square] = PLAN_CAPTURE_SQUARE_STYLE;
-        return result;
-      }, {});
+      const planCaptureStyles = planView.captureSquares.reduce<Record<string, Record<string, string | number>>>(
+        function collectCaptureStyles(result, square) {
+          result[square] = PLAN_CAPTURE_SQUARE_STYLE;
+          return result;
+        },
+        {},
+      );
 
-      return {
-        ...boardMarkStyles,
-        ...planCaptureStyles,
-      };
+      const mergedStyles: Record<string, Record<string, string | number>> = { ...boardMarkStyles };
+      Object.entries(planCaptureStyles).forEach(function mergeSquareStyle([square, squareStyle]) {
+        mergedStyles[square] = {
+          ...(mergedStyles[square] ?? {}),
+          ...squareStyle,
+        };
+      });
+
+      return mergedStyles;
     },
     [boardMarkStyles, planView.captureSquares],
   );
@@ -1129,6 +1135,8 @@ function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
       return isFocus ? "bg-yellow-200 text-yellow-900" : "bg-yellow-100 text-yellow-800";
     case MoveMark.MISTAKE:
       return isFocus ? "bg-orange-200 text-orange-900" : "bg-orange-100 text-orange-800";
+    case MoveMark.MISS:
+      return isFocus ? "bg-cyan-200 text-cyan-900" : "bg-cyan-100 text-cyan-700";
     case MoveMark.BLUNDER:
       return isFocus ? "bg-red-200 text-red-900" : "bg-red-100 text-red-700";
     case MoveMark.ONLY_MOVE:
@@ -1140,46 +1148,36 @@ function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
   }
 }
 
-function getMoveMarkColor(mark: MoveMark): string {
+function getMoveMarkIconPath(mark: MoveMark): string {
   switch (mark) {
     case MoveMark.BEST:
-      return "rgba(22, 163, 74, 0.9)";
+      return "/movemarks/best.svg";
     case MoveMark.OK:
-      return "rgba(107, 114, 128, 0.9)";
+      return "/movemarks/good.svg";
     case MoveMark.INACCURACY:
-      return "rgba(234, 179, 8, 0.9)";
+      return "/movemarks/inaccuracy.svg";
     case MoveMark.MISTAKE:
-      return "rgba(249, 115, 22, 0.9)";
+      return "/movemarks/mistake.svg";
+    case MoveMark.MISS:
+      return "/movemarks/miss.svg";
     case MoveMark.BLUNDER:
-      return "rgba(220, 38, 38, 0.9)";
+      return "/movemarks/blunder.svg";
     case MoveMark.ONLY_MOVE:
-      return "rgba(37, 99, 235, 0.9)";
+      return "/movemarks/forced.svg";
     case MoveMark.BRILLIANT:
-      return "rgba(13, 148, 136, 0.9)";
+      return "/movemarks/brilliant.svg";
     default:
-      return "rgba(107, 114, 128, 0.9)";
+      return "/movemarks/good.svg";
   }
 }
 
-function getMoveMarkBackground(mark: MoveMark): string {
-  switch (mark) {
-    case MoveMark.BEST:
-      return "rgba(34, 197, 94, 0.22)";
-    case MoveMark.OK:
-      return "rgba(107, 114, 128, 0.18)";
-    case MoveMark.INACCURACY:
-      return "rgba(250, 204, 21, 0.24)";
-    case MoveMark.MISTAKE:
-      return "rgba(251, 146, 60, 0.24)";
-    case MoveMark.BLUNDER:
-      return "rgba(248, 113, 113, 0.26)";
-    case MoveMark.ONLY_MOVE:
-      return "rgba(59, 130, 246, 0.24)";
-    case MoveMark.BRILLIANT:
-      return "rgba(45, 212, 191, 0.24)";
-    default:
-      return "rgba(107, 114, 128, 0.18)";
-  }
+function getMoveMarkSquareStyle(mark: MoveMark): Record<string, string | number> {
+  return {
+    backgroundImage: `url("${getMoveMarkIconPath(mark)}")`,
+    backgroundRepeat: "no-repeat",
+    backgroundSize: "34%",
+    backgroundPosition: "right 6% top 6%",
+  };
 }
 
 function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolean {

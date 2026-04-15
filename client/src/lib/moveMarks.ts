@@ -11,6 +11,7 @@ export const MoveMark = {
   OK: "Ok",
   INACCURACY: "Inaccuracy",
   MISTAKE: "Mistake",
+  MISS: "Miss",
   BLUNDER: "Blunder",
   ONLY_MOVE: "Only Move",
   BRILLIANT: "Brilliant",
@@ -57,7 +58,16 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
     return { mark: MoveMark.BEST, evalLoss, bestMoveUci };
   }
 
-  if (evalLoss >= 3) return { mark: MoveMark.BLUNDER, evalLoss, bestMoveUci };
+  if (evalLoss >= 3) {
+    if (
+      // is still not losing
+      (mover === "w" && input.playedEvaluation >= 0) ||
+      (mover === "b" && input.playedEvaluation <= 0)
+    ) {
+      return { mark: MoveMark.MISS, evalLoss, bestMoveUci };
+    }
+    return { mark: MoveMark.BLUNDER, evalLoss, bestMoveUci };
+  }
   if (evalLoss >= 1.7) return { mark: MoveMark.MISTAKE, evalLoss, bestMoveUci };
   if (evalLoss >= 0.8) return { mark: MoveMark.INACCURACY, evalLoss, bestMoveUci };
   return { mark: MoveMark.OK, evalLoss, bestMoveUci };
