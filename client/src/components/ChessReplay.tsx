@@ -40,6 +40,7 @@ import {
 } from "../lib/evaluation";
 import { classifyMoveMark, MoveMark, type MoveMarkResult, toMoveMarkEvaluation } from "../lib/moveMarks";
 import EvaluationThermometer from "./EvaluationThermometer";
+import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
 
 interface MoveNode {
@@ -226,15 +227,22 @@ function ChessReplay() {
     },
     [currentNodeId, tree],
   );
-  const boardMarkStyles = useMemo(() => {
-    if (!currentMoveMark || !currentMoveSquares?.to) return {};
+  const moveMarksBySquare = useMemo<Record<string, MoveMark>>(
+    function buildMoveMarksBySquare() {
+      if (!currentMoveMark || !currentMoveSquares?.to) return {};
 
-    return {
-      [currentMoveSquares.to]: {
-        ...getMoveMarkSquareStyle(currentMoveMark.mark),
-      },
-    };
-  }, [currentMoveMark, currentMoveSquares]);
+      return {
+        [currentMoveSquares.to]: currentMoveMark.mark,
+      };
+    },
+    [currentMoveMark, currentMoveSquares],
+  );
+  const moveMarkSquareRenderer = useMemo(
+    function buildMoveMarkSquareRenderer() {
+      return createMoveMarkSquareRenderer(moveMarksBySquare);
+    },
+    [moveMarksBySquare],
+  );
   const currentFen = useMemo(
     () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
     [currentNodeId, tree],
@@ -259,7 +267,7 @@ function ChessReplay() {
   );
   const boardSquareStyles = useMemo(
     function buildBoardSquareStyles() {
-      if (planView.captureSquares.length === 0) return boardMarkStyles;
+      if (planView.captureSquares.length === 0) return {};
 
       const planCaptureStyles = planView.captureSquares.reduce<Record<string, Record<string, string | number>>>(
         function collectCaptureStyles(result, square) {
@@ -269,17 +277,9 @@ function ChessReplay() {
         {},
       );
 
-      const mergedStyles: Record<string, Record<string, string | number>> = { ...boardMarkStyles };
-      Object.entries(planCaptureStyles).forEach(function mergeSquareStyle([square, squareStyle]) {
-        mergedStyles[square] = {
-          ...(mergedStyles[square] ?? {}),
-          ...squareStyle,
-        };
-      });
-
-      return mergedStyles;
+      return planCaptureStyles;
     },
-    [boardMarkStyles, planView.captureSquares],
+    [planView.captureSquares],
   );
   const canGoForward = useMemo(
     function checkCanGoForward() {
@@ -589,6 +589,7 @@ function ChessReplay() {
               boardOrientation={boardOrientation}
               animationDuration={200}
               customArrows={planView.arrows}
+              customSquare={moveMarkSquareRenderer}
               customSquareStyles={boardSquareStyles}
             />
           </div>
@@ -915,9 +916,6 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
 
 function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: string | null): ScheduledTask[] {
   const allNodeIds = Object.keys(tree);
-  allNodeIds.filter(function filterNode(nodeId) {
-    return nodeId !== currentNodeId;
-  });
   const tasks: ScheduledTask[] = [];
   const taskKeys = new Set<string>();
 
@@ -950,6 +948,7 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
   }
 
   if (currentNodeId) {
+    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.IMMEDIATE);
     addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.NEXT);
   }
 
@@ -1146,38 +1145,6 @@ function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
     default:
       return isFocus ? "bg-gray-200 text-gray-900" : "bg-gray-100 text-gray-700";
   }
-}
-
-function getMoveMarkIconPath(mark: MoveMark): string {
-  switch (mark) {
-    case MoveMark.BEST:
-      return "/movemarks/best.svg";
-    case MoveMark.OK:
-      return "/movemarks/good.svg";
-    case MoveMark.INACCURACY:
-      return "/movemarks/inaccuracy.svg";
-    case MoveMark.MISTAKE:
-      return "/movemarks/mistake.svg";
-    case MoveMark.MISS:
-      return "/movemarks/miss.svg";
-    case MoveMark.BLUNDER:
-      return "/movemarks/blunder.svg";
-    case MoveMark.ONLY_MOVE:
-      return "/movemarks/forced.svg";
-    case MoveMark.BRILLIANT:
-      return "/movemarks/brilliant.svg";
-    default:
-      return "/movemarks/good.svg";
-  }
-}
-
-function getMoveMarkSquareStyle(mark: MoveMark): Record<string, string | number> {
-  return {
-    backgroundImage: `url("${getMoveMarkIconPath(mark)}")`,
-    backgroundRepeat: "no-repeat",
-    backgroundSize: "34%",
-    backgroundPosition: "right 6% top 6%",
-  };
 }
 
 function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolean {
