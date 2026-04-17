@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
+import AppHeader from "./components/AppHeader";
 import { AboutPage } from "./pages/AboutPage";
 import AnalyzerPage from "./pages/AnalyzerPage";
 import ChessComImportPage from "./pages/ChessComImportPage";
@@ -7,32 +8,7 @@ import ChessComImportPage from "./pages/ChessComImportPage";
 function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200 py-4 px-6 shadow-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <Link to="/" className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="Chess Analysis logo" className="w-10 h-10 object-contain" />
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-              CHESS<span className="text-indigo-600">ANALYSIS</span>
-            </h1>
-          </Link>
-          <div className="flex items-center gap-6">
-            <nav className="flex gap-4">
-              <Link to="/" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
-                Analyzer
-              </Link>
-              <Link
-                to="/import/chess-com"
-                className="text-gray-600 hover:text-indigo-600 font-medium transition-colors"
-              >
-                Chess.com
-              </Link>
-              <Link to="/about" className="text-gray-600 hover:text-indigo-600 font-medium transition-colors">
-                About
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <main>{children}</main>
 
