@@ -122,6 +122,7 @@ function ChessReplay() {
 
   const engineRef = useRef<ChessEngine | null>(null);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
+  const moveMarksBySquareRef = useRef<Record<string, MoveMark>>({});
 
   useEffect(function initEngine() {
     engineRef.current = getChessEngine();
@@ -237,12 +238,14 @@ function ChessReplay() {
     },
     [currentMoveMark, currentMoveSquares],
   );
-  const moveMarkSquareRenderer = useMemo(
-    function buildMoveMarkSquareRenderer() {
-      return createMoveMarkSquareRenderer(moveMarksBySquare);
-    },
-    [moveMarksBySquare],
-  );
+  moveMarksBySquareRef.current = moveMarksBySquare;
+  const moveMarkSquareRenderer = useMemo(function buildMoveMarkSquareRenderer() {
+    return createMoveMarkSquareRenderer({
+      getMark(square: string) {
+        return moveMarksBySquareRef.current[square];
+      },
+    });
+  }, []);
   const currentFen = useMemo(
     () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
     [currentNodeId, tree],

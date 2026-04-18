@@ -2,10 +2,12 @@ import { forwardRef, type ReactNode } from "react";
 import type { CustomSquareRenderer } from "react-chessboard/dist/chessboard/types";
 import { MoveMark } from "../lib/moveMarks";
 
-export function createMoveMarkSquareRenderer(marksBySquare: Record<string, MoveMark>): CustomSquareRenderer {
+export function createMoveMarkSquareRenderer(delegate: {
+  getMark(square: string): MoveMark | undefined;
+}): CustomSquareRenderer {
   return forwardRef<HTMLDivElement, { children: ReactNode; square: string; style: Record<string, string | number> }>(
     function MoveMarkSquareRenderer({ children, square, style }, ref) {
-      const mark = marksBySquare[square];
+      const mark = delegate.getMark(square);
       return (
         <div ref={ref} style={{ ...style, position: "relative" }}>
           {children}
