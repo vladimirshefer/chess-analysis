@@ -7,6 +7,7 @@ interface MoveMarkLine {
 }
 
 export const MoveMark = {
+  BOOK: "Book",
   BEST: "Best",
   OK: "Ok",
   INACCURACY: "Inaccuracy",

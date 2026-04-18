@@ -1181,6 +1181,8 @@ function getMoveSquares(baseFen: string, san: string): { from: string; to: strin
 
 function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
   switch (mark) {
+    case MoveMark.BOOK:
+      return isFocus ? "bg-sky-200 text-sky-900" : "bg-sky-100 text-sky-700";
     case MoveMark.BEST:
       return isFocus ? "bg-green-200 text-green-900" : "bg-green-100 text-green-700";
     case MoveMark.OK:

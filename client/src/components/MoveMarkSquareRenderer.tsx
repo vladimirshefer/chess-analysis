@@ -37,6 +37,8 @@ export function createMoveMarkSquareRenderer(delegate: {
 
 function getMoveMarkIconPath(mark: MoveMark): string {
   switch (mark) {
+    case MoveMark.BOOK:
+      return "/movemarks/book.svg";
     case MoveMark.BEST:
       return "/movemarks/best.svg";
     case MoveMark.OK:
