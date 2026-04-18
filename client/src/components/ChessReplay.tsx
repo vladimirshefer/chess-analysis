@@ -39,6 +39,7 @@ import {
   toComparableEvaluationScore,
 } from "../lib/evaluation";
 import { classifyMoveMark, MoveMark, type MoveMarkResult, toMoveMarkEvaluation } from "../lib/moveMarks";
+import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
@@ -119,6 +120,7 @@ function ChessReplay() {
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
   const [showPlans, setShowPlans] = useState(false);
+  const [knownOpeningEpds, setKnownOpeningEpds] = useState<ReadonlySet<string> | null>(null);
 
   const engineRef = useRef<ChessEngine | null>(null);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
@@ -126,6 +128,25 @@ function ChessReplay() {
 
   useEffect(function initEngine() {
     engineRef.current = getChessEngine();
+  }, []);
+
+  useEffect(function loadOpeningsBook() {
+    let cancelled = false;
+
+    void OpeningsBook.getKnownPositionEpds()
+      .then(function syncKnownOpeningEpds(epds) {
+        if (cancelled) return;
+        setKnownOpeningEpds(epds);
+      })
+      .catch(function onError(error) {
+        if (cancelled) return;
+        console.error("Failed to prepare openings book marks", error);
+        setKnownOpeningEpds(new Set<string>());
+      });
+
+    return function cleanup() {
+      cancelled = true;
+    };
   }, []);
 
   function goStart() {
@@ -212,7 +233,10 @@ function ChessReplay() {
   );
 
   const currentAnalysis = currentNodeId ? (positionAnalysisMap[currentNodeId] ?? null) : null;
-  const moveMarksMap = useMemo(() => buildMoveMarksByNodeId(tree, positionAnalysisMap), [positionAnalysisMap, tree]);
+  const moveMarksMap = useMemo(
+    () => buildMoveMarksByNodeId(tree, positionAnalysisMap, knownOpeningEpds),
+    [knownOpeningEpds, positionAnalysisMap, tree],
+  );
   const currentMoveMark = currentNodeId ? (moveMarksMap[currentNodeId] ?? null) : null;
   const currentMoveSquares = useMemo(
     function buildCurrentMoveSquares() {
@@ -1138,10 +1162,20 @@ function toSeededDisplayLines(
 function buildMoveMarksByNodeId(
   tree: Record<string, MoveNode>,
   analysesByNodeId: Record<string, NodeAnalysis>,
+  knownOpeningEpds: ReadonlySet<string> | null,
 ): Record<string, MoveMarkResult> {
   const marksByNodeId: Record<string, MoveMarkResult> = {};
 
   Object.values(tree).forEach(function classifyNode(node) {
+    if (knownOpeningEpds?.has(OpeningsBook.toEpd(node.fen))) {
+      marksByNodeId[node.id] = {
+        mark: MoveMark.BOOK,
+        evalLoss: 0,
+        bestMoveUci: null,
+      };
+      return;
+    }
+
     const parentAnalysis = node.parentId ? analysesByNodeId[node.parentId] : analysesByNodeId[ROOT_ANALYSIS_NODE_ID];
     const nodeAnalysis = analysesByNodeId[node.id];
     const parentFen = node.parentId ? tree[node.parentId]?.fen : START_FEN;
