@@ -28,4 +28,12 @@ Add Total Game Overview panel
 - If a low-depth estimate is better than a high-depth estimate, that means the move is a trap.
 - If a high-depth estimate is better than a low-depth estimate, that means that move is a hard-to-find (maybe brilliant?) move.
 - Potentially come up with the idea on how to explain it in human-understandable text.
-- 
+
+### Multiple parallel engine workers
+- We could analyze multiple positions at once with spawning more stockfish workers.
+
+### Live PGN Editor
+- Should be updated when unknown moves made (expand the tree)
+- Should be editable by user, edits are reflected on the board and the move-tree component.
+- Should support user names and other pieces.
+- Optional but cool: Support syntax highlight and autocomplete (when i write a move - suggest legal moves)

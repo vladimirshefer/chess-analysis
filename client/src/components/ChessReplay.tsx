@@ -14,7 +14,6 @@ import { Chessboard } from "react-chessboard";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
 import {
-  type ChessEngine,
   type ChessEngineLine,
   EngineEvaluationPriorities,
   type EngineEvaluationPriority,
@@ -120,34 +119,22 @@ function ChessReplay() {
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
   const [showPlans, setShowPlans] = useState(false);
-  const [knownOpeningEpds, setKnownOpeningEpds] = useState<ReadonlySet<string> | null>(null);
+  const [importedFullPgn, setImportedFullPgn] = useState("");
 
-  const engineRef = useRef<ChessEngine | null>(null);
+  const currentLinePgn = useMemo(() => {
+    if (!currentNodeId) {
+      return "";
+    }
+
+    return toLinePgn(currentNodeId, tree) ?? "";
+  }, [currentNodeId, tree]);
+
+  const [lastBookOpeningName, setLastBookOpeningName] = useState<string | null>(null);
+
+  const engine = useMemo(() => getChessEngine(), []);
+
   const lastImportedRouteKeyRef = useRef<string | null>(null);
   const moveMarksBySquareRef = useRef<Record<string, MoveMark>>({});
-
-  useEffect(function initEngine() {
-    engineRef.current = getChessEngine();
-  }, []);
-
-  useEffect(function loadOpeningsBook() {
-    let cancelled = false;
-
-    void OpeningsBook.getKnownPositionEpds()
-      .then(function syncKnownOpeningEpds(epds) {
-        if (cancelled) return;
-        setKnownOpeningEpds(epds);
-      })
-      .catch(function onError(error) {
-        if (cancelled) return;
-        console.error("Failed to prepare openings book marks", error);
-        setKnownOpeningEpds(new Set<string>());
-      });
-
-    return function cleanup() {
-      cancelled = true;
-    };
-  }, []);
 
   function goStart() {
     setCurrentNodeId(() => null);
@@ -233,12 +220,36 @@ function ChessReplay() {
   );
 
   const currentAnalysis = currentNodeId ? (positionAnalysisMap[currentNodeId] ?? null) : null;
-  const moveMarksMap = useMemo(
-    () => buildMoveMarksByNodeId(tree, positionAnalysisMap, knownOpeningEpds),
-    [knownOpeningEpds, positionAnalysisMap, tree],
+  const openingsReady = OpeningsBook.isReady();
+
+  const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
+    if (!openingsReady) return {};
+    return buildMoveMarksByNodeId(tree, positionAnalysisMap);
+  }, [openingsReady, positionAnalysisMap, tree]);
+
+  useEffect(
+    function resolveLastBookOpeningName() {
+      const linePgn = currentLinePgn.trim();
+      if (!linePgn) {
+        setLastBookOpeningName(null);
+        return;
+      }
+
+      void OpeningsBook.getOpeningByPgn(linePgn)
+        .then((openingByPgn) => {
+          setLastBookOpeningName(openingByPgn?.name ?? null);
+        })
+        .catch((error) => {
+          console.error("Failed to resolve opening name for current line", error);
+          setLastBookOpeningName(null);
+        });
+    },
+    [currentLinePgn],
   );
-  const currentMoveMark = currentNodeId ? (moveMarksMap[currentNodeId] ?? null) : null;
-  const currentMoveSquares = useMemo(
+
+  const currentMoveMark: MoveMarkResult = currentNodeId ? (moveMarksMap[currentNodeId] ?? null) : null;
+
+  const currentMoveSquares: { from: string; to: string } = useMemo(
     function buildCurrentMoveSquares() {
       if (!currentNodeId) return null;
 
@@ -252,6 +263,7 @@ function ChessReplay() {
     },
     [currentNodeId, tree],
   );
+
   const moveMarksBySquare = useMemo<Record<string, MoveMark>>(
     function buildMoveMarksBySquare() {
       if (!currentMoveMark || !currentMoveSquares?.to) return {};
@@ -263,13 +275,16 @@ function ChessReplay() {
     [currentMoveMark, currentMoveSquares],
   );
   moveMarksBySquareRef.current = moveMarksBySquare;
-  const moveMarkSquareRenderer = useMemo(function buildMoveMarkSquareRenderer() {
-    return createMoveMarkSquareRenderer({
-      getMark(square: string) {
-        return moveMarksBySquareRef.current[square];
-      },
-    });
-  }, []);
+  const moveMarkSquareRenderer = useMemo(
+    () =>
+      createMoveMarkSquareRenderer({
+        getMark(square: string) {
+          return moveMarksBySquareRef.current[square];
+        },
+      }),
+    [],
+  );
+
   const currentFen = useMemo(
     () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
     [currentNodeId, tree],
@@ -333,8 +348,7 @@ function ChessReplay() {
 
   useEffect(
     function hydrateSelectedNodeFromCache() {
-      const engine = engineRef.current;
-      if (!engine || !currentNodeId) return;
+      if (!currentNodeId) return;
 
       const node = tree[currentNodeId];
       if (!node) return;
@@ -363,9 +377,6 @@ function ChessReplay() {
   );
 
   useEffect(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-
     let cancelled = false;
     void (async () => {
       const tasks = buildAnalysisTasks(tree, currentNodeId);
@@ -424,9 +435,6 @@ function ChessReplay() {
   }
 
   function runDeepAnalysis() {
-    const engine = engineRef.current;
-    if (!engine) return;
-
     const target = getSelectedAnalysisTarget(tree, currentNodeId);
     if (!target) return;
 
@@ -505,9 +513,6 @@ function ChessReplay() {
     });
     if (!moveResult) return;
 
-    const engine = engineRef.current;
-    if (!engine) return;
-
     try {
       const cachedEvaluation = await engine.getEvaluation(moveResult.fen, 0);
       if (cachedEvaluation) {
@@ -570,6 +575,7 @@ function ChessReplay() {
       setTree(nextTree);
       setActiveLineId(lastNodeId);
       setPgnInput(pgn);
+      setImportedFullPgn(pgn.trim());
       setPlayersInfo(mergedPlayersInfo);
       setPositionAnalysisMap({});
       setStatusText("PGN Imported");
@@ -590,6 +596,7 @@ function ChessReplay() {
     setCurrentNodeId(null);
     setActiveLineId(null);
     setPgnInput("");
+    setImportedFullPgn("");
     setPlayersInfo(null);
     setPositionAnalysisMap({});
     setStatusText("Interactive Mode");
@@ -727,7 +734,14 @@ function ChessReplay() {
 
         <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
           <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
-            <span>Move Tree</span>
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="shrink-0">Move Tree</span>
+              {lastBookOpeningName && (
+                <span className="text-xs font-medium text-sky-700 truncate" title={lastBookOpeningName}>
+                  {lastBookOpeningName}
+                </span>
+              )}
+            </span>
             <button
               onClick={clearTree}
               className="inline-flex items-center gap-1.5 text-[10px] text-red-500 hover:underline"
@@ -1162,12 +1176,16 @@ function toSeededDisplayLines(
 function buildMoveMarksByNodeId(
   tree: Record<string, MoveNode>,
   analysesByNodeId: Record<string, NodeAnalysis>,
-  knownOpeningEpds: ReadonlySet<string> | null,
 ): Record<string, MoveMarkResult> {
   const marksByNodeId: Record<string, MoveMarkResult> = {};
+  const pathKeyByNodeId = new Map<string, string | null>();
 
   Object.values(tree).forEach(function classifyNode(node) {
-    if (knownOpeningEpds?.has(OpeningsBook.toEpd(node.fen))) {
+    const movePathKey = getPgnToPosition(node.id, tree, pathKeyByNodeId);
+    const isKnownByFen = OpeningsBook.isKnownPositionByFen(node.fen);
+    const isKnownByMovePath = movePathKey ? OpeningsBook.isKnownMovePathKey(movePathKey) : false;
+
+    if (isKnownByFen || isKnownByMovePath) {
       marksByNodeId[node.id] = {
         mark: MoveMark.BOOK,
         evalLoss: 0,
@@ -1199,6 +1217,66 @@ function buildMoveMarksByNodeId(
   });
 
   return marksByNodeId;
+}
+
+function getPgnToPosition(
+  nodeId: string,
+  tree: Record<string, MoveNode>,
+  cache: Map<string, string | null>,
+): string | null {
+  if (cache.has(nodeId)) {
+    return cache.get(nodeId) ?? null;
+  }
+
+  const node = tree[nodeId];
+  if (!node) {
+    cache.set(nodeId, null);
+    return null;
+  }
+
+  if (!node.parentId) {
+    const rootPathKey = OpeningsBook.toMovePathKey([node.san]);
+    cache.set(nodeId, rootPathKey);
+    return rootPathKey;
+  }
+
+  const parentPathKey = getPgnToPosition(node.parentId, tree, cache);
+  if (!parentPathKey) {
+    const fallbackPathKey = OpeningsBook.toMovePathKey([node.san]);
+    cache.set(nodeId, fallbackPathKey);
+    return fallbackPathKey;
+  }
+
+  const nodePathKey = `${parentPathKey} ${node.san}`;
+  cache.set(nodeId, nodePathKey);
+  return nodePathKey;
+}
+
+function toLinePgn(nodeId: string, tree: Record<string, MoveNode>): string | null {
+  const sanMoves: string[] = [];
+  let currentNodeId: string | null = nodeId;
+
+  while (currentNodeId) {
+    const node = tree[currentNodeId];
+    if (!node) break;
+    sanMoves.unshift(node.san);
+    currentNodeId = node.parentId;
+  }
+
+  if (sanMoves.length === 0) return null;
+  return toPgnFromSanMoves(sanMoves);
+}
+
+function toPgnFromSanMoves(sanMoves: string[]): string {
+  return sanMoves
+    .map(function toPgnToken(sanMove, index) {
+      if (index % 2 === 0) {
+        return `${Math.floor(index / 2) + 1}. ${sanMove}`;
+      }
+
+      return sanMove;
+    })
+    .join(" ");
 }
 
 function getMoveSquares(baseFen: string, san: string): { from: string; to: string } | null {
