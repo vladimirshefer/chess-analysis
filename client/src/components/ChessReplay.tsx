@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
 import { Chess } from "chess.js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FaAnglesLeft,
   FaChevronLeft,
@@ -140,16 +140,16 @@ function ChessReplay() {
     setCurrentNodeId(() => null);
   }
 
-  function goBack() {
+  const goBack = useCallback(() => {
     setCurrentNodeId((previous) => {
       if (!previous || !tree[previous]) return previous;
       return tree[previous].parentId;
     });
-  }
+  }, [tree]);
 
-  function goForward() {
+  const goForward = useCallback(() => {
     setCurrentNodeId((previous) => getNextNodeId(previous, tree) ?? previous);
-  }
+  }, [tree]);
 
   useEffect(() => {
     const locationState = location.state as AnalyzerLocationState | null;
@@ -173,7 +173,7 @@ function ChessReplay() {
     return function cleanup() {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [tree]);
+  }, [goBack, tree]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -186,7 +186,7 @@ function ChessReplay() {
     return function cleanup() {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [tree]);
+  }, [goForward, tree]);
 
   const fullTreePgn = useMemo(() => {
     const roots = Object.values(tree).filter((node) => node.parentId === null);
@@ -289,6 +289,20 @@ function ChessReplay() {
     () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
     [currentNodeId, tree],
   );
+
+  const currentPositionGame = useMemo(() => new Chess(currentFen), [currentFen]);
+  const selectedSquareMoves = useMemo<Move[]>(
+    function buildSelectedSquareMoves() {
+      if (!selectedSquare) return [];
+
+      try {
+        return currentPositionGame.moves({ square: selectedSquare, verbose: true });
+      } catch {
+        return [];
+      }
+    },
+    [currentPositionGame, selectedSquare],
+  );
   const planView = useMemo(
     function buildPlanView() {
       if (!showPlans) return AnalyzerPageEnginePlan.toPlanView(currentFen, []);
@@ -309,19 +323,57 @@ function ChessReplay() {
   );
   const boardSquareStyles = useMemo(
     function buildBoardSquareStyles() {
-      if (planView.captureSquares.length === 0) return {};
+      const stylesBySquare: Record<string, Record<string, string | number>> = {};
 
-      const planCaptureStyles = planView.captureSquares.reduce<Record<string, Record<string, string | number>>>(
-        function collectCaptureStyles(result, square) {
-          result[square] = PLAN_CAPTURE_SQUARE_STYLE;
-          return result;
-        },
-        {},
-      );
+      function mergeSquareStyle(square: string, style: Record<string, string | number>) {
+        const current = stylesBySquare[square];
+        if (!current) {
+          stylesBySquare[square] = style;
+          return;
+        }
 
-      return planCaptureStyles;
+        const currentBoxShadow = typeof current.boxShadow === "string" ? current.boxShadow : "";
+        const nextBoxShadow = typeof style.boxShadow === "string" ? style.boxShadow : "";
+        const mergedBoxShadow =
+          currentBoxShadow && nextBoxShadow
+            ? `${currentBoxShadow}, ${nextBoxShadow}`
+            : nextBoxShadow || currentBoxShadow || undefined;
+
+        stylesBySquare[square] = {
+          ...current,
+          ...style,
+          ...(mergedBoxShadow ? { boxShadow: mergedBoxShadow } : {}),
+        };
+      }
+
+      planView.captureSquares.forEach(function applyCaptureSquareStyle(square) {
+        mergeSquareStyle(square, PLAN_CAPTURE_SQUARE_STYLE);
+      });
+
+      if (selectedSquare) {
+        mergeSquareStyle(selectedSquare, {
+          backgroundColor: "rgba(59, 130, 246, 0.35)",
+          boxShadow: "inset 0 0 0 3px rgba(30, 64, 175, 0.9)",
+        });
+      }
+
+      selectedSquareMoves.forEach(function applyLegalTargetStyle(move) {
+        const isCapture = move.flags.includes("c") || move.flags.includes("e");
+        mergeSquareStyle(move.to, {
+          ...(isCapture
+            ? {
+                boxShadow: "inset 0 0 0 4px rgba(30, 64, 175, 0.75)",
+              }
+            : {
+                background:
+                  "radial-gradient(circle, rgba(30, 64, 175, 0.45) 0%, rgba(30, 64, 175, 0.45) 22%, rgba(30, 64, 175, 0) 24%)",
+              }),
+        });
+      });
+
+      return stylesBySquare;
     },
-    [planView.captureSquares],
+    [planView.captureSquares, selectedSquare, selectedSquareMoves],
   );
   const canGoForward = useMemo(
     function checkCanGoForward() {
@@ -420,7 +472,7 @@ function ChessReplay() {
     return () => {
       cancelled = true;
     };
-  }, [tree, currentNodeId]);
+  }, [tree, currentNodeId, engine]);
 
   function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
     setPositionAnalysisMap((previous) => {
@@ -529,7 +581,44 @@ function ChessReplay() {
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    return makeMove({ from: sourceSquare, to: targetSquare, promotion: "q" }) !== null;
+    const moveResult = makeMove({ from: sourceSquare, to: targetSquare, promotion: "q" });
+    if (!moveResult) return false;
+    setSelectedSquare(null);
+    return true;
+  }
+
+  function onSquareClick(square: string) {
+    const clickedSquare = square as Square;
+
+    function isMovableOwnPiece(targetSquare: Square) {
+      const piece = currentPositionGame.get(targetSquare);
+      if (!piece) return false;
+      if (piece.color !== currentPositionGame.turn()) return false;
+      return currentPositionGame.moves({ square: targetSquare, verbose: true }).length > 0;
+    }
+
+    if (!selectedSquare) {
+      if (isMovableOwnPiece(clickedSquare)) setSelectedSquare(clickedSquare);
+      return;
+    }
+
+    if (selectedSquare === clickedSquare) {
+      setSelectedSquare(null);
+      return;
+    }
+
+    const moveResult = makeMove({ from: selectedSquare, to: clickedSquare, promotion: "q" });
+    if (moveResult) {
+      setSelectedSquare(null);
+      return;
+    }
+
+    if (isMovableOwnPiece(clickedSquare)) {
+      setSelectedSquare(clickedSquare);
+      return;
+    }
+
+    setSelectedSquare(null);
   }
 
   function importPgn(

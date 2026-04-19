@@ -3,7 +3,7 @@ import { ChessComClient } from "./ChessComClient.ts";
 export namespace ChessComGamesStorage {
   const STORAGE_KEY = "chess-com-games-library-v1";
 
-  export interface ChessComGameEntity extends ChessComClient.Dto.ChessComGameSummary {}
+  export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
 
   export interface ChessComGameRepository {
     get(id: string): ChessComGameEntity | null;
