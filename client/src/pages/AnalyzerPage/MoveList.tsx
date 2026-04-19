@@ -1,6 +1,54 @@
 import { MoveMarks, type MoveMarkResult, type MoveMark } from "../../lib/moveMarks.ts";
-import { areEvaluationsEqual, formatEvaluation } from "../../lib/evaluation.ts";
+import { formatEvaluation } from "../../lib/evaluation.ts";
 import { type MoveNode, type NodeAnalysis, ROOT_ANALYSIS_NODE_ID } from "../../components/ChessReplay.tsx";
+
+namespace MoveListView {
+  export type MoveTree = Record<string, MoveNode>;
+  export type Row = {
+    rowIndex: number;
+    whiteNode: MoveNode;
+    blackNode: MoveNode | null;
+    whiteVariations: MoveNode[];
+    blackVariations: MoveNode[];
+  };
+
+  export function getVariations(node: MoveNode | null, tree: MoveTree): MoveNode[] {
+    if (!node) {
+      return [];
+    }
+
+    return (
+      tree[node.parentId || ROOT_ANALYSIS_NODE_ID]?.children?.map(function mapVariationChild(id) {
+        return tree[id];
+      }) || getRootNodes(tree)
+    );
+  }
+
+  export function getRootNodes(tree: MoveTree): MoveNode[] {
+    return Object.values(tree).filter(function keepRootNode(rootNode) {
+      return !rootNode.parentId;
+    });
+  }
+
+  export function getRows(visiblePath: MoveNode[], tree: MoveTree): Row[] {
+    return visiblePath
+      .filter(function keepWhiteHalfMove(_, index) {
+        return index % 2 === 0;
+      })
+      .map(function toRow(whiteNode, rowIndex) {
+        const whiteIndex = rowIndex * 2;
+        const blackNode = visiblePath[whiteIndex + 1] ?? null;
+
+        return {
+          rowIndex,
+          whiteNode,
+          blackNode,
+          whiteVariations: getVariations(whiteNode, tree),
+          blackVariations: getVariations(blackNode, tree),
+        };
+      });
+  }
+}
 
 export function MoveList({
   setActiveLineId,
@@ -19,115 +67,203 @@ export function MoveList({
   setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
   setActiveLineId: (value: string) => void;
 }) {
+  const rows = MoveListView.getRows(visiblePath, tree);
+
   return (
     <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
-      {visiblePath
-        .filter(function keepWhiteHalfMove(_, index) {
-          return index % 2 === 0;
-        })
-        .map(function renderMoveRow(whiteNode, rowIndex) {
-          const whiteIndex = rowIndex * 2;
-          const blackNode = visiblePath[whiteIndex + 1] ?? null;
-          const whiteVariations =
-            tree[whiteNode.parentId || ROOT_ANALYSIS_NODE_ID]?.children?.map((id) => tree[id]) ||
-            Object.values(tree).filter((rootNode) => !rootNode.parentId);
-          const blackVariations = blackNode
-            ? tree[blackNode.parentId || ROOT_ANALYSIS_NODE_ID]?.children?.map((id) => tree[id]) ||
-              Object.values(tree).filter((rootNode) => !rootNode.parentId)
-            : [];
-          const hasWhiteVariations = whiteVariations.length > 1;
-          const hasBlackVariations = blackVariations.length > 1;
-          return (
-            <div key={whiteNode.id} className="flex flex-col gap-1">
-              <div className="flex items-start gap-2">
-                <span className="text-[11px] font-bold text-gray-400 w-8 pt-2">{`${rowIndex + 1}.`}</span>
-                <div className="flex-1 grid grid-cols-2 gap-2">
-                  {[whiteNode, blackNode].map(function renderHalfMove(node, index) {
-                    if (!node) {
-                      return (
-                        <div
-                          key={`empty-${rowIndex}-${index}`}
-                          className="w-full p-2 rounded border border-transparent"
-                        />
-                      );
-                    }
+      <MoveListRows
+        rows={rows}
+        currentNodeId={currentNodeId}
+        positionAnalysisMap={positionAnalysisMap}
+        moveMarksMap={moveMarksMap}
+        tree={tree}
+        setCurrentNodeId={setCurrentNodeId}
+        setActiveLineId={setActiveLineId}
+      />
+    </div>
+  );
+}
 
-                    const isFocus = node.id === currentNodeId;
-                    const nodeAnalysis = positionAnalysisMap[node.id];
-                    const moveMark = moveMarksMap[node.id];
+function MoveListRows({
+  rows,
+  currentNodeId,
+  positionAnalysisMap,
+  moveMarksMap,
+  tree,
+  setCurrentNodeId,
+  setActiveLineId,
+}: {
+  rows: MoveListView.Row[];
+  currentNodeId: string;
+  positionAnalysisMap: Record<string, NodeAnalysis>;
+  moveMarksMap: Record<string, MoveMarkResult>;
+  tree: Record<string, MoveNode>;
+  setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
+  setActiveLineId: (value: string) => void;
+}) {
+  return (
+    <>
+      {rows.map((row) => (
+        <MoveRow
+          key={row.whiteNode.id}
+          row={row}
+          currentNodeId={currentNodeId}
+          positionAnalysisMap={positionAnalysisMap}
+          moveMarksMap={moveMarksMap}
+          tree={tree}
+          setCurrentNodeId={setCurrentNodeId}
+          setActiveLineId={setActiveLineId}
+        />
+      ))}
+    </>
+  );
+}
 
-                    return (
-                      <button
-                        key={node.id}
-                        onClick={() => {
-                          setCurrentNodeId(node.id);
-                        }}
-                        className={`w-full flex justify-between items-center p-2 rounded border transition-all ${isFocus ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300" : "bg-white hover:bg-indigo-50 border-gray-200"}`}
-                      >
-                        <span className="flex items-center gap-2">
-                          <span className="font-bold font-mono text-sm">{node.san}</span>
-                          {moveMark && (
-                            <span
-                              className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}
-                            >
-                              {moveMark.mark}
-                            </span>
-                          )}
-                        </span>
-                        {nodeAnalysis && (
-                          <span className={`text-[10px] font-bold ${isFocus ? "text-indigo-100" : "text-gray-500"}`}>
-                            {formatEvaluation(nodeAnalysis.evaluation)}{" "}
-                            {nodeAnalysis.depth > 0 && <span className="opacity-50">d{nodeAnalysis.depth}</span>}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              {(hasWhiteVariations || hasBlackVariations) && (
-                <div className="ml-10 grid grid-cols-2 gap-2">
-                  <div className="min-h-0 border-l-2 border-indigo-100 pl-3 py-1 flex flex-wrap gap-1">
-                    {hasWhiteVariations &&
-                      whiteVariations.map(function renderWhiteVariation(variation) {
-                        if (variation.id === whiteNode.id) return null;
-                        return (
-                          <button
-                            key={variation.id}
-                            onClick={() => {
-                              setCurrentNodeId(variation.id);
-                              setActiveLineId(getDeepestLeaf(variation.id, tree));
-                            }}
-                            className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
-                          >
-                            alt: {variation.san}
-                          </button>
-                        );
-                      })}
-                  </div>
-                  <div className="min-h-0 border-l-2 border-indigo-100 pl-3 py-1 flex flex-wrap gap-1">
-                    {hasBlackVariations &&
-                      blackVariations.map(function renderBlackVariation(variation) {
-                        if (variation.id === blackNode?.id) return null;
-                        return (
-                          <button
-                            key={variation.id}
-                            onClick={() => {
-                              setCurrentNodeId(variation.id);
-                              setActiveLineId(getDeepestLeaf(variation.id, tree));
-                            }}
-                            className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
-                          >
-                            alt: {variation.san}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+function MoveRow({
+  row,
+  currentNodeId,
+  positionAnalysisMap,
+  moveMarksMap,
+  tree,
+  setCurrentNodeId,
+  setActiveLineId,
+}: {
+  row: MoveListView.Row;
+  currentNodeId: string;
+  positionAnalysisMap: Record<string, NodeAnalysis>;
+  moveMarksMap: Record<string, MoveMarkResult>;
+  tree: Record<string, MoveNode>;
+  setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
+  setActiveLineId: (value: string) => void;
+}) {
+  const hasWhiteVariations = row.whiteVariations.length > 1;
+  const hasBlackVariations = row.blackVariations.length > 1;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-start gap-2">
+        <span className="text-[11px] font-bold text-gray-400 w-8 pt-2">{`${row.rowIndex + 1}.`}</span>
+        <div className="flex-1 grid grid-cols-2 gap-2">
+          <HalfMoveCell
+            node={row.whiteNode}
+            currentNodeId={currentNodeId}
+            positionAnalysisMap={positionAnalysisMap}
+            moveMarksMap={moveMarksMap}
+            onSelect={setCurrentNodeId}
+          />
+          <HalfMoveCell
+            node={row.blackNode}
+            currentNodeId={currentNodeId}
+            positionAnalysisMap={positionAnalysisMap}
+            moveMarksMap={moveMarksMap}
+            onSelect={setCurrentNodeId}
+          />
+        </div>
+      </div>
+
+      {(hasWhiteVariations || hasBlackVariations) && (
+        <div className="ml-10 grid grid-cols-2 gap-2">
+          <VariationColumn
+            variations={hasWhiteVariations ? row.whiteVariations : []}
+            activeNodeId={row.whiteNode.id}
+            tree={tree}
+            setCurrentNodeId={setCurrentNodeId}
+            setActiveLineId={setActiveLineId}
+          />
+          <VariationColumn
+            variations={hasBlackVariations ? row.blackVariations : []}
+            activeNodeId={row.blackNode?.id ?? null}
+            tree={tree}
+            setCurrentNodeId={setCurrentNodeId}
+            setActiveLineId={setActiveLineId}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HalfMoveCell({
+  node,
+  currentNodeId,
+  positionAnalysisMap,
+  moveMarksMap,
+  onSelect,
+}: {
+  node: MoveNode | null;
+  currentNodeId: string;
+  positionAnalysisMap: Record<string, NodeAnalysis>;
+  moveMarksMap: Record<string, MoveMarkResult>;
+  onSelect: (value: ((prevState: string) => string) | string) => void;
+}) {
+  if (!node) {
+    return <div className="w-full p-2 rounded border border-transparent" />;
+  }
+
+  const isFocus = node.id === currentNodeId;
+  const nodeAnalysis = positionAnalysisMap[node.id];
+  const moveMark = moveMarksMap[node.id];
+
+  return (
+    <button
+      onClick={() => {
+        onSelect(node.id);
+      }}
+      className={`w-full flex justify-between items-center p-2 rounded border transition-all ${isFocus ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300" : "bg-white hover:bg-indigo-50 border-gray-200"}`}
+    >
+      <span className="flex items-center gap-2">
+        <span className="font-bold font-mono text-sm">{node.san}</span>
+        {moveMark && (
+          <span
+            className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}
+          >
+            {moveMark.mark}
+          </span>
+        )}
+      </span>
+      {nodeAnalysis && (
+        <span className={`text-[10px] font-bold ${isFocus ? "text-indigo-100" : "text-gray-500"}`}>
+          {formatEvaluation(nodeAnalysis.evaluation)}{" "}
+          {nodeAnalysis.depth > 0 && <span className="opacity-50">d{nodeAnalysis.depth}</span>}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function VariationColumn({
+  variations,
+  activeNodeId,
+  tree,
+  setCurrentNodeId,
+  setActiveLineId,
+}: {
+  variations: MoveNode[];
+  activeNodeId: string | null;
+  tree: Record<string, MoveNode>;
+  setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
+  setActiveLineId: (value: string) => void;
+}) {
+  return (
+    <div className="min-h-0 border-l-2 border-indigo-100 pl-3 py-1 flex flex-wrap gap-1">
+      {variations.map(function n(variation) {
+        if (variation.id === activeNodeId) {
+          return null;
+        }
+
+        return (
+          <button
+            key={variation.id}
+            onClick={() => {
+              setCurrentNodeId(variation.id);
+              setActiveLineId(getDeepestLeaf(variation.id, tree));
+            }}
+            className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
+          >
+            alt: {variation.san}
+          </button>
+        );
+      })}
     </div>
   );
 }
