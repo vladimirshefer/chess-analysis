@@ -1,6 +1,6 @@
 import { forwardRef, type ReactNode } from "react";
 import type { CustomSquareRenderer } from "react-chessboard/dist/chessboard/types";
-import { MoveMark } from "../lib/moveMarks";
+import { MoveMarks, type MoveMark } from "../lib/moveMarks";
 
 export function createMoveMarkSquareRenderer(delegate: {
   getMark(square: string): MoveMark | undefined;
@@ -37,23 +37,23 @@ export function createMoveMarkSquareRenderer(delegate: {
 
 function getMoveMarkIconPath(mark: MoveMark): string {
   switch (mark) {
-    case MoveMark.BOOK:
+    case MoveMarks.BOOK:
       return "/movemarks/book.svg";
-    case MoveMark.BEST:
+    case MoveMarks.BEST:
       return "/movemarks/best.svg";
-    case MoveMark.OK:
+    case MoveMarks.OK:
       return "/movemarks/good.svg";
-    case MoveMark.INACCURACY:
+    case MoveMarks.INACCURACY:
       return "/movemarks/inaccuracy.svg";
-    case MoveMark.MISTAKE:
+    case MoveMarks.MISTAKE:
       return "/movemarks/mistake.svg";
-    case MoveMark.MISS:
+    case MoveMarks.MISS:
       return "/movemarks/miss.svg";
-    case MoveMark.BLUNDER:
+    case MoveMarks.BLUNDER:
       return "/movemarks/blunder.svg";
-    case MoveMark.ONLY_MOVE:
+    case MoveMarks.ONLY_MOVE:
       return "/movemarks/great.svg";
-    case MoveMark.BRILLIANT:
+    case MoveMarks.BRILLIANT:
       return "/movemarks/brilliant.svg";
     default:
       return "/movemarks/good.svg";

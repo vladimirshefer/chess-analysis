@@ -6,7 +6,7 @@ interface MoveMarkLine {
   evaluation: number;
 }
 
-export const MoveMark = {
+export const MoveMarks = {
   BOOK: "Book",
   BEST: "Best",
   OK: "Ok",
@@ -18,7 +18,7 @@ export const MoveMark = {
   BRILLIANT: "Brilliant",
 } as const;
 
-export type MoveMark = (typeof MoveMark)[keyof typeof MoveMark];
+export type MoveMark = (typeof MoveMarks)[keyof typeof MoveMarks];
 
 export interface MoveMarkResult {
   mark: MoveMark;
@@ -49,14 +49,14 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
 
   if (playedBestMove) {
     if (isOnlyMove(input.parentFen, input.parentLines)) {
-      return { mark: MoveMark.ONLY_MOVE, evalLoss, bestMoveUci };
+      return { mark: MoveMarks.ONLY_MOVE, evalLoss, bestMoveUci };
     }
 
     if (isBrilliantMove(input.playedMoveSan, input.parentFen, input.parentLines)) {
-      return { mark: MoveMark.BRILLIANT, evalLoss, bestMoveUci };
+      return { mark: MoveMarks.BRILLIANT, evalLoss, bestMoveUci };
     }
 
-    return { mark: MoveMark.BEST, evalLoss, bestMoveUci };
+    return { mark: MoveMarks.BEST, evalLoss, bestMoveUci };
   }
 
   if (evalLoss >= 3) {
@@ -65,13 +65,13 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
       (mover === "w" && input.playedEvaluation >= 0) ||
       (mover === "b" && input.playedEvaluation <= 0)
     ) {
-      return { mark: MoveMark.MISS, evalLoss, bestMoveUci };
+      return { mark: MoveMarks.MISS, evalLoss, bestMoveUci };
     }
-    return { mark: MoveMark.BLUNDER, evalLoss, bestMoveUci };
+    return { mark: MoveMarks.BLUNDER, evalLoss, bestMoveUci };
   }
-  if (evalLoss >= 1.7) return { mark: MoveMark.MISTAKE, evalLoss, bestMoveUci };
-  if (evalLoss >= 0.8) return { mark: MoveMark.INACCURACY, evalLoss, bestMoveUci };
-  return { mark: MoveMark.OK, evalLoss, bestMoveUci };
+  if (evalLoss >= 1.7) return { mark: MoveMarks.MISTAKE, evalLoss, bestMoveUci };
+  if (evalLoss >= 0.8) return { mark: MoveMarks.INACCURACY, evalLoss, bestMoveUci };
+  return { mark: MoveMarks.OK, evalLoss, bestMoveUci };
 }
 
 function getSideToMove(fen: string): "w" | "b" {

@@ -37,7 +37,7 @@ export class PersistentChessEngine implements ChessEngine {
   ): Promise<FullMoveEvaluation> {
     const persisted = await this.repository.getBestForRequest(fen, options.minDepth, options.linesAmount);
     if (persisted) {
-      console.log(`Position: ${fen}, eval: ${persisted.evaluation}`);
+      console.log(`P Position: ${fen}, eval: ${persisted.evaluation}`);
       const result = trimEvaluationLines(toFullMoveEvaluation(fen, persisted), options.linesAmount);
       if (onUpdate) notifyUpdateSafely(onUpdate, { ...result, isFinal: true });
       return result;
@@ -51,7 +51,7 @@ export class PersistentChessEngine implements ChessEngine {
   async getEvaluation(fen: string, minDepth: number = 0): Promise<FullMoveEvaluation | null> {
     const persisted = await this.repository.getBestForRequest(fen, minDepth, 1);
     if (persisted) {
-      console.log(`Position: ${fen}, eval: ${persisted.evaluation}`);
+      console.log(`E Position: ${fen}, eval: ${persisted.evaluation}`);
       return toFullMoveEvaluation(fen, persisted);
     }
     return this.delegate.getEvaluation(fen, minDepth);
@@ -60,7 +60,7 @@ export class PersistentChessEngine implements ChessEngine {
   async getLines(fen: string, minDepth: number = 0, amount: number = 1): Promise<ChessEngineLine[] | null> {
     const persisted = await this.repository.getBestForRequest(fen, minDepth, amount);
     if (persisted) {
-      console.log(`Position: ${fen}, eval: ${persisted.evaluation}`);
+      console.log(`L Position: ${fen}, eval: ${persisted.evaluation}`);
       const lines = toFullMoveEvaluation(fen, persisted).lines;
       return lines.length >= amount ? lines.slice(0, amount) : null;
     }

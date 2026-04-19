@@ -37,13 +37,20 @@ import {
   START_FEN,
   toComparableEvaluationScore,
 } from "../lib/evaluation";
-import { classifyMoveMark, MoveMark, type MoveMarkResult, toMoveMarkEvaluation } from "../lib/moveMarks";
+import {
+  classifyMoveMark,
+  MoveMarks,
+  type MoveMark,
+  type MoveMarkResult,
+  toMoveMarkEvaluation,
+} from "../lib/moveMarks";
 import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
+import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 
-interface MoveNode {
+export interface MoveNode {
   id: string;
   san: string;
   fen: string;
@@ -79,7 +86,7 @@ interface DisplayEngineLine {
   lineRank: number;
 }
 
-interface NodeAnalysis {
+export interface NodeAnalysis {
   fen: string;
   evaluation: EngineEvaluation;
   depth: number;
@@ -101,18 +108,29 @@ interface AnalyzerLocationState {
   initialBoardOrientation?: "white" | "black";
 }
 
-const ROOT_ANALYSIS_NODE_ID = "__root__";
+export const ROOT_ANALYSIS_NODE_ID = "__root__";
 const PLAN_CAPTURE_SQUARE_STYLE = {
   backgroundColor: "rgba(220, 38, 38, 0.45)",
   boxShadow: "inset 0 0 0 3px rgba(185, 28, 28, 0.85)",
+};
+
+const TREE_SEED = {
+  __root__: {
+    id: ROOT_ANALYSIS_NODE_ID,
+    san: "",
+    fen: START_FEN,
+    parentId: null,
+    children: [],
+  },
 };
 
 function ChessReplay() {
   const location = useLocation();
   const navigate = useNavigate();
   const [pgnInput, setPgnInput] = useState("");
-  const [tree, setTree] = useState<Record<string, MoveNode>>({});
-  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
+  const [tree, setTree] = useState<Record<string, MoveNode>>({ ...TREE_SEED });
+
+  const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
   const [activeLineId, setActiveLineId] = useState<string | null>(null);
   const [positionAnalysisMap, setPositionAnalysisMap] = useState<Record<string, NodeAnalysis>>({});
   const [statusText, setStatusText] = useState("Interactive Mode");
@@ -123,10 +141,6 @@ function ChessReplay() {
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
   const currentLinePgn = useMemo(() => {
-    if (!currentNodeId) {
-      return "";
-    }
-
     return toLinePgn(currentNodeId, tree) ?? "";
   }, [currentNodeId, tree]);
 
@@ -143,8 +157,7 @@ function ChessReplay() {
 
   const goBack = useCallback(() => {
     setCurrentNodeId((previous) => {
-      if (!previous || !tree[previous]) return previous;
-      return tree[previous].parentId;
+      return tree[previous]?.parentId ?? ROOT_ANALYSIS_NODE_ID;
     });
   }, [tree]);
 
@@ -220,7 +233,7 @@ function ChessReplay() {
     [activeLineId, tree],
   );
 
-  const currentAnalysis = currentNodeId ? (positionAnalysisMap[currentNodeId] ?? null) : null;
+  const currentAnalysis = positionAnalysisMap[currentNodeId || ROOT_ANALYSIS_NODE_ID];
   const openingsReady = OpeningsBook.isReady();
 
   const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
@@ -248,12 +261,10 @@ function ChessReplay() {
     [currentLinePgn],
   );
 
-  const currentMoveMark: MoveMarkResult = currentNodeId ? (moveMarksMap[currentNodeId] ?? null) : null;
+  const currentMoveMark: MoveMarkResult = moveMarksMap[currentNodeId ?? ROOT_ANALYSIS_NODE_ID];
 
   const currentMoveSquares: { from: string; to: string } = useMemo(
     function buildCurrentMoveSquares() {
-      if (!currentNodeId) return null;
-
       const node = tree[currentNodeId];
       if (!node?.parentId) return null;
 
@@ -265,17 +276,16 @@ function ChessReplay() {
     [currentNodeId, tree],
   );
 
-  const moveMarksBySquare = useMemo<Record<string, MoveMark>>(
-    function buildMoveMarksBySquare() {
-      if (!currentMoveMark || !currentMoveSquares?.to) return {};
+  const moveMarksBySquare = useMemo<Record<string, MoveMark>>(() => {
+    if (!currentMoveMark || !currentMoveSquares?.to) return {};
 
-      return {
-        [currentMoveSquares.to]: currentMoveMark.mark,
-      };
-    },
-    [currentMoveMark, currentMoveSquares],
-  );
+    return {
+      [currentMoveSquares.to]: currentMoveMark.mark,
+    };
+  }, [currentMoveMark, currentMoveSquares]);
+
   moveMarksBySquareRef.current = moveMarksBySquare;
+
   const moveMarkSquareRenderer = useMemo(
     () =>
       createMoveMarkSquareRenderer({
@@ -286,10 +296,7 @@ function ChessReplay() {
     [],
   );
 
-  const currentFen = useMemo(
-    () => (!currentNodeId ? START_FEN : (tree[currentNodeId]?.fen ?? START_FEN)),
-    [currentNodeId, tree],
-  );
+  const currentFen: string = useMemo(() => tree[currentNodeId].fen, [currentNodeId, tree]);
 
   const currentPositionGame = useMemo(() => new Chess(currentFen), [currentFen]);
   const selectedSquareMoves = useMemo<Move[]>(
@@ -376,12 +383,7 @@ function ChessReplay() {
     },
     [planView.captureSquares, selectedSquare, selectedSquareMoves],
   );
-  const canGoForward = useMemo(
-    function checkCanGoForward() {
-      return getNextNodeId(currentNodeId, tree) !== null;
-    },
-    [currentNodeId, tree],
-  );
+  const canGoForward = useMemo(() => tree[currentNodeId]?.children?.[0] ?? false, [currentNodeId, tree]);
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
 
@@ -401,8 +403,6 @@ function ChessReplay() {
 
   useEffect(
     function hydrateSelectedNodeFromCache() {
-      if (!currentNodeId) return;
-
       const node = tree[currentNodeId];
       if (!node) return;
 
@@ -670,6 +670,7 @@ function ChessReplay() {
 
       setTree(nextTree);
       setActiveLineId(lastNodeId);
+      setCurrentNodeId(lastNodeId);
       setPgnInput(pgn);
       setImportedFullPgn(pgn.trim());
       setPlayersInfo(mergedPlayersInfo);
@@ -688,9 +689,9 @@ function ChessReplay() {
   }
 
   function clearTree() {
-    setTree({});
-    setCurrentNodeId(null);
-    setActiveLineId(null);
+    setTree({ ...TREE_SEED });
+    setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
+    setActiveLineId(ROOT_ANALYSIS_NODE_ID);
     setPgnInput("");
     setImportedFullPgn("");
     setPlayersInfo(null);
@@ -847,125 +848,15 @@ function ChessReplay() {
               <span>Clear Tree</span>
             </button>
           </h3>
-          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
-            {visiblePath
-              .filter(function keepWhiteHalfMove(_, index) {
-                return index % 2 === 0;
-              })
-              .map(function renderMoveRow(whiteNode, rowIndex) {
-                const whiteIndex = rowIndex * 2;
-                const blackNode = visiblePath[whiteIndex + 1] ?? null;
-                const whiteVariations =
-                  tree[whiteNode.parentId || "root"]?.children?.map(function toNode(id) {
-                    return tree[id];
-                  }) ||
-                  Object.values(tree).filter(function findRoots(rootNode) {
-                    return rootNode.parentId === null;
-                  });
-                const blackVariations = blackNode
-                  ? tree[blackNode.parentId || "root"]?.children?.map(function toNode(id) {
-                      return tree[id];
-                    }) ||
-                    Object.values(tree).filter(function findRoots(rootNode) {
-                      return rootNode.parentId === null;
-                    })
-                  : [];
-                const hasWhiteVariations = whiteVariations.length > 1;
-                const hasBlackVariations = blackVariations.length > 1;
-                return (
-                  <div key={whiteNode.id} className="flex flex-col gap-1">
-                    <div className="flex items-start gap-2">
-                      <span className="text-[11px] font-bold text-gray-400 w-8 pt-2">{`${rowIndex + 1}.`}</span>
-                      <div className="flex-1 grid grid-cols-2 gap-2">
-                        {[whiteNode, blackNode].map(function renderHalfMove(node, index) {
-                          if (!node) {
-                            return (
-                              <div
-                                key={`empty-${rowIndex}-${index}`}
-                                className="w-full p-2 rounded border border-transparent"
-                              />
-                            );
-                          }
-
-                          const isFocus = node.id === currentNodeId;
-                          const nodeAnalysis = positionAnalysisMap[node.id];
-                          const moveMark = moveMarksMap[node.id];
-
-                          return (
-                            <button
-                              key={node.id}
-                              onClick={function selectNode() {
-                                setCurrentNodeId(node.id);
-                              }}
-                              className={`w-full flex justify-between items-center p-2 rounded border transition-all ${isFocus ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300" : "bg-white hover:bg-indigo-50 border-gray-200"}`}
-                            >
-                              <span className="flex items-center gap-2">
-                                <span className="font-bold font-mono text-sm">{node.san}</span>
-                                {moveMark && (
-                                  <span
-                                    className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}
-                                  >
-                                    {moveMark.mark}
-                                  </span>
-                                )}
-                              </span>
-                              {nodeAnalysis && (
-                                <span
-                                  className={`text-[10px] font-bold ${isFocus ? "text-indigo-100" : "text-gray-500"}`}
-                                >
-                                  {formatEvaluation(nodeAnalysis.evaluation)}{" "}
-                                  {nodeAnalysis.depth > 0 && <span className="opacity-50">d{nodeAnalysis.depth}</span>}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    {(hasWhiteVariations || hasBlackVariations) && (
-                      <div className="ml-10 grid grid-cols-2 gap-2">
-                        <div className="min-h-0 border-l-2 border-indigo-100 pl-3 py-1 flex flex-wrap gap-1">
-                          {hasWhiteVariations &&
-                            whiteVariations.map(function renderWhiteVariation(variation) {
-                              if (variation.id === whiteNode.id) return null;
-                              return (
-                                <button
-                                  key={variation.id}
-                                  onClick={function selectWhiteVariation() {
-                                    setCurrentNodeId(variation.id);
-                                    setActiveLineId(getDeepestLeaf(variation.id, tree));
-                                  }}
-                                  className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
-                                >
-                                  alt: {variation.san}
-                                </button>
-                              );
-                            })}
-                        </div>
-                        <div className="min-h-0 border-l-2 border-indigo-100 pl-3 py-1 flex flex-wrap gap-1">
-                          {hasBlackVariations &&
-                            blackVariations.map(function renderBlackVariation(variation) {
-                              if (variation.id === blackNode?.id) return null;
-                              return (
-                                <button
-                                  key={variation.id}
-                                  onClick={function selectBlackVariation() {
-                                    setCurrentNodeId(variation.id);
-                                    setActiveLineId(getDeepestLeaf(variation.id, tree));
-                                  }}
-                                  className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
-                                >
-                                  alt: {variation.san}
-                                </button>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
+          <MoveList
+            visiblePath={visiblePath}
+            tree={tree}
+            currentNodeId={currentNodeId}
+            positionAnalysisMap={positionAnalysisMap}
+            moveMarksMap={moveMarksMap}
+            setCurrentNodeId={setCurrentNodeId}
+            setActiveLineId={setActiveLineId}
+          />
         </div>
 
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
@@ -1078,24 +969,8 @@ function getDisplayedPlayersInfo(
   };
 }
 
-function getRootNodeIds(tree: Record<string, MoveNode>): string[] {
-  return Object.values(tree)
-    .filter(function isRoot(node) {
-      return node.parentId === null;
-    })
-    .map(function toId(node) {
-      return node.id;
-    });
-}
-
-function getNextNodeId(currentNodeId: string | null, tree: Record<string, MoveNode>): string | null {
-  if (currentNodeId === null) {
-    return getRootNodeIds(tree)[0] ?? null;
-  }
-
-  const node = tree[currentNodeId];
-  if (!node || node.children.length === 0) return null;
-  return node.children[0];
+function getNextNodeId(currentNodeId: string, tree: Record<string, MoveNode>): string | null {
+  return tree[currentNodeId]?.children?.[0] ?? null;
 }
 
 function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string {
@@ -1109,6 +984,29 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
   const tasks: ScheduledTask[] = [];
   const taskKeys = new Set<string>();
 
+  function addTask(
+    nodeId: string,
+    fen: string,
+    label: string,
+    minDepth: number,
+    linesAmount: number,
+    priority: EngineEvaluationPriority,
+  ): void {
+    if (getTerminalEvaluation(fen)) return;
+
+    const key = [nodeId, fen, minDepth, linesAmount, priority].join("|");
+    if (taskKeys.has(key)) return;
+
+    taskKeys.add(key);
+    tasks.push({
+      nodeId,
+      fen,
+      label,
+      request: { minDepth, linesAmount },
+      priority,
+    });
+  }
+
   function addTasksForNodes(
     nodeIds: string[],
     minDepth: number,
@@ -1119,21 +1017,7 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
       if (!tree[nodeId]) continue;
       const fen = tree[nodeId].fen;
       const label = tree[nodeId].san || "___";
-      const request = { minDepth, linesAmount };
-
-      if (getTerminalEvaluation(fen)) continue;
-
-      const key = [nodeId, fen, minDepth, linesAmount, priority].join("|");
-      if (taskKeys.has(key)) continue;
-
-      taskKeys.add(key);
-      tasks.push({
-        nodeId,
-        fen: fen,
-        label: label,
-        request: request,
-        priority,
-      });
+      addTask(nodeId, fen, label, minDepth, linesAmount, priority);
     }
   }
 
@@ -1284,14 +1168,14 @@ function buildMoveMarksByNodeId(
 
     if (isKnownByFen || isKnownByMovePath) {
       marksByNodeId[node.id] = {
-        mark: MoveMark.BOOK,
+        mark: MoveMarks.BOOK,
         evalLoss: 0,
         bestMoveUci: null,
       };
       return;
     }
 
-    const parentAnalysis = node.parentId ? analysesByNodeId[node.parentId] : analysesByNodeId[ROOT_ANALYSIS_NODE_ID];
+    const parentAnalysis = analysesByNodeId[node.parentId ?? ROOT_ANALYSIS_NODE_ID];
     const nodeAnalysis = analysesByNodeId[node.id];
     const parentFen = node.parentId ? tree[node.parentId]?.fen : START_FEN;
     if (!parentFen) return;
@@ -1385,31 +1269,6 @@ function getMoveSquares(baseFen: string, san: string): { from: string; to: strin
     return { from: move.from, to: move.to };
   } catch {
     return null;
-  }
-}
-
-function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
-  switch (mark) {
-    case MoveMark.BOOK:
-      return isFocus ? "bg-sky-200 text-sky-900" : "bg-sky-100 text-sky-700";
-    case MoveMark.BEST:
-      return isFocus ? "bg-green-200 text-green-900" : "bg-green-100 text-green-700";
-    case MoveMark.OK:
-      return isFocus ? "bg-gray-200 text-gray-900" : "bg-gray-100 text-gray-700";
-    case MoveMark.INACCURACY:
-      return isFocus ? "bg-yellow-200 text-yellow-900" : "bg-yellow-100 text-yellow-800";
-    case MoveMark.MISTAKE:
-      return isFocus ? "bg-orange-200 text-orange-900" : "bg-orange-100 text-orange-800";
-    case MoveMark.MISS:
-      return isFocus ? "bg-cyan-200 text-cyan-900" : "bg-cyan-100 text-cyan-700";
-    case MoveMark.BLUNDER:
-      return isFocus ? "bg-red-200 text-red-900" : "bg-red-100 text-red-700";
-    case MoveMark.ONLY_MOVE:
-      return isFocus ? "bg-blue-200 text-blue-900" : "bg-blue-100 text-blue-700";
-    case MoveMark.BRILLIANT:
-      return isFocus ? "bg-teal-200 text-teal-900" : "bg-teal-100 text-teal-700";
-    default:
-      return isFocus ? "bg-gray-200 text-gray-900" : "bg-gray-100 text-gray-700";
   }
 }
 
