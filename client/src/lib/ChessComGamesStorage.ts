@@ -74,7 +74,7 @@ export namespace ChessComGamesStorage {
         if (!key) return;
         if (!isObjectRecord(value)) return;
         if (typeof value.id !== "string" || !value.id) return;
-        entitiesById[key] = value as ChessComGameEntity;
+        entitiesById[key] = value as unknown as ChessComGameEntity;
       });
       return entitiesById;
     } catch {
