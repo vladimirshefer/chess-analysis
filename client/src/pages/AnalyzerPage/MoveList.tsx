@@ -1,4 +1,4 @@
-import { MoveMarks, type MoveMarkResult, type MoveMark } from "../../lib/moveMarks.ts";
+import { MoveMarks, type MoveMarkResult, type MoveMark, MoveMarksShort, MoveMarksName } from "../../lib/moveMarks.ts";
 import { formatEvaluation } from "../../lib/evaluation.ts";
 import { type MoveNode, type NodeAnalysis, ROOT_ANALYSIS_NODE_ID } from "../../components/ChessReplay.tsx";
 
@@ -141,8 +141,8 @@ function MoveRow({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-start gap-2">
-        <span className="text-[11px] font-bold text-gray-400 w-8 pt-2">{`${row.rowIndex + 1}.`}</span>
+      <div className="flex items-start">
+        <span className="text-[10px] font-bold text-gray-400 pt-2 w-4">{`${row.rowIndex + 1}.`}</span>
         <div className="flex-1 grid grid-cols-2 gap-2">
           <HalfMoveCell
             node={row.whiteNode}
@@ -209,23 +209,38 @@ function HalfMoveCell({
       onClick={() => {
         onSelect(node.id);
       }}
-      className={`w-full flex justify-between items-center p-2 rounded border transition-all ${isFocus ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300" : "bg-white hover:bg-indigo-50 border-gray-200"}`}
+      className={`w-full flex relative justify-between items-center p-2 rounded border transition-all ${isFocus ? "bg-indigo-600 text-white border-indigo-700 shadow-md ring-2 ring-indigo-300" : "bg-white hover:bg-indigo-50 border-gray-200"}`}
     >
-      <span className="flex items-center gap-2">
-        <span className="font-bold font-mono text-sm">{node.san}</span>
+      <span className="flex items-center gap-1 overflow-hidden">
+        <span className="font-bold font-mono text-md md:text-sm">{node.san}</span>
         {moveMark && (
-          <span
-            className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}
-          >
-            {moveMark.mark}
-          </span>
+          <>
+            <span
+              className={`hidden md:block text-xs px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ellipsis ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}
+            >
+              {MoveMarksName[moveMark.mark]}
+            </span>
+            <span className={`block md:hidden text-xs`}>
+              <img
+                src={getMoveMarkIconPath(moveMark.mark)}
+                alt={MoveMarksShort[moveMark.mark]}
+                className="w-[1em] h-[1-em]"
+              />
+            </span>
+          </>
         )}
       </span>
       {nodeAnalysis && (
-        <span className={`text-[10px] font-bold ${isFocus ? "text-indigo-100" : "text-gray-500"}`}>
-          {formatEvaluation(nodeAnalysis.evaluation)}{" "}
-          {nodeAnalysis.depth > 0 && <span className="opacity-50">d{nodeAnalysis.depth}</span>}
-        </span>
+        <>
+          <div
+            className={`flex relative text-sm font-bold flex-nowrap gap-1 items-center ${isFocus ? "text-indigo-100" : "text-gray-500"}`}
+          >
+            <span>{formatEvaluation(nodeAnalysis.evaluation)}</span>
+            {nodeAnalysis?.depth > 0 && (
+              <span className="absolute right-0 bottom-[-1em] opacity-50 text-[7px]">d{nodeAnalysis.depth}</span>
+            )}
+          </div>
+        </>
       )}
     </button>
   );
@@ -271,7 +286,7 @@ function VariationColumn({
 function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
   switch (mark) {
     case MoveMarks.BOOK:
-      return isFocus ? "bg-sky-200 text-sky-900" : "bg-sky-100 text-sky-700";
+      return isFocus ? "bg-taupe-200 text-taupe-900" : "bg-taupe-100 taupe-taupe-700";
     case MoveMarks.BEST:
       return isFocus ? "bg-green-200 text-green-900" : "bg-green-100 text-green-700";
     case MoveMarks.OK:
@@ -281,7 +296,7 @@ function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
     case MoveMarks.MISTAKE:
       return isFocus ? "bg-orange-200 text-orange-900" : "bg-orange-100 text-orange-800";
     case MoveMarks.MISS:
-      return isFocus ? "bg-cyan-200 text-cyan-900" : "bg-cyan-100 text-cyan-700";
+      return isFocus ? "bg-cyan-200 text-red-900" : "bg-cyan-100 text-red-700";
     case MoveMarks.BLUNDER:
       return isFocus ? "bg-red-200 text-red-900" : "bg-red-100 text-red-700";
     case MoveMarks.ONLY_MOVE:
@@ -290,6 +305,31 @@ function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
       return isFocus ? "bg-teal-200 text-teal-900" : "bg-teal-100 text-teal-700";
     default:
       return isFocus ? "bg-gray-200 text-gray-900" : "bg-gray-100 text-gray-700";
+  }
+}
+
+function getMoveMarkIconPath(mark: MoveMark): string {
+  switch (mark) {
+    case MoveMarks.BOOK:
+      return "/movemarks/book.svg";
+    case MoveMarks.BEST:
+      return "/movemarks/best.svg";
+    case MoveMarks.OK:
+      return "/movemarks/good.svg";
+    case MoveMarks.INACCURACY:
+      return "/movemarks/inaccuracy.svg";
+    case MoveMarks.MISTAKE:
+      return "/movemarks/mistake.svg";
+    case MoveMarks.MISS:
+      return "/movemarks/miss.svg";
+    case MoveMarks.BLUNDER:
+      return "/movemarks/blunder.svg";
+    case MoveMarks.ONLY_MOVE:
+      return "/movemarks/great.svg";
+    case MoveMarks.BRILLIANT:
+      return "/movemarks/brilliant.svg";
+    default:
+      return "/movemarks/good.svg";
   }
 }
 

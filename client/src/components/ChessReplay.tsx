@@ -9,7 +9,7 @@ import {
   FaRotate,
   FaTrashCan,
 } from "react-icons/fa6";
-import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
+import { GiPerspectiveDiceSixFacesRandom, GiStrikingArrows } from "react-icons/gi";
 import { Chessboard } from "react-chessboard";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
@@ -152,7 +152,7 @@ function ChessReplay() {
   const moveMarksBySquareRef = useRef<Record<string, MoveMark>>({});
 
   function goStart() {
-    setCurrentNodeId(() => null);
+    setCurrentNodeId(() => ROOT_ANALYSIS_NODE_ID);
   }
 
   const goBack = useCallback(() => {
@@ -216,22 +216,21 @@ function ChessReplay() {
     return result.trim();
   }, [tree]);
 
-  const visiblePath = useMemo(
-    function buildVisiblePath() {
-      const path: MoveNode[] = [];
-      let current = activeLineId;
+  const visiblePath: MoveNode[] = useMemo(() => {
+    const path: MoveNode[] = [];
+    let current = activeLineId;
 
-      while (current) {
-        const node = tree[current];
-        if (!node) break;
-        path.unshift(node);
-        current = node.parentId;
-      }
+    while (current) {
+      const node = tree[current];
+      if (!node) break;
+      if (node.parentId === null) break;
+      path.unshift(node);
+      current = node.parentId;
+    }
 
-      return path;
-    },
-    [activeLineId, tree],
-  );
+    console.log("visiblePath", path);
+    return path;
+  }, [activeLineId, tree]);
 
   const currentAnalysis = positionAnalysisMap[currentNodeId || ROOT_ANALYSIS_NODE_ID];
   const openingsReady = OpeningsBook.isReady();
@@ -360,21 +359,20 @@ function ChessReplay() {
 
       if (selectedSquare) {
         mergeSquareStyle(selectedSquare, {
-          backgroundColor: "rgba(59, 130, 246, 0.35)",
-          boxShadow: "inset 0 0 0 3px rgba(30, 64, 175, 0.9)",
+          backgroundColor: "#fff6",
+          boxShadow: "inset 0 0 0 3px #fff6",
         });
       }
 
       selectedSquareMoves.forEach(function applyLegalTargetStyle(move) {
-        const isCapture = move.flags.includes("c") || move.flags.includes("e");
+        const isCapture = move.isCapture();
         mergeSquareStyle(move.to, {
           ...(isCapture
             ? {
-                boxShadow: "inset 0 0 0 4px rgba(30, 64, 175, 0.75)",
+                boxShadow: "inset 0 0 0 4px #fff6",
               }
             : {
-                background:
-                  "radial-gradient(circle, rgba(30, 64, 175, 0.45) 0%, rgba(30, 64, 175, 0.45) 22%, rgba(30, 64, 175, 0) 24%)",
+                background: "radial-gradient(circle, #fff6 0%, #fff6 22%, #fff0 26%)",
               }),
         });
       });
@@ -521,7 +519,8 @@ function ChessReplay() {
       if (!result) return null;
 
       const nextFen = tempGame.fen();
-      const nextNodeId = currentNodeId ? `${currentNodeId}|${result.san}` : result.san;
+      const nextNodeId =
+        currentNodeId && currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}|${result.san}` : result.san;
 
       if (tree[nextNodeId]) {
         setCurrentNodeId(nextNodeId);
@@ -701,7 +700,7 @@ function ChessReplay() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 p-6 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
+    <div className="flex flex-col lg:flex-row gap-8 p-4 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
       <div className="flex-1 flex flex-col items-center gap-2">
         <div className="w-full max-w-120">
           <PlayerCard info={displayedPlayersInfo.top} />
@@ -764,27 +763,19 @@ function ChessReplay() {
       </div>
 
       <div className="w-full lg:w-md flex flex-col gap-4">
-        <div className="bg-gray-50 p-4 rounded-sm border border-gray-200">
+        <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={function togglePlans() {
-                  setShowPlans(function toggle(previous) {
-                    return !previous;
-                  });
-                }}
+                onClick={() => setShowPlans((it) => !it)}
                 title={"Show engine plan arrows"}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded border ${showPlans ? "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100" : "text-gray-600 border-gray-300 bg-white hover:bg-gray-100"}`}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wide rounded border ${showPlans ? "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100" : "text-gray-600 border-gray-300 bg-white hover:bg-gray-100"}`}
               >
-                Show plans
+                <RenderIcon iconType={GiStrikingArrows} className="text-xs" />
               </button>
-              <span className="text-xs uppercase text-gray-400 font-bold">Eval</span>
-              <div className="text-sm font-mono text-indigo-500">
-                {currentAnalysis ? formatEvaluation(currentAnalysis.evaluation) : "--"}
-              </div>
               <button
                 onClick={runDeepAnalysis}
                 title={"Run deeper analysis"}
@@ -830,7 +821,7 @@ function ChessReplay() {
           </div>
         </div>
 
-        <div className="flex-1 bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col overflow-hidden">
+        <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
           <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
             <span className="flex items-center gap-2 min-w-0">
               <span className="shrink-0">Move Tree</span>

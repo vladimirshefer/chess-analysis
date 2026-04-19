@@ -7,6 +7,30 @@ interface MoveMarkLine {
 }
 
 export const MoveMarks = {
+  BOOK: "BOOK",
+  BEST: "BEST",
+  OK: "OK",
+  INACCURACY: "INACCURACY",
+  MISTAKE: "MISTAKE",
+  MISS: "MISS",
+  BLUNDER: "BLUNDER",
+  ONLY_MOVE: "ONLY_MOVE",
+  BRILLIANT: "BRILLIANT",
+} as const;
+
+export const MoveMarksShort = {
+  BOOK: "✓",
+  BEST: "☆",
+  OK: "✓",
+  INACCURACY: "?!",
+  MISTAKE: "?",
+  MISS: "✖",
+  BLUNDER: "??",
+  ONLY_MOVE: "!",
+  BRILLIANT: "!!",
+};
+
+export const MoveMarksName = {
   BOOK: "Book",
   BEST: "Best",
   OK: "Ok",
@@ -16,7 +40,7 @@ export const MoveMarks = {
   BLUNDER: "Blunder",
   ONLY_MOVE: "Only Move",
   BRILLIANT: "Brilliant",
-} as const;
+};
 
 export type MoveMark = (typeof MoveMarks)[keyof typeof MoveMarks];
 
