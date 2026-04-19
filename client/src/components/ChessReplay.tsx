@@ -438,11 +438,10 @@ function ChessReplay() {
     const target = getSelectedAnalysisTarget(tree, currentNodeId);
     if (!target) return;
 
-    setStatusText(`Analyzing ${target.label} (d22)...`);
-
     void engine
       .evaluate(target.fen, { minDepth: 22, linesAmount: 3 }, EngineEvaluationPriorities.IMMEDIATE, (update) => {
         syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
+        setStatusText(`Analyzing ${target.label} (d22)...`);
       })
       .then((result) => {
         syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, result, true));

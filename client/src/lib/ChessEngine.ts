@@ -54,8 +54,9 @@ export interface ChessEngine {
 }
 
 export function createChessEngine(): ChessEngine {
-  return new PersistentChessEngine(
-    new CachedChessEngine(new QueuedChessEngine(new NativeChessEngine()), sharedEvaluationCache),
+  return new CachedChessEngine(
+    new PersistentChessEngine(new QueuedChessEngine(new NativeChessEngine())),
+    sharedEvaluationCache,
   );
 }
 
