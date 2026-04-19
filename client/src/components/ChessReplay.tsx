@@ -39,9 +39,9 @@ import {
 } from "../lib/evaluation";
 import {
   classifyMoveMark,
-  MoveMarks,
   type MoveMark,
   type MoveMarkResult,
+  MoveMarks,
   toMoveMarkEvaluation,
 } from "../lib/moveMarks";
 import { OpeningsBook } from "../lib/OpeningsBook";
@@ -152,7 +152,7 @@ function ChessReplay() {
   const moveMarksBySquareRef = useRef<Record<string, MoveMark>>({});
 
   function goStart() {
-    setCurrentNodeId(() => ROOT_ANALYSIS_NODE_ID);
+    setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
   }
 
   const goBack = useCallback(() => {
@@ -392,7 +392,7 @@ function ChessReplay() {
 
   useEffect(
     function keepActiveLineVisible() {
-      if (!currentNodeId) return;
+      if (!currentNodeId || currentNodeId === ROOT_ANALYSIS_NODE_ID) return;
       if (visiblePath.some((node) => node.id === currentNodeId)) return;
       setActiveLineId(getDeepestLeaf(currentNodeId, tree));
     },
@@ -641,7 +641,7 @@ function ChessReplay() {
       const mergedPlayersInfo = mergePlayersInfo(parsedPlayersInfo, importedGameInfo?.players ?? null);
       const moves = tempGame.history();
       let lastNodeId: string | null = null;
-      const nextTree: Record<string, MoveNode> = {};
+      const nextTree: Record<string, MoveNode> = { ...TREE_SEED };
       const walker = new Chess();
 
       moves.forEach(function addMove(moveSan) {
@@ -700,12 +700,12 @@ function ChessReplay() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 p-4 max-w-7xl mx-auto bg-white rounded-xl shadow-lg border border-gray-100 min-h-[700px]">
+    <div className="flex flex-col lg:flex-row gap-8 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
       <div className="flex-1 flex flex-col items-center gap-2">
-        <div className="w-full max-w-120">
+        <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.top} />
         </div>
-        <div className="w-full max-w-130 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
+        <div className="w-full max-w-180 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
           <EvaluationThermometer
             evaluation={currentAnalysis?.evaluation ?? null}
             orientation={boardOrientation}
@@ -725,10 +725,12 @@ function ChessReplay() {
             />
           </div>
         </div>
-        <div className="w-full max-w-120">
+        <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.bottom} />
         </div>
+      </div>
 
+      <div className="w-full lg:w-md flex flex-col gap-4 shrink-0 lg:overflow-y-auto ">
         <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
           <button
             onClick={goStart}
@@ -760,9 +762,6 @@ function ChessReplay() {
             <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
         </div>
-      </div>
-
-      <div className="w-full lg:w-md flex flex-col gap-4">
         <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
           <div className="flex items-start justify-between gap-4 mb-3">
             <div>
