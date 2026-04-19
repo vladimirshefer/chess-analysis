@@ -1,4 +1,4 @@
-import { Chess } from "chess.js";
+import { Chess, type Move, type Square } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FaAnglesLeft,
@@ -120,6 +120,7 @@ function ChessReplay() {
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
   const [showPlans, setShowPlans] = useState(false);
   const [importedFullPgn, setImportedFullPgn] = useState("");
+  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
   const currentLinePgn = useMemo(() => {
     if (!currentNodeId) {
@@ -425,7 +426,7 @@ function ChessReplay() {
         cancelled = true;
       };
     },
-    [currentNodeId, tree],
+    [currentNodeId, engine, tree],
   );
 
   useEffect(() => {
@@ -473,6 +474,13 @@ function ChessReplay() {
       cancelled = true;
     };
   }, [tree, currentNodeId, engine]);
+
+  useEffect(
+    function clearSelectedSquareOnPositionChange() {
+      setSelectedSquare(null);
+    },
+    [currentFen],
+  );
 
   function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
     setPositionAnalysisMap((previous) => {
@@ -708,8 +716,9 @@ function ChessReplay() {
               id="AnalysisBoard"
               position={currentNodeId ? tree[currentNodeId].fen : START_FEN}
               onPieceDrop={onDrop}
+              onSquareClick={onSquareClick}
               boardOrientation={boardOrientation}
-              animationDuration={200}
+              animationDuration={300}
               customArrows={planView.arrows}
               customSquare={moveMarkSquareRenderer}
               customSquareStyles={boardSquareStyles}
