@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createEvaluationCache } from "../EvaluationCache.ts";
+import { createEvaluationCache } from "./EvaluationCache.ts";
 import {
   type ChessEngine,
   type ChessEngineLine,

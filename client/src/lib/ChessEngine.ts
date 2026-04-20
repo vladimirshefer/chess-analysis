@@ -1,4 +1,4 @@
-import { sharedEvaluationCache } from "./EvaluationCache.ts";
+import { sharedEvaluationCache } from "./chess-engine/EvaluationCache.ts";
 import { CachedChessEngine } from "./chess-engine/CachedChessEngine.ts";
 import { NativeChessEngine } from "./chess-engine/NativeChessEngine.ts";
 import { PersistentChessEngine } from "./chess-engine/PersistentChessEngine.ts";
@@ -8,6 +8,7 @@ import type { EngineEvaluation } from "./evaluation";
 export interface ChessEngineLine {
   /** UCI = Universal Chess Interface */
   uci: string;
+  /** Principal variation */
   pv: string[];
   evaluation: EngineEvaluation;
   depth: number;
@@ -21,6 +22,7 @@ export interface FullMoveEvaluation {
   /** Depth of the evaluation in half-moves */
   depth: number;
   lines: ChessEngineLine[];
+  isFinal?: boolean;
 }
 
 export interface EvaluationRequest {

@@ -1,4 +1,4 @@
-import { type EvaluationCache, sharedEvaluationCache } from "../EvaluationCache.ts";
+import { type EvaluationCache, sharedEvaluationCache } from "./EvaluationCache.ts";
 import {
   type ChessEngine,
   type ChessEngineLine,
@@ -26,11 +26,12 @@ export class CachedChessEngine implements ChessEngine {
   ): Promise<FullMoveEvaluation> {
     const terminalEvaluation = getTerminalEvaluation(fen);
     if (terminalEvaluation) {
-      const terminalResult: FullMoveEvaluation = {
+      const terminalResult: EvaluationUpdate = {
         fen,
         evaluation: terminalEvaluation,
         depth: 0,
         lines: [],
+        isFinal: true,
       };
       if (onUpdate) notifyUpdateSafely(onUpdate, { ...terminalResult, isFinal: true });
       return Promise.resolve(terminalResult);
@@ -38,9 +39,7 @@ export class CachedChessEngine implements ChessEngine {
 
     const cached = this.cache.getEvaluation(fen, options.minDepth);
     if (cached && cached.lines.length >= options.linesAmount) {
-      const cachedResult = trimEvaluationLines(cached, options.linesAmount);
-      if (onUpdate) notifyUpdateSafely(onUpdate, { ...cachedResult, isFinal: true });
-      return Promise.resolve(cachedResult);
+      if (onUpdate) notifyUpdateSafely(onUpdate, { ...cached, isFinal: true });
     }
 
     const result = await this.delegate.evaluate(fen, options, priority, onUpdate);
@@ -65,11 +64,4 @@ function notifyUpdateSafely(callback: (update: EvaluationUpdate) => void, update
   } catch (error) {
     console.error("Failed to deliver engine update to subscriber", error);
   }
-}
-
-function trimEvaluationLines(evaluation: FullMoveEvaluation, amount: number): FullMoveEvaluation {
-  return {
-    ...evaluation,
-    lines: evaluation.lines.slice(0, amount),
-  };
 }
