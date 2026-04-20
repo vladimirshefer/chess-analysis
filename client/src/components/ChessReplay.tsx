@@ -647,19 +647,20 @@ function ChessReplay() {
       moves.forEach(function addMove(moveSan) {
         const result = walker.move(moveSan);
         const nodeId = lastNodeId ? `${lastNodeId}|${result.san}` : result.san;
+        const parent = lastNodeId || ROOT_ANALYSIS_NODE_ID;
 
         if (!nextTree[nodeId]) {
           nextTree[nodeId] = {
             id: nodeId,
             san: result.san,
             fen: walker.fen(),
-            parentId: lastNodeId,
+            parentId: parent,
             children: [],
           };
-          if (lastNodeId) {
-            nextTree[lastNodeId] = {
-              ...nextTree[lastNodeId],
-              children: [...nextTree[lastNodeId].children, nodeId],
+          if (parent) {
+            nextTree[parent] = {
+              ...nextTree[parent],
+              children: [...nextTree[parent].children, nodeId],
             };
           }
         }
