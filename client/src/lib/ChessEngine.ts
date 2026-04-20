@@ -8,7 +8,7 @@ import type { EngineEvaluation } from "./evaluation";
 export interface ChessEngineLine {
   /** UCI = Universal Chess Interface */
   uci: string;
-  /** Principal variation */
+  /** Principal variation. Example: ["e2e4", "e7e5"]*/
   pv: string[];
   evaluation: EngineEvaluation;
   depth: number;

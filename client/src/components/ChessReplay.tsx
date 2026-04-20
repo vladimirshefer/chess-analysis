@@ -1058,23 +1058,25 @@ function uciToSanLine(uciString: string, baseFen: string): string[] {
   return sanMoves;
 }
 
-function toDisplayLine(baseFen: string, line: ChessEngineLine): DisplayEngineLine | null {
-  const sanMoves = uciToSanLine(line.pv.join(" "), baseFen);
-  if (sanMoves.length === 0) return null;
-
-  return {
-    suggestedMove: sanMoves[0],
-    suggestedMoveUci: line.uci,
-    engineLineUci: line.pv,
-    engineLine: sanMoves.join(" "),
-    score: line.evaluation,
-    depth: line.depth,
-    lineRank: line.multipv,
-  };
-}
-
 function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngineLine[] {
-  return lines.map((line) => toDisplayLine(baseFen, line)).filter((line) => line !== null);
+  return lines
+    .map((line) => {
+      const sanMoves = uciToSanLine(line.pv.join(" "), baseFen);
+      if (sanMoves.length === 0) return null;
+
+      const displayEngineLine: DisplayEngineLine = {
+        suggestedMove: sanMoves[0],
+        suggestedMoveUci: line.uci,
+        engineLineUci: line.pv,
+        engineLine: sanMoves.join(" "),
+        score: line.evaluation,
+        depth: line.depth,
+        lineRank: line.multipv,
+      };
+
+      return displayEngineLine;
+    })
+    .filter((line) => line !== null);
 }
 
 function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal: boolean): NodeAnalysis {
@@ -1097,7 +1099,7 @@ function buildSeededNodeAnalysis(
       ? toSeededDisplayLines(
           lineNextMovesUci,
           line.score,
-          line.depth,
+          line.depth - 1,
           uciToSanLine(lineNextMovesUci.join(" "), childFen),
         )
       : [];
@@ -1105,7 +1107,7 @@ function buildSeededNodeAnalysis(
   return {
     fen: childFen,
     evaluation: line.score,
-    depth: line.depth,
+    depth: line.depth - 1,
     lines: childLines,
     isFinal: false,
   };

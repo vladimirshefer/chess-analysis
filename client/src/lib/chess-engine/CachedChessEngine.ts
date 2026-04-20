@@ -40,6 +40,12 @@ export class CachedChessEngine implements ChessEngine {
     const cached = this.cache.getEvaluation(fen, options.minDepth);
     if (cached && cached.lines.length >= options.linesAmount) {
       if (onUpdate) notifyUpdateSafely(onUpdate, { ...cached, isFinal: true });
+      return Promise.resolve(cached);
+    }
+
+    const cachedWeak = this.cache.getEvaluation(fen, 0);
+    if (cachedWeak) {
+      if (onUpdate) notifyUpdateSafely(onUpdate, { ...cachedWeak, isFinal: false });
     }
 
     const result = await this.delegate.evaluate(fen, options, priority, onUpdate);
