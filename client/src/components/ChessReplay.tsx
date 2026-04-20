@@ -400,31 +400,30 @@ function ChessReplay() {
   );
 
   useEffect(
-    function hydrateSelectedNodeFromCache() {
-      const node = tree[currentNodeId];
-      if (!node) return;
+    function getCurrentMoveCachedAnalysis() {
+      const terminalAnalysis = buildTerminalNodeAnalysis(currentFen);
+      if (terminalAnalysis) {
+        syncSingleNodeAnalysis(currentNodeId, terminalAnalysis);
+        return;
+      }
 
-      let cancelled = false;
       void (async () => {
-        const cachedEvaluation = await engine.getEvaluation(node.fen, 0);
-        if (cancelled) return;
+        const cachedEvaluation = await engine.getEvaluation(currentFen, 0);
         if (cachedEvaluation) {
-          syncSingleNodeAnalysis(currentNodeId, toNodeAnalysis(node.fen, cachedEvaluation, true));
+          syncSingleNodeAnalysis(currentNodeId, {
+            fen: cachedEvaluation.fen,
+            evaluation: cachedEvaluation.evaluation,
+            depth: cachedEvaluation.depth,
+            lines: toDisplayLines(currentFen, cachedEvaluation.lines),
+            isFinal: true,
+          });
           return;
         }
-
-        const terminalAnalysis = buildTerminalNodeAnalysis(node.fen);
-        if (terminalAnalysis) syncSingleNodeAnalysis(currentNodeId, terminalAnalysis);
       })().catch((error) => {
-        if (cancelled) return;
         console.error("Failed to hydrate selected node analysis", error);
       });
-
-      return function cleanup() {
-        cancelled = true;
-      };
     },
-    [currentNodeId, engine, tree],
+    [currentFen, currentNodeId, engine, tree],
   );
 
   useEffect(() => {
@@ -1007,7 +1006,7 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
     for (const nodeId of nodeIds) {
       if (!tree[nodeId]) continue;
       const fen = tree[nodeId].fen;
-      const label = tree[nodeId].san || "___";
+      const label = tree[nodeId].san;
       addTask(nodeId, fen, label, minDepth, linesAmount, priority);
     }
   }
