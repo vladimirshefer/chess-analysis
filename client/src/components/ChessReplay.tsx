@@ -703,7 +703,11 @@ function ChessReplay() {
         </div>
         <div className="w-full max-w-180 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
           <EvaluationThermometer
-            evaluation={currentAnalysis?.evaluation != null ? absoluteNumericEvaluationToEngineEvaluation(currentAnalysis.evaluation) : null}
+            evaluation={
+              currentAnalysis?.evaluation != null
+                ? absoluteNumericEvaluationToEngineEvaluation(currentAnalysis.evaluation)
+                : null
+            }
             orientation={boardOrientation}
             className="w-6 self-stretch"
           />
@@ -1111,7 +1115,7 @@ function buildSeededNodeAnalysis(
 function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
   const absoluteTerminalEvaluation = getAbsoluteTerminalEvaluation(fen);
   if (absoluteTerminalEvaluation === null || absoluteTerminalEvaluation === undefined) {
-    return null
+    return null;
   }
 
   return {

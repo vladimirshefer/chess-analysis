@@ -74,7 +74,9 @@ export function getAbsoluteTerminalEvaluation(fen: string): AbsoluteNumericEvalu
 
   if (chess.isCheckmate()) {
     const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
-    return sideToMove==="w" ? -Evaluations.absoluteNumericEvaluationOfWhiteWin() : Evaluations.absoluteNumericEvaluationOfWhiteWin();
+    return sideToMove === "w"
+      ? -Evaluations.absoluteNumericEvaluationOfWhiteWin()
+      : Evaluations.absoluteNumericEvaluationOfWhiteWin();
   }
 
   if (chess.isDraw()) {
@@ -165,7 +167,7 @@ export namespace Evaluations {
     } else {
       const centipawns = clampInteger(evaluation, -MAX_CENTIPAWN, MAX_CENTIPAWN);
       const pawns = centipawns / 100;
-      return (centipawns < 0 ? "-" : centipawns>0 ? "+" : "") + Math.abs(pawns).toFixed(1);
+      return (centipawns < 0 ? "-" : centipawns > 0 ? "+" : "") + Math.abs(pawns).toFixed(1);
     }
   }
 }
