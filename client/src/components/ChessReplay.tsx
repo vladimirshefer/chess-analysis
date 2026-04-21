@@ -1011,12 +1011,12 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
     }
   }
 
-  if (currentNodeId) {
-    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.IMMEDIATE);
-    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.NEXT);
-  }
-
   addTasksForNodes(allNodeIds, 12, 1, EngineEvaluationPriorities.BACKGROUND);
+
+  if (currentNodeId) {
+    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.BACKGROUND);
+    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.BACKGROUND);
+  }
 
   return tasks;
 }
