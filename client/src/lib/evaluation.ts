@@ -68,6 +68,22 @@ export function getTerminalEvaluation(fen: string): EngineEvaluation | null {
   return null;
 }
 
+export function getAbsoluteTerminalEvaluation(fen: string): AbsoluteNumericEvaluation | null {
+  const chess = new Chess(fen);
+  if (!chess.isGameOver()) return null;
+
+  if (chess.isCheckmate()) {
+    const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
+    return sideToMove==="w" ? -Evaluations.absoluteNumericEvaluationOfWhiteWin() : Evaluations.absoluteNumericEvaluationOfWhiteWin();
+  }
+
+  if (chess.isDraw()) {
+    return 0;
+  }
+
+  return null;
+}
+
 const MAX_CENTIPAWN = 500_000;
 const MATE_BASE = 1_000_000;
 const MATE_MAX_DISTANCE = 999_999;
@@ -111,6 +127,10 @@ export namespace Evaluations {
 
   export function absoluteNumericEvaluationOfCentipawns(centipawns: number): AbsoluteNumericEvaluation {
     return clampInteger(centipawns ?? 0, -MAX_CENTIPAWN, MAX_CENTIPAWN);
+  }
+
+  export function absoluteNumericEvaluationOfWhiteWin(): AbsoluteNumericEvaluation {
+    return TERMINAL_RESULT_SCORE;
   }
 
   export function absoluteNumericEvaluationOfEngineEvaluation(evaluation: EngineEvaluation): AbsoluteNumericEvaluation {

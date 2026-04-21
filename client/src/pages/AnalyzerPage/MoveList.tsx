@@ -1,5 +1,5 @@
-import { MoveMarks, type MoveMarkResult, type MoveMark, MoveMarksShort, MoveMarksName } from "../../lib/moveMarks.ts";
-import { formatEvaluation } from "../../lib/evaluation.ts";
+import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksName, MoveMarksShort } from "../../lib/moveMarks.ts";
+import { Evaluations } from "../../lib/evaluation.ts";
 import { type MoveNode, type NodeAnalysis, ROOT_ANALYSIS_NODE_ID } from "../../components/ChessReplay.tsx";
 
 namespace MoveListView {
@@ -235,7 +235,7 @@ function HalfMoveCell({
           <div
             className={`flex relative text-sm font-bold flex-nowrap gap-1 items-center ${isFocus ? "text-indigo-100" : "text-gray-500"}`}
           >
-            <span>{formatEvaluation(nodeAnalysis.evaluation)}</span>
+            <span>{Evaluations.toString(nodeAnalysis.evaluation)}</span>
             {nodeAnalysis?.depth > 0 && (
               <span className="absolute right-0 bottom-[-1em] opacity-50 text-[7px]">d{nodeAnalysis.depth}</span>
             )}

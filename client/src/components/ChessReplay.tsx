@@ -31,9 +31,9 @@ import {
 import {
   type AbsoluteNumericEvaluation,
   absoluteNumericEvaluationToEngineEvaluation,
-  type EngineEvaluation,
   evalToNum,
   Evaluations,
+  getAbsoluteTerminalEvaluation,
   getTerminalEvaluation,
   START,
   START_FEN,
@@ -44,6 +44,7 @@ import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
+import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export interface MoveNode {
   id: string;
@@ -83,8 +84,7 @@ interface DisplayEngineLine {
 
 export interface NodeAnalysis {
   fen: string;
-  evaluation: EngineEvaluation;
-  evaluation1?: AbsoluteNumericEvaluation;
+  evaluation: AbsoluteNumericEvaluation;
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
@@ -408,7 +408,7 @@ function ChessReplay() {
         if (cachedEvaluation) {
           syncSingleNodeAnalysis(currentNodeId, {
             fen: cachedEvaluation.fen,
-            evaluation: cachedEvaluation.evaluation,
+            evaluation: absoluteNumericEvaluationOfEngineEvaluation(cachedEvaluation.evaluation),
             depth: cachedEvaluation.depth,
             lines: toDisplayLines(currentFen, cachedEvaluation.lines),
             isFinal: true,
@@ -703,7 +703,7 @@ function ChessReplay() {
         </div>
         <div className="w-full max-w-180 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
           <EvaluationThermometer
-            evaluation={currentAnalysis?.evaluation ?? null}
+            evaluation={currentAnalysis?.evaluation != null ? absoluteNumericEvaluationToEngineEvaluation(currentAnalysis.evaluation) : null}
             orientation={boardOrientation}
             className="w-6 self-stretch"
           />
@@ -1077,7 +1077,7 @@ function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngin
 function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal: boolean): NodeAnalysis {
   return {
     fen: evaluation.fen,
-    evaluation: evaluation.evaluation,
+    evaluation: absoluteNumericEvaluationOfEngineEvaluation(evaluation.evaluation),
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
@@ -1101,8 +1101,7 @@ function buildSeededNodeAnalysis(
 
   return {
     fen: childFen,
-    evaluation: absoluteNumericEvaluationToEngineEvaluation(line.evaluation),
-    evaluation1: line.evaluation,
+    evaluation: line.evaluation,
     depth: line.depth - 1,
     lines: childLines,
     isFinal: false,
@@ -1110,12 +1109,14 @@ function buildSeededNodeAnalysis(
 }
 
 function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
-  const evaluation = getTerminalEvaluation(fen);
-  if (!evaluation) return null;
+  const absoluteTerminalEvaluation = getAbsoluteTerminalEvaluation(fen);
+  if (absoluteTerminalEvaluation === null || absoluteTerminalEvaluation === undefined) {
+    return null
+  }
 
   return {
     fen,
-    evaluation,
+    evaluation: absoluteTerminalEvaluation,
     depth: 0,
     lines: [],
     isFinal: true,
@@ -1174,7 +1175,7 @@ function buildMoveMarksByNodeId(
     const mark = classifyMoveMark({
       parentFen,
       playedMoveSan: node.san,
-      playedEvaluation: evalToNum(nodeAnalysis.evaluation),
+      playedEvaluation: nodeAnalysis.evaluation,
       parentLines: parentAnalysis.lines.map(function toEngineLine(line: DisplayEngineLine) {
         return {
           uci: line.suggestedMoveUci,
@@ -1267,7 +1268,7 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
 
   return (
     left.fen === right.fen &&
-    evalToNum(left.evaluation) === evalToNum(right.evaluation) &&
+    left.evaluation === right.evaluation &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
     areDisplayLinesEqual(left.lines, right.lines)
