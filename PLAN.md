@@ -58,8 +58,14 @@ Summary: Add a compact horizontal main-line move strip with index-based navigati
 4. Simplify `evaluation.ts`: remove `EngineEvaluation`, `parseEngineEvaluation`, `getTerminalEvaluation`, `evalToNum`, and `absoluteNumericEvaluationToEngineEvaluation`; keep numeric-first helpers.
    TL;DR: migrate to one canonical eval type end-to-end (number), then clean old adapters/tests to eliminate dual-representation drift.
 
-### Imported PGN Analysis Gating
-Summary: imported PGN first analyzes the whole imported line into separate state; no selected-move auto-eval spends engine time until that pass finishes.
+### Imported PGN Analysis Priority
+Summary: imported PGN first analyzes the whole imported line into separate state; current-position evaluation is `BACKGROUND`, so it runs only after imported nodes are done.
 1. Add `ImportedLineAnalysisState` in `client/src/components/ChessReplay.tsx` with `importedPgn`, ordered `nodeIds`, `analysesByNodeId`, and `status`.
-2. Change `importPgn()` and analysis effects so import starts one line-wide analysis pass, while move navigation only updates UI and blocks click-driven auto-analysis during that pass.
+2. Change `importPgn()` and task scheduling so import starts one line-wide analysis pass first, while current selected-position evaluation stays lower priority instead of being hard-blocked.
 3. Render imported-line nodes from imported analysis first, fall back to normal interactive analysis otherwise, and keep imported analysis separately saveable for future game-library storage.
+
+### Imported PGN Non-Destructive Enrichment
+Summary: Keep imported PGN as canonical editable full text; never delete imported content, only enrich it.
+- [ ] In `ChessReplay`, make `fullPgn` the source of truth (use `setFullPgn`) and stop overwriting textarea from regenerated raw tree PGN.
+- [ ] In `PortableGameNotation`, add non-destructive merge that keeps headers/comments/annotations and inserts missing tree SAN fragments before the result token.
+- [ ] For added fragments, map engine marks to PGN suffixes only when supported (`!!`, `!`, `?!`, `?`, `??`) and skip unsupported marks.
