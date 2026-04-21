@@ -1,4 +1,4 @@
-import { type EngineEvaluation, formatEvaluation, GameResult, toComparableEvaluationScore } from "../lib/evaluation";
+import { type EngineEvaluation, evalToNum, formatEvaluation, GameResult } from "../lib/evaluation";
 
 interface ThermometerSegments {
   topShare: number;
@@ -61,7 +61,7 @@ function EvaluationThermometer({
 
 function getThermometerValue(evaluation: EngineEvaluation | null): number {
   if (evaluation === null) return 0;
-  return Math.max(-1, Math.min(1, toComparableEvaluationScore(evaluation) / 6));
+  return Math.max(-1, Math.min(1, evalToNum(evaluation) / 100 / 6));
 }
 
 function getThermometerSegments(

@@ -25,32 +25,6 @@ export function formatEvaluation(evaluation: EngineEvaluation): string {
   }
 }
 
-export function toComparableEvaluationScore(evaluation: EngineEvaluation): number {
-  switch (evaluation.kind) {
-    case "cp":
-      return evaluation.pawns;
-    case "mate":
-      return evaluation.moves >= 0 ? 1000 - Math.abs(evaluation.moves) : -1000 + Math.abs(evaluation.moves);
-    case "result":
-      if (evaluation.result === GameResult.WHITE_WIN) return 2000;
-      if (evaluation.result === GameResult.BLACK_WIN) return -2000;
-      return 0;
-  }
-}
-
-export function areEvaluationsEqual(left: EngineEvaluation, right: EngineEvaluation): boolean {
-  if (left.kind !== right.kind) return false;
-
-  switch (left.kind) {
-    case "cp":
-      return left.pawns === (right as Extract<EngineEvaluation, { kind: "cp" }>).pawns;
-    case "mate":
-      return left.moves === (right as Extract<EngineEvaluation, { kind: "mate" }>).moves;
-    case "result":
-      return left.result === (right as Extract<EngineEvaluation, { kind: "result" }>).result;
-  }
-}
-
 export const START = "start";
 export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -120,99 +94,68 @@ const TERMINAL_RESULT_SCORE = 2_000_000;
  */
 export type AbsoluteNumericEvaluation = number;
 
-export interface MixedPositionEvaluation {
-  centipawnEvaluation?: number;
-  mateInMoves?: number;
+export function evalToNum(evaluation: EngineEvaluation): AbsoluteNumericEvaluation {
+  return Evaluations.absoluteNumericEvaluationOfEngineEvaluation(evaluation);
 }
 
-export function evalToNum(evaluation: MixedPositionEvaluation): AbsoluteNumericEvaluation {
-  if (typeof evaluation.mateInMoves === "number") {
-    if (evaluation.mateInMoves === 0) {
+export namespace Evaluations {
+  export function absoluteNumericEvaluationOfMate(mateInMoves: number): AbsoluteNumericEvaluation {
+    if (mateInMoves === 0) {
       throw new Error("mateInMoves cannot be 0");
     }
-
-    const distance = clampInteger(Math.abs(evaluation.mateInMoves), 1, MATE_MAX_DISTANCE);
+    const distance = clampInteger(Math.abs(mateInMoves), 1, MATE_MAX_DISTANCE);
     const encodedDistance = MATE_MAX_DISTANCE - distance;
     const encodedMate = MATE_BASE + encodedDistance;
-    return evaluation.mateInMoves > 0 ? encodedMate : -encodedMate;
+    return mateInMoves > 0 ? encodedMate : -encodedMate;
   }
 
-  return clampInteger(evaluation.centipawnEvaluation ?? 0, -MAX_CENTIPAWN, MAX_CENTIPAWN);
+  export function absoluteNumericEvaluationOfCentipawns(centipawns: number): AbsoluteNumericEvaluation {
+    return clampInteger(centipawns ?? 0, -MAX_CENTIPAWN, MAX_CENTIPAWN);
+  }
+
+  export function absoluteNumericEvaluationOfEngineEvaluation(evaluation: EngineEvaluation): AbsoluteNumericEvaluation {
+    if (evaluation.kind === "mate") {
+      return Evaluations.absoluteNumericEvaluationOfMate(evaluation.moves);
+    }
+    if (evaluation.kind === "cp") {
+      return Evaluations.absoluteNumericEvaluationOfCentipawns(evaluation.pawns * 100);
+    }
+    if (evaluation.kind === "result") {
+      return evaluation.result === "0-1"
+        ? -TERMINAL_RESULT_SCORE
+        : evaluation.result === "1-0"
+          ? TERMINAL_RESULT_SCORE
+          : 0;
+    }
+  }
+
+  export function toString(evaluation: AbsoluteNumericEvaluation): string {
+    return `${evaluation}`;
+  }
 }
 
-export function numToEval(score: AbsoluteNumericEvaluation): MixedPositionEvaluation {
-  const normalizedScore = Math.trunc(score);
-  const absoluteScore = Math.abs(normalizedScore);
+export function absoluteNumericEvaluationToEngineEvaluation(score: AbsoluteNumericEvaluation): EngineEvaluation {
+  if (Math.abs(score) === TERMINAL_RESULT_SCORE) {
+    return {
+      kind: "result",
+      result: score > 0 ? GameResult.WHITE_WIN : GameResult.BLACK_WIN,
+    };
+  }
+  const absoluteScore = Math.abs(score);
 
   if (absoluteScore >= MATE_BASE) {
     const encodedDistance = absoluteScore - MATE_BASE;
     const distance = clampInteger(MATE_MAX_DISTANCE - encodedDistance, 1, MATE_MAX_DISTANCE);
-    return { mateInMoves: normalizedScore > 0 ? distance : -distance };
-  }
-
-  return {
-    centipawnEvaluation: clampInteger(normalizedScore, -MAX_CENTIPAWN, MAX_CENTIPAWN),
-  };
-}
-
-export function engineEvaluationToAbsoluteNumericEvaluation(
-  fen: string,
-  evaluation: EngineEvaluation,
-): AbsoluteNumericEvaluation {
-  switch (evaluation.kind) {
-    case "cp":
-      return evalToNum({ centipawnEvaluation: evaluation.pawns * 100 });
-    case "mate":
-      return evalToNum({ mateInMoves: evaluation.moves });
-    case "result": {
-      if (evaluation.result === GameResult.DRAW) return 0;
-      const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
-      const sideToMoveWon =
-        (sideToMove === "w" && evaluation.result === GameResult.WHITE_WIN) ||
-        (sideToMove === "b" && evaluation.result === GameResult.BLACK_WIN);
-      return sideToMoveWon ? TERMINAL_RESULT_SCORE : -TERMINAL_RESULT_SCORE;
-    }
-  }
-}
-
-export function absoluteNumericEvaluationToEngineEvaluation(
-  fen: string,
-  score: AbsoluteNumericEvaluation,
-): EngineEvaluation {
-  const normalizedScore = Math.trunc(score);
-  if (Math.abs(normalizedScore) === TERMINAL_RESULT_SCORE) {
-    const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
-    const sideToMoveWon = normalizedScore > 0;
-    if (sideToMove === "w") {
-      return {
-        kind: "result",
-        result: sideToMoveWon ? GameResult.WHITE_WIN : GameResult.BLACK_WIN,
-      };
-    }
-
-    return {
-      kind: "result",
-      result: sideToMoveWon ? GameResult.BLACK_WIN : GameResult.WHITE_WIN,
-    };
-  }
-
-  if (normalizedScore === 0) {
-    const terminal = getTerminalEvaluation(fen);
-    if (terminal?.kind === "result" && terminal.result === GameResult.DRAW) return terminal;
-  }
-
-  const mixed = numToEval(normalizedScore);
-  if (typeof mixed.mateInMoves === "number") {
     return {
       kind: "mate",
-      moves: mixed.mateInMoves,
+      moves: score > 0 ? distance : -distance,
+    };
+  } else {
+    return {
+      kind: "cp",
+      pawns: clampInteger(score, -MAX_CENTIPAWN, MAX_CENTIPAWN) / 100,
     };
   }
-
-  return {
-    kind: "cp",
-    pawns: (mixed.centipawnEvaluation ?? 0) / 100,
-  };
 }
 
 function clampInteger(value: number, min: number, max: number): number {

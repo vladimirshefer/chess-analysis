@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { evalToNum } from "./evaluation.ts";
+import { Evaluations } from "./evaluation.ts";
 
 namespace IndexedDbTestMock {
   interface ObjectStoreDefinition {
@@ -224,11 +224,11 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
       positionFen: "fen-a",
       engineId: "stockfish-16.1-lite",
       searchDepth: 12,
-      evaluation: evalToNum({ centipawnEvaluation: 35 }),
+      evaluation: 35,
       variationLines: [
         {
           principalVariationMoves: ["e2e4", "e7e5"],
-          evaluation: evalToNum({ centipawnEvaluation: 35 }),
+          evaluation: 35,
         },
       ],
     });
@@ -258,11 +258,11 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
       positionFen: "fen-b",
       engineId: "stockfish-16.1-lite",
       searchDepth: 12,
-      evaluation: evalToNum({ centipawnEvaluation: 120 }),
+      evaluation: 120,
       variationLines: [
         {
           principalVariationMoves: ["e2e4"],
-          evaluation: evalToNum({ centipawnEvaluation: 120 }),
+          evaluation: 120,
         },
       ],
     });
@@ -271,15 +271,15 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
       positionFen: "fen-b",
       engineId: "stockfish-16.1-lite",
       searchDepth: 16,
-      evaluation: evalToNum({ centipawnEvaluation: 50 }),
+      evaluation: 50,
       variationLines: [
         {
           principalVariationMoves: ["d2d4"],
-          evaluation: evalToNum({ centipawnEvaluation: 50 }),
+          evaluation: 50,
         },
         {
           principalVariationMoves: ["c2c4"],
-          evaluation: evalToNum({ centipawnEvaluation: 30 }),
+          evaluation: 30,
         },
       ],
     });
@@ -288,11 +288,11 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
       positionFen: "fen-b",
       engineId: "stockfish-16.1-lite",
       searchDepth: 14,
-      evaluation: evalToNum({ mateInMoves: 4 }),
+      evaluation: Evaluations.absoluteNumericEvaluationOfMate({ mateInMoves: 4 }.mateInMoves),
       variationLines: [
         {
           principalVariationMoves: ["h7h8q"],
-          evaluation: evalToNum({ mateInMoves: 4 }),
+          evaluation: Evaluations.absoluteNumericEvaluationOfMate({ mateInMoves: 4 }.mateInMoves),
         },
       ],
     });
@@ -303,7 +303,7 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
 
     expect(all).toHaveLength(1);
     expect(all[0].searchDepth).toBe(16);
-    expect(all[0].evaluation).toBe(evalToNum({ centipawnEvaluation: 50 }));
+    expect(all[0].evaluation).toBe(50);
     expect(best?.searchDepth).toBe(16);
     expect(withTwoLines?.searchDepth).toBe(16);
     expect(withTwoLines?.variationLines).toHaveLength(2);
@@ -317,11 +317,11 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
       positionFen: "fen-c",
       engineId: "stockfish-16.1-lite",
       searchDepth: 12,
-      evaluation: evalToNum({ centipawnEvaluation: 10 }),
+      evaluation: 10,
       variationLines: [
         {
           principalVariationMoves: ["g1f3"],
-          evaluation: evalToNum({ centipawnEvaluation: 10 }),
+          evaluation: 10,
         },
       ],
     });
@@ -329,11 +329,11 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
       positionFen: "fen-d",
       engineId: "stockfish-16.1-lite",
       searchDepth: 12,
-      evaluation: evalToNum({ centipawnEvaluation: 20 }),
+      evaluation: 20,
       variationLines: [
         {
           principalVariationMoves: ["c2c4"],
-          evaluation: evalToNum({ centipawnEvaluation: 20 }),
+          evaluation: 20,
         },
       ],
     });
@@ -346,7 +346,7 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
 
   it("throws for mate 0 conversion", async function testCase() {
     expect(function throwForMateZero() {
-      evalToNum({ mateInMoves: 0 });
+      Evaluations.absoluteNumericEvaluationOfMate({ mateInMoves: 0 }.mateInMoves);
     }).toThrow("mateInMoves cannot be 0");
   });
 });

@@ -29,21 +29,14 @@ import {
   type PlayerInfo,
 } from "../lib/gameInfo";
 import {
-  areEvaluationsEqual,
   type EngineEvaluation,
+  evalToNum,
   formatEvaluation,
   getTerminalEvaluation,
   START,
   START_FEN,
-  toComparableEvaluationScore,
 } from "../lib/evaluation";
-import {
-  classifyMoveMark,
-  type MoveMark,
-  type MoveMarkResult,
-  MoveMarks,
-  toMoveMarkEvaluation,
-} from "../lib/moveMarks";
+import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from "../lib/moveMarks";
 import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
@@ -789,7 +782,7 @@ function ChessReplay() {
               <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>
             )}
             {currentAnalysis?.lines.map(function renderLine(line, index) {
-              const scoreValue = toComparableEvaluationScore(line.score);
+              const scoreValue = evalToNum(line.score);
               return (
                 <button
                   key={index}
@@ -1177,11 +1170,11 @@ function buildMoveMarksByNodeId(
     const mark = classifyMoveMark({
       parentFen,
       playedMoveSan: node.san,
-      playedEvaluation: toMoveMarkEvaluation(nodeAnalysis.evaluation),
-      parentLines: parentAnalysis.lines.map(function toEngineLine(line) {
+      playedEvaluation: evalToNum(nodeAnalysis.evaluation),
+      parentLines: parentAnalysis.lines.map(function toEngineLine(line: DisplayEngineLine) {
         return {
           uci: line.suggestedMoveUci,
-          evaluation: toMoveMarkEvaluation(line.score),
+          evaluation: evalToNum(line.score),
         };
       }),
     });
@@ -1270,7 +1263,7 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
 
   return (
     left.fen === right.fen &&
-    areEvaluationsEqual(left.evaluation, right.evaluation) &&
+    evalToNum(left.evaluation) === evalToNum(right.evaluation) &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
     areDisplayLinesEqual(left.lines, right.lines)
@@ -1289,7 +1282,7 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
       leftLine.suggestedMoveUci !== rightLine.suggestedMoveUci ||
       leftLine.engineLineUci.join(" ") !== rightLine.engineLineUci.join(" ") ||
       leftLine.engineLine !== rightLine.engineLine ||
-      !areEvaluationsEqual(leftLine.score, rightLine.score) ||
+      !(evalToNum(leftLine.score) === evalToNum(rightLine.score)) ||
       leftLine.depth !== rightLine.depth ||
       leftLine.lineRank !== rightLine.lineRank
     ) {

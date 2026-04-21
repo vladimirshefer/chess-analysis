@@ -296,7 +296,7 @@ function getMoveMarkBadgeClass(mark: MoveMark, isFocus: boolean): string {
     case MoveMarks.MISTAKE:
       return isFocus ? "bg-orange-200 text-orange-900" : "bg-orange-100 text-orange-800";
     case MoveMarks.MISS:
-      return isFocus ? "bg-cyan-200 text-red-900" : "bg-cyan-100 text-red-700";
+      return isFocus ? "bg-red-200 text-red-900" : "bg-red-100 text-red-700";
     case MoveMarks.BLUNDER:
       return isFocus ? "bg-red-200 text-red-900" : "bg-red-100 text-red-700";
     case MoveMarks.ONLY_MOVE:
