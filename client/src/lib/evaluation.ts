@@ -163,7 +163,7 @@ export namespace Evaluations {
     if (absoluteValue >= MATE_BASE) {
       const encodedDistance = absoluteValue - MATE_BASE;
       const distance = clampInteger(MATE_MAX_DISTANCE - encodedDistance, 1, MATE_MAX_DISTANCE);
-      return evaluation > 0 ? `+M${distance}` : `-M${-distance}`;
+      return evaluation > 0 ? `+M${distance}` : `-M${distance}`;
     } else {
       const centipawns = clampInteger(evaluation, -MAX_CENTIPAWN, MAX_CENTIPAWN);
       const pawns = centipawns / 100;
