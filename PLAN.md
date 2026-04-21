@@ -37,3 +37,16 @@ Add Total Game Overview panel
 - Should be editable by user, edits are reflected on the board and the move-tree component.
 - Should support user names and other pieces.
 - Optional but cool: Support syntax highlight and autocomplete (when i write a move - suggest legal moves)
+
+### Book Move Depth 22 Plan
+Summary: All book moves are queued at depth 22; non-book behavior stays unchanged.
+1. Add `BOOK_ANALYSIS_DEPTH = 22` in `client/src/components/ChessReplay.tsx` and reuse it in task scheduling.
+2. In `buildAnalysisTasks`, detect book nodes by existing rules (known FEN or known move-path key) and force `minDepth` to `22`.
+3. Keep queue/dedup/deep-analysis logic unchanged; validate book nodes show `d22` while non-book flow stays `12/16` + background behavior.
+
+### EngineEvaluation -> AbsoluteNumericEvaluation (Research Plan)
+1. Replace `EngineEvaluation` in core engine contracts (`ChessEngineLine`, `FullMoveEvaluation`, cache interface) with `AbsoluteNumericEvaluation`.
+2. Update `NativeChessEngine`/`CachedChessEngine`/`PersistentChessEngine` flow to produce, pass, persist, and hydrate only numeric evaluations (drop object<->number conversion bridges).
+3. Refactor `EvaluationThermometer` and `ChessReplay` call sites to use numeric formatting/parsing helpers from `Evaluations` only.
+4. Simplify `evaluation.ts`: remove `EngineEvaluation`, `parseEngineEvaluation`, `getTerminalEvaluation`, `evalToNum`, and `absoluteNumericEvaluationToEngineEvaluation`; keep numeric-first helpers.
+   TL;DR: migrate to one canonical eval type end-to-end (number), then clean old adapters/tests to eliminate dual-representation drift.
