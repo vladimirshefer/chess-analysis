@@ -40,8 +40,10 @@ import {
 } from "../lib/evaluation";
 import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from "../lib/moveMarks";
 import { OpeningsBook } from "../lib/OpeningsBook";
+import { PortableGameNotation } from "../lib/PortableGameNotation";
 import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
+import { MoveLine } from "./MoveLine";
 import RenderIcon from "./RenderIcon";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
@@ -133,8 +135,14 @@ function ChessReplay() {
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
   const [showPlans, setShowPlans] = useState(false);
-  const [importedFullPgn, setImportedFullPgn] = useState("");
+  const [fullPgn, setFullPgn] = useState("");
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const mainLineNodeIds = useMemo(
+    function buildMainLineNodeIds() {
+      return getMainLineNodeIds(tree);
+    },
+    [tree],
+  );
 
   const currentLinePgn = useMemo(() => {
     return toLinePgn(currentNodeId, tree) ?? "";
@@ -198,20 +206,6 @@ function ChessReplay() {
     };
   }, [goForward, tree]);
 
-  const fullTreePgn = useMemo(() => {
-    const roots = Object.values(tree).filter((node) => node.parentId === null);
-    if (roots.length === 0) return "";
-
-    let result = "";
-    roots.forEach((root, index) => {
-      result +=
-        (index === 0 ? "" : "(") +
-        generatePgnString(root.id, 1, true, index !== 0, tree).trim() +
-        (index === 0 ? " " : ") ");
-    });
-    return result.trim();
-  }, [tree]);
-
   const visiblePath: MoveNode[] = useMemo(() => {
     const path: MoveNode[] = [];
     let current = activeLineId;
@@ -224,7 +218,6 @@ function ChessReplay() {
       current = node.parentId;
     }
 
-    console.log("visiblePath", path);
     return path;
   }, [activeLineId, tree]);
 
@@ -235,6 +228,38 @@ function ChessReplay() {
     if (!openingsReady) return {};
     return buildMoveMarksByNodeId(tree, positionAnalysisMap);
   }, [openingsReady, positionAnalysisMap, tree]);
+
+  const mainLinePgn = useMemo(
+    function buildMainLinePgn() {
+      const mainLineMoves = mainLineNodeIds
+        .map(function toMainLineMove(nodeId) {
+          const node = tree[nodeId];
+          if (!node?.san) return null;
+
+          return {
+            san: node.san,
+            mark: toNativeMoveMark(moveMarksMap[nodeId]?.mark),
+          };
+        })
+        .filter((move): move is PortableGameNotation.MoveToken => move !== null);
+      return PortableGameNotation.toPgnFromMoves(mainLineMoves);
+    },
+    [mainLineNodeIds, moveMarksMap, tree],
+  );
+
+  const selectedMainLineIndex = useMemo(
+    function resolveSelectedMainLineIndex() {
+      return getSelectedMainLineIndex(currentNodeId, tree, mainLineNodeIds);
+    },
+    [currentNodeId, mainLineNodeIds, tree],
+  );
+
+  const fullTreePgnWithMarks = useMemo(
+    function buildFullPgnWithMarks() {
+      return buildFullTreePgn(tree, moveMarksMap);
+    },
+    [moveMarksMap, tree],
+  );
 
   useEffect(
     function resolveLastBookOpeningName() {
@@ -381,10 +406,19 @@ function ChessReplay() {
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
 
-  useEffect(() => {
-    if (!fullTreePgn) return;
-    setPgnInput(fullTreePgn);
-  }, [fullTreePgn]);
+  useEffect(
+    function syncFullPgnState() {
+      setFullPgn(fullTreePgnWithMarks);
+    },
+    [fullTreePgnWithMarks],
+  );
+
+  useEffect(
+    function syncPgnInput() {
+      setPgnInput(fullPgn);
+    },
+    [fullPgn],
+  );
 
   useEffect(
     function keepActiveLineVisible() {
@@ -623,6 +657,16 @@ function ChessReplay() {
     setSelectedSquare(null);
   }
 
+  const onMainLineMoveSelected = useCallback(
+    function selectMainLineMove(index: number) {
+      const nodeId = mainLineNodeIds[index];
+      if (!nodeId) return;
+      setCurrentNodeId(nodeId);
+      setActiveLineId(nodeId);
+    },
+    [mainLineNodeIds],
+  );
+
   function importPgn(
     pgn: string,
     importedGameInfo: ImportedGameInfo | null = null,
@@ -667,7 +711,7 @@ function ChessReplay() {
       setActiveLineId(lastNodeId);
       setCurrentNodeId(lastNodeId);
       setPgnInput(pgn);
-      setImportedFullPgn(pgn.trim());
+      setFullPgn(pgn.trim());
       setPlayersInfo(mergedPlayersInfo);
       setPositionAnalysisMap({});
       setStatusText("PGN Imported");
@@ -688,7 +732,7 @@ function ChessReplay() {
     setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
     setActiveLineId(ROOT_ANALYSIS_NODE_ID);
     setPgnInput("");
-    setImportedFullPgn("");
+    setFullPgn("");
     setPlayersInfo(null);
     setPositionAnalysisMap({});
     setStatusText("Interactive Mode");
@@ -725,6 +769,11 @@ function ChessReplay() {
             />
           </div>
         </div>
+        <MoveLine
+          mainLinePgn={mainLinePgn}
+          selectedIndex={selectedMainLineIndex}
+          onIndexSelected={onMainLineMoveSelected}
+        />
         <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.bottom} />
         </div>
@@ -903,27 +952,87 @@ function PlayerCard({ info }: { info: { side: "white" | "black"; player: PlayerI
   );
 }
 
+function buildFullTreePgn(tree: Record<string, MoveNode>, moveMarksMap: Record<string, MoveMarkResult>): string {
+  const root = tree[ROOT_ANALYSIS_NODE_ID];
+  if (!root || root.children.length === 0) return "";
+
+  const mainLine = generatePgnString(root.children[0], 1, true, false, tree, moveMarksMap).trim();
+  if (root.children.length === 1) return mainLine;
+
+  let pgn = mainLine;
+  for (let index = 1; index < root.children.length; index += 1) {
+    const variation = generatePgnString(root.children[index], 1, true, true, tree, moveMarksMap).trim();
+    if (!variation) continue;
+    pgn += ` (${variation})`;
+  }
+  return pgn.trim();
+}
+
+function getMainLineNodeIds(tree: Record<string, MoveNode>): string[] {
+  const nodeIds: string[] = [];
+  let currentNodeId = tree[ROOT_ANALYSIS_NODE_ID]?.children?.[0] ?? null;
+
+  while (currentNodeId) {
+    nodeIds.push(currentNodeId);
+    currentNodeId = tree[currentNodeId]?.children?.[0] ?? null;
+  }
+
+  return nodeIds;
+}
+
+function getSelectedMainLineIndex(
+  currentNodeId: string,
+  tree: Record<string, MoveNode>,
+  mainLineNodeIds: string[],
+): number {
+  const indexByNodeId = new Map(
+    mainLineNodeIds.map(function toEntry(nodeId, index) {
+      return [nodeId, index] as const;
+    }),
+  );
+
+  let candidateNodeId: string | null = currentNodeId;
+  while (candidateNodeId && candidateNodeId !== ROOT_ANALYSIS_NODE_ID) {
+    const index = indexByNodeId.get(candidateNodeId);
+    if (index !== undefined) return index;
+    candidateNodeId = tree[candidateNodeId]?.parentId ?? null;
+  }
+
+  return -1;
+}
+
+function toNativeMoveMark(mark: MoveMark | null | undefined): PortableGameNotation.NativeMoveMark | null {
+  if (!mark) return null;
+  if (mark === MoveMarks.ONLY_MOVE) return PortableGameNotation.NativeMoveMarks.GOOD;
+  if (mark === MoveMarks.BRILLIANT) return PortableGameNotation.NativeMoveMarks.BRILLIANT;
+  if (mark === MoveMarks.INACCURACY) return PortableGameNotation.NativeMoveMarks.INACCURACY;
+  if (mark === MoveMarks.MISTAKE) return PortableGameNotation.NativeMoveMarks.MISTAKE;
+  if (mark === MoveMarks.MISS || mark === MoveMarks.BLUNDER) return PortableGameNotation.NativeMoveMarks.BLUNDER;
+  return null;
+}
+
 function generatePgnString(
   nodeId: string,
   moveNum: number,
   isWhite: boolean,
   isFirstInVariation: boolean,
   tree: Record<string, MoveNode>,
+  moveMarksMap: Record<string, MoveMarkResult>,
 ): string {
   const node = tree[nodeId];
   if (!node) return "";
 
   let pgn = isWhite ? `${moveNum}. ` : isFirstInVariation ? `${moveNum}... ` : "";
-  pgn += `${node.san} `;
+  pgn += `${PortableGameNotation.withNativeMoveMark(node.san, toNativeMoveMark(moveMarksMap[nodeId]?.mark))} `;
 
   if (node.children.length > 1) {
     for (let index = 1; index < node.children.length; index += 1) {
-      pgn += `(${generatePgnString(node.children[index], moveNum, isWhite, true, tree).trim()}) `;
+      pgn += `(${generatePgnString(node.children[index], moveNum, isWhite, true, tree, moveMarksMap).trim()}) `;
     }
   }
 
   if (node.children.length > 0) {
-    pgn += generatePgnString(node.children[0], isWhite ? moveNum : moveNum + 1, !isWhite, false, tree);
+    pgn += generatePgnString(node.children[0], isWhite ? moveNum : moveNum + 1, !isWhite, false, tree, moveMarksMap);
   }
 
   return pgn;
@@ -1011,12 +1120,12 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
     }
   }
 
-  if (currentNodeId) {
-    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.IMMEDIATE);
-    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.NEXT);
-  }
-
   addTasksForNodes(allNodeIds, 12, 1, EngineEvaluationPriorities.BACKGROUND);
+
+  if (currentNodeId) {
+    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.BACKGROUND);
+    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.BACKGROUND);
+  }
 
   return tasks;
 }
@@ -1234,7 +1343,7 @@ function toLinePgn(nodeId: string, tree: Record<string, MoveNode>): string | nul
   while (currentNodeId) {
     const node = tree[currentNodeId];
     if (!node) break;
-    sanMoves.unshift(node.san);
+    if (node.san) sanMoves.unshift(node.san);
     currentNodeId = node.parentId;
   }
 
