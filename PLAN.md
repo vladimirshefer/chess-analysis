@@ -1,4 +1,4 @@
-## Total Game Estimate
+### Total Game Estimate
 Add Total Game Overview panel
 
 ### Player Accuracy
@@ -10,9 +10,7 @@ Add Total Game Overview panel
 - Separate for each player side.
 - show this value to Total Game Estimate
 
-## Other ideas
-
-### Fix brilliant move marking to mean "Sacrifice"
+### [x] ~~Fix brilliant move marking to mean "Sacrifice"~~
 - That means giving up the material, with (almost) no loss in evaluation.
 
 ### First implementation of a "Plan"
@@ -44,9 +42,24 @@ Summary: All book moves are queued at depth 22; non-book behavior stays unchange
 2. In `buildAnalysisTasks`, detect book nodes by existing rules (known FEN or known move-path key) and force `minDepth` to `22`.
 3. Keep queue/dedup/deep-analysis logic unchanged; validate book nodes show `d22` while non-book flow stays `12/16` + background behavior.
 
+### Main Line Move Strip With PGN Marks
+Summary: Add a compact horizontal main-line move strip with index-based navigation and native PGN move-mark annotations.
+1. Build and persist annotated PGN in `ChessReplay`, including supported native marks only.
+2. Add a dedicated `MoveLine` component that renders the main-line moves, highlights current move, and supports click navigation by index.
+3. Resolve selected index using current position with ancestor fallback when user is in a variation.
+4. Keep the line compact and horizontally scrollable with drag scrolling and no visible scrollbar.
+5. Pull request: https://github.com/vladimirshefer/chess-analysis/pull/1
+   TL;DR: Main-line move strip with PGN-native marks is implemented and tracked in PR #1.
+
 ### EngineEvaluation -> AbsoluteNumericEvaluation (Research Plan)
 1. Replace `EngineEvaluation` in core engine contracts (`ChessEngineLine`, `FullMoveEvaluation`, cache interface) with `AbsoluteNumericEvaluation`.
 2. Update `NativeChessEngine`/`CachedChessEngine`/`PersistentChessEngine` flow to produce, pass, persist, and hydrate only numeric evaluations (drop object<->number conversion bridges).
 3. Refactor `EvaluationThermometer` and `ChessReplay` call sites to use numeric formatting/parsing helpers from `Evaluations` only.
 4. Simplify `evaluation.ts`: remove `EngineEvaluation`, `parseEngineEvaluation`, `getTerminalEvaluation`, `evalToNum`, and `absoluteNumericEvaluationToEngineEvaluation`; keep numeric-first helpers.
    TL;DR: migrate to one canonical eval type end-to-end (number), then clean old adapters/tests to eliminate dual-representation drift.
+
+### Imported PGN Analysis Gating
+Summary: imported PGN first analyzes the whole imported line into separate state; no selected-move auto-eval spends engine time until that pass finishes.
+1. Add `ImportedLineAnalysisState` in `client/src/components/ChessReplay.tsx` with `importedPgn`, ordered `nodeIds`, `analysesByNodeId`, and `status`.
+2. Change `importPgn()` and analysis effects so import starts one line-wide analysis pass, while move navigation only updates UI and blocks click-driven auto-analysis during that pass.
+3. Render imported-line nodes from imported analysis first, fall back to normal interactive analysis otherwise, and keep imported analysis separately saveable for future game-library storage.
