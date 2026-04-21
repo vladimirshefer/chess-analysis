@@ -130,7 +130,23 @@ export namespace Evaluations {
   }
 
   export function toString(evaluation: AbsoluteNumericEvaluation): string {
-    return `${evaluation}`;
+    if (evaluation === TERMINAL_RESULT_SCORE) {
+      return GameResult.WHITE_WIN;
+    }
+    if (evaluation === -TERMINAL_RESULT_SCORE) {
+      return GameResult.BLACK_WIN;
+    }
+
+    const absoluteValue = Math.abs(evaluation);
+    if (absoluteValue >= MATE_BASE) {
+      const encodedDistance = absoluteValue - MATE_BASE;
+      const distance = clampInteger(MATE_MAX_DISTANCE - encodedDistance, 1, MATE_MAX_DISTANCE);
+      return evaluation > 0 ? `+M${distance}` : `-M${-distance}`;
+    } else {
+      const centipawns = clampInteger(evaluation, -MAX_CENTIPAWN, MAX_CENTIPAWN);
+      const pawns = centipawns / 100;
+      return (centipawns < 0 ? "-" : centipawns>0 ? "+" : "") + Math.abs(pawns).toFixed(1);
+    }
   }
 }
 

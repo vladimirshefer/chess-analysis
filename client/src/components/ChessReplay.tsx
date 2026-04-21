@@ -29,9 +29,11 @@ import {
   type PlayerInfo,
 } from "../lib/gameInfo";
 import {
+  type AbsoluteNumericEvaluation,
+  absoluteNumericEvaluationToEngineEvaluation,
   type EngineEvaluation,
   evalToNum,
-  formatEvaluation,
+  Evaluations,
   getTerminalEvaluation,
   START,
   START_FEN,
@@ -73,7 +75,7 @@ interface DisplayEngineLine {
    * like "Bc2 h6 Be3"
    */
   engineLine: string;
-  score: EngineEvaluation;
+  evaluation: AbsoluteNumericEvaluation;
   depth: number;
   /** rank of the line. 1 = suggestion*/
   lineRank: number;
@@ -82,6 +84,7 @@ interface DisplayEngineLine {
 export interface NodeAnalysis {
   fen: string;
   evaluation: EngineEvaluation;
+  evaluation1?: AbsoluteNumericEvaluation;
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
@@ -782,7 +785,7 @@ function ChessReplay() {
               <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>
             )}
             {currentAnalysis?.lines.map(function renderLine(line, index) {
-              const scoreValue = evalToNum(line.score);
+              const scoreValue = line.evaluation;
               return (
                 <button
                   key={index}
@@ -801,7 +804,7 @@ function ChessReplay() {
                       <span
                         className={`text-sm font-bold ${scoreValue > 0 ? "text-green-600" : scoreValue < 0 ? "text-red-600" : "text-gray-500"}`}
                       >
-                        {formatEvaluation(line.score)}
+                        {Evaluations.toString(line.evaluation)}
                       </span>
                       <span className="text-xs text-gray-400">d{line.depth}</span>
                     </div>
@@ -1061,7 +1064,7 @@ function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngin
         suggestedMoveUci: line.uci,
         engineLineUci: line.pv,
         engineLine: sanMoves.join(" "),
-        score: line.evaluation,
+        evaluation: evalToNum(line.evaluation),
         depth: line.depth,
         lineRank: line.multipv,
       };
@@ -1090,7 +1093,7 @@ function buildSeededNodeAnalysis(
     lineNextMovesUci.length > 0
       ? toSeededDisplayLines(
           lineNextMovesUci,
-          line.score,
+          line.evaluation,
           line.depth - 1,
           uciToSanLine(lineNextMovesUci.join(" "), childFen),
         )
@@ -1098,7 +1101,8 @@ function buildSeededNodeAnalysis(
 
   return {
     fen: childFen,
-    evaluation: line.score,
+    evaluation: absoluteNumericEvaluationToEngineEvaluation(line.evaluation),
+    evaluation1: line.evaluation,
     depth: line.depth - 1,
     lines: childLines,
     isFinal: false,
@@ -1120,7 +1124,7 @@ function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
 
 function toSeededDisplayLines(
   lineNextMovesUci: string[],
-  score: EngineEvaluation,
+  score: AbsoluteNumericEvaluation,
   depth: number,
   lineNextMovesSan: string[],
 ): DisplayEngineLine[] {
@@ -1132,7 +1136,7 @@ function toSeededDisplayLines(
       suggestedMoveUci: lineNextMovesUci[0],
       engineLineUci: lineNextMovesUci,
       engineLine: lineNextMovesSan.join(" "),
-      score: score,
+      evaluation: score,
       depth: depth,
       lineRank: 1,
     },
@@ -1174,7 +1178,7 @@ function buildMoveMarksByNodeId(
       parentLines: parentAnalysis.lines.map(function toEngineLine(line: DisplayEngineLine) {
         return {
           uci: line.suggestedMoveUci,
-          evaluation: evalToNum(line.score),
+          evaluation: line.evaluation,
         };
       }),
     });
@@ -1282,7 +1286,7 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
       leftLine.suggestedMoveUci !== rightLine.suggestedMoveUci ||
       leftLine.engineLineUci.join(" ") !== rightLine.engineLineUci.join(" ") ||
       leftLine.engineLine !== rightLine.engineLine ||
-      !(evalToNum(leftLine.score) === evalToNum(rightLine.score)) ||
+      leftLine.evaluation !== rightLine.evaluation ||
       leftLine.depth !== rightLine.depth ||
       leftLine.lineRank !== rightLine.lineRank
     ) {
