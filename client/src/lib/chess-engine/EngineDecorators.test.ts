@@ -34,7 +34,7 @@ describe("CachedChessEngine", function suite() {
     );
 
     expect(delegate.evaluateCallCount).toBe(0);
-    expect(result.lines).toHaveLength(1);
+    expect(result.lines).toHaveLength(2);
     expect(onUpdate).toHaveBeenCalledOnce();
     expect(onUpdate.mock.calls[0][0].isFinal).toBe(true);
   });
@@ -167,7 +167,7 @@ describe("PersistentChessEngine", function suite() {
     });
     expect(blackResult?.evaluation).toEqual({
       kind: "result",
-      result: GameResult.WHITE_WIN,
+      result: GameResult.BLACK_WIN,
     });
   });
 });

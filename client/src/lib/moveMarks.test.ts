@@ -78,8 +78,8 @@ describe("classifyMoveMark", function suite() {
       playedMoveSan: sanFromUci(parentFen, playedUci),
       playedEvaluation: 0,
       parentLines: [
-        { uci: "g1f2", evaluation: 1 },
-        { uci: "g1f1", evaluation: 0.95 },
+        { uci: "g1f2", evaluation: 100 },
+        { uci: "g1f1", evaluation: 95 },
       ],
     });
 
