@@ -44,6 +44,8 @@ import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
+import { EngineDepthSelector } from "../pages/AnalyzerPage/EngineDepthSelector.tsx";
+import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export interface MoveNode {
@@ -121,6 +123,7 @@ const TREE_SEED = {
     children: [],
   },
 };
+const ENGINE_DEPTH_STORAGE_KEY = "analyzer-engine-selected-depth";
 
 function ChessReplay() {
   const location = useLocation();
@@ -135,8 +138,10 @@ function ChessReplay() {
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
   const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
   const [showPlans, setShowPlans] = useState(false);
+  const [selectedDepth, setSelectedDepth] = useLocalStorageNumericState(ENGINE_DEPTH_STORAGE_KEY, 12);
   const [importedFullPgn, setImportedFullPgn] = useState("");
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
+  const deepAnalysisDepth = Math.max(selectedDepth + 4, 22);
 
   const engine = useMemo(() => getChessEngine(), []);
 
@@ -417,7 +422,7 @@ function ChessReplay() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const tasks = buildAnalysisTasks(tree, currentNodeId, positionAnalysisMap);
+      const tasks = buildAnalysisTasks(tree, currentNodeId, positionAnalysisMap, selectedDepth);
       if (cancelled) return;
       if (tasks.length === 0) {
         setStatusText("Nothing to analyze");
@@ -458,7 +463,7 @@ function ChessReplay() {
     return () => {
       cancelled = true;
     };
-  }, [tree, currentNodeId, engine]);
+  }, [tree, currentNodeId, engine, selectedDepth]);
 
   useEffect(
     function clearSelectedSquareOnPositionChange() {
@@ -482,13 +487,13 @@ function ChessReplay() {
   }
 
   function runDeepAnalysis() {
-    const target = getSelectedAnalysisTarget(tree, currentNodeId);
+    const target = getSelectedAnalysisTarget(tree, currentNodeId, deepAnalysisDepth);
     if (!target) return;
 
     void engine
-      .evaluate(target.fen, { minDepth: 22, linesAmount: 3 }, EngineEvaluationPriorities.IMMEDIATE, (update) => {
+      .evaluate(target.fen, target.request, EngineEvaluationPriorities.IMMEDIATE, (update) => {
         syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
-        setStatusText(`Analyzing ${target.label} (d22)...`);
+        setStatusText(`Analyzing ${target.label} (d${deepAnalysisDepth})...`);
       })
       .then((result) => {
         syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, result, true));
@@ -762,6 +767,7 @@ function ChessReplay() {
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
             </div>
             <div className="flex items-center gap-2">
+              <EngineDepthSelector selectedDepth={selectedDepth} onSelectDepth={setSelectedDepth} />
               <button
                 onClick={() => setShowPlans((it) => !it)}
                 title={"Show engine plan arrows"}
@@ -967,6 +973,7 @@ function buildAnalysisTasks(
   tree: Record<string, MoveNode>,
   currentNodeId: string | null,
   positionAnalysisMap: Record<string, NodeAnalysis>,
+  selectedDepth: number,
 ): ScheduledTask[] {
   const allNodeIds = Object.keys(tree);
   const tasks: ScheduledTask[] = [];
@@ -1010,20 +1017,24 @@ function buildAnalysisTasks(
   }
 
   const notAnalyzedNodes = allNodeIds.filter(
-    (it) => (positionAnalysisMap[it]?.depth ?? -1) < 12 || !(positionAnalysisMap[it]?.isFinal ?? false),
+    (it) => (positionAnalysisMap[it]?.depth ?? -1) < selectedDepth || !(positionAnalysisMap[it]?.isFinal ?? false),
   );
 
-  addTasksForNodes(notAnalyzedNodes, 12, 1, EngineEvaluationPriorities.BACKGROUND);
+  addTasksForNodes(notAnalyzedNodes, selectedDepth, 1, EngineEvaluationPriorities.BACKGROUND);
 
   if (currentNodeId) {
-    addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.BACKGROUND);
-    addTasksForNodes([currentNodeId], 16, 3, EngineEvaluationPriorities.BACKGROUND);
+    const currentNodeDepth = Math.max(selectedDepth, selectedDepth);
+    addTasksForNodes([currentNodeId], currentNodeDepth, 3, EngineEvaluationPriorities.BACKGROUND);
   }
 
   return tasks;
 }
 
-function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId: string | null): ScheduledTask | null {
+function getSelectedAnalysisTarget(
+  tree: Record<string, MoveNode>,
+  currentNodeId: string | null,
+  deepAnalysisDepth: number,
+): ScheduledTask | null {
   if (!currentNodeId) return null;
   const node = tree[currentNodeId];
   if (!node) return null;
@@ -1032,7 +1043,7 @@ function getSelectedAnalysisTarget(tree: Record<string, MoveNode>, currentNodeId
     nodeId: node.id,
     fen: node.fen,
     label: node.san || "___",
-    request: { minDepth: 22, linesAmount: 3 },
+    request: { minDepth: deepAnalysisDepth, linesAmount: 3 },
     priority: EngineEvaluationPriorities.IMMEDIATE,
   };
 }
