@@ -88,6 +88,8 @@ export interface NodeAnalysis {
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
+  opening?: OpeningsBook.Opening | null;
+  openingLookupDone?: boolean;
 }
 
 interface ScheduledTask {
@@ -136,16 +138,46 @@ function ChessReplay() {
   const [importedFullPgn, setImportedFullPgn] = useState("");
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
 
-  const currentLinePgn = useMemo(() => {
-    return toLinePgn(currentNodeId, tree) ?? "";
-  }, [currentNodeId, tree]);
-
-  const [lastBookOpeningName, setLastBookOpeningName] = useState<string | null>(null);
-
   const engine = useMemo(() => getChessEngine(), []);
 
   const lastImportedRouteKeyRef = useRef<string | null>(null);
   const moveMarksBySquareRef = useRef<Record<string, MoveMark>>({});
+
+  function syncOpeningInfo(nodeId: string, opening: OpeningsBook.Opening | null): void {
+    setPositionAnalysisMap((previous) => {
+      const nodeAnalysis = previous[nodeId];
+      if (!nodeAnalysis || nodeAnalysis.openingLookupDone) return previous;
+
+      const nextNodeAnalysis: NodeAnalysis = {
+        ...nodeAnalysis,
+        opening: opening ?? null,
+        openingLookupDone: true,
+      };
+      if (areNodeAnalysesEqual(nodeAnalysis, nextNodeAnalysis)) return previous;
+
+      return {
+        ...previous,
+        [nodeId]: nextNodeAnalysis,
+      };
+    });
+  }
+
+  function ensureNodeOpeningLookup(nodeId: string, analysis: NodeAnalysis): void {
+    if (analysis.openingLookupDone) return;
+    const linePgn = toLinePgnFromNodeId(nodeId)?.trim();
+    if (!linePgn) {
+      syncOpeningInfo(nodeId, null);
+      return;
+    }
+
+    void OpeningsBook.getOpeningByPgn(linePgn)
+      .then((openingByPgn) => {
+        syncOpeningInfo(nodeId, openingByPgn ?? null);
+      })
+      .catch((error) => {
+        console.error(`Failed to resolve opening name for node ${nodeId}`, error);
+      });
+  }
 
   function goStart() {
     setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
@@ -236,24 +268,11 @@ function ChessReplay() {
     return buildMoveMarksByNodeId(tree, positionAnalysisMap);
   }, [openingsReady, positionAnalysisMap, tree]);
 
-  useEffect(
+  const lastBookOpeningName = useMemo(
     function resolveLastBookOpeningName() {
-      const linePgn = currentLinePgn.trim();
-      if (!linePgn) {
-        setLastBookOpeningName(null);
-        return;
-      }
-
-      void OpeningsBook.getOpeningByPgn(linePgn)
-        .then((openingByPgn) => {
-          setLastBookOpeningName(openingByPgn?.name ?? null);
-        })
-        .catch((error) => {
-          console.error("Failed to resolve opening name for current line", error);
-          setLastBookOpeningName(null);
-        });
+      return findClosestOpeningName(currentNodeId, tree, positionAnalysisMap);
     },
-    [currentLinePgn],
+    [currentNodeId, positionAnalysisMap, tree],
   );
 
   const currentMoveMark: MoveMarkResult = moveMarksMap[currentNodeId ?? ROOT_ANALYSIS_NODE_ID];
@@ -395,37 +414,10 @@ function ChessReplay() {
     [currentNodeId, tree, visiblePath],
   );
 
-  useEffect(
-    function getCurrentMoveCachedAnalysis() {
-      const terminalAnalysis = buildTerminalNodeAnalysis(currentFen);
-      if (terminalAnalysis) {
-        syncSingleNodeAnalysis(currentNodeId, terminalAnalysis);
-        return;
-      }
-
-      void (async () => {
-        const cachedEvaluation = await engine.getEvaluation(currentFen, 0);
-        if (cachedEvaluation) {
-          syncSingleNodeAnalysis(currentNodeId, {
-            fen: cachedEvaluation.fen,
-            evaluation: absoluteNumericEvaluationOfEngineEvaluation(cachedEvaluation.evaluation),
-            depth: cachedEvaluation.depth,
-            lines: toDisplayLines(currentFen, cachedEvaluation.lines),
-            isFinal: true,
-          });
-          return;
-        }
-      })().catch((error) => {
-        console.error("Failed to hydrate selected node analysis", error);
-      });
-    },
-    [currentFen, currentNodeId, engine, tree],
-  );
-
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const tasks = buildAnalysisTasks(tree, currentNodeId);
+      const tasks = buildAnalysisTasks(tree, currentNodeId, positionAnalysisMap);
       if (cancelled) return;
       if (tasks.length === 0) {
         setStatusText("Nothing to analyze");
@@ -485,6 +477,8 @@ function ChessReplay() {
         [nodeId]: preferredAnalysis,
       };
     });
+
+    ensureNodeOpeningLookup(nodeId, analysis);
   }
 
   function runDeepAnalysis() {
@@ -969,7 +963,11 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
   return getDeepestLeaf(node.children[0], tree);
 }
 
-function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: string | null): ScheduledTask[] {
+function buildAnalysisTasks(
+  tree: Record<string, MoveNode>,
+  currentNodeId: string | null,
+  positionAnalysisMap: Record<string, NodeAnalysis>,
+): ScheduledTask[] {
   const allNodeIds = Object.keys(tree);
   const tasks: ScheduledTask[] = [];
   const taskKeys = new Set<string>();
@@ -1011,7 +1009,11 @@ function buildAnalysisTasks(tree: Record<string, MoveNode>, currentNodeId: strin
     }
   }
 
-  addTasksForNodes(allNodeIds, 12, 1, EngineEvaluationPriorities.BACKGROUND);
+  const notAnalyzedNodes = allNodeIds.filter(
+    (it) => (positionAnalysisMap[it]?.depth ?? -1) < 12 || !(positionAnalysisMap[it]?.isFinal ?? false),
+  );
+
+  addTasksForNodes(notAnalyzedNodes, 12, 1, EngineEvaluationPriorities.BACKGROUND);
 
   if (currentNodeId) {
     addTasksForNodes([currentNodeId], 12, 3, EngineEvaluationPriorities.BACKGROUND);
@@ -1227,17 +1229,10 @@ function getPgnToPosition(
   return nodePathKey;
 }
 
-function toLinePgn(nodeId: string, tree: Record<string, MoveNode>): string | null {
-  const sanMoves: string[] = [];
-  let currentNodeId: string | null = nodeId;
+function toLinePgnFromNodeId(nodeId: string): string | null {
+  if (!nodeId || nodeId === ROOT_ANALYSIS_NODE_ID) return null;
 
-  while (currentNodeId) {
-    const node = tree[currentNodeId];
-    if (!node) break;
-    sanMoves.unshift(node.san);
-    currentNodeId = node.parentId;
-  }
-
+  const sanMoves = nodeId.split("|").filter(Boolean);
   if (sanMoves.length === 0) return null;
   return toPgnFromSanMoves(sanMoves);
 }
@@ -1266,6 +1261,22 @@ function getMoveSquares(baseFen: string, san: string): { from: string; to: strin
   }
 }
 
+function findClosestOpeningName(
+  startNodeId: string,
+  tree: Record<string, MoveNode>,
+  analysesByNodeId: Record<string, NodeAnalysis>,
+): string | null {
+  let nodeId: string | null = startNodeId;
+
+  while (nodeId) {
+    const nodeAnalysis = analysesByNodeId[nodeId];
+    if (nodeAnalysis?.opening?.name) return nodeAnalysis.opening.name;
+    nodeId = tree[nodeId]?.parentId ?? null;
+  }
+
+  return null;
+}
+
 function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolean {
   if (left === right) return true;
   if (!left || !right) return !left && !right;
@@ -1275,7 +1286,18 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
     left.evaluation === right.evaluation &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
+    left.openingLookupDone === right.openingLookupDone &&
+    areOpeningsEqual(left.opening, right.opening) &&
     areDisplayLinesEqual(left.lines, right.lines)
+  );
+}
+
+function areOpeningsEqual(left?: OpeningsBook.Opening | null, right?: OpeningsBook.Opening | null): boolean {
+  if (left === right) return true;
+  if (!left || !right) return !left && !right;
+
+  return (
+    left.name === right.name && left.epd === right.epd && left.pgn === right.pgn && left.plyCount === right.plyCount
   );
 }
 
@@ -1303,12 +1325,27 @@ function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLin
 }
 
 function pickPreferredAnalysis(currentAnalysis: NodeAnalysis | undefined, nextAnalysis: NodeAnalysis): NodeAnalysis {
-  const mergedNextAnalysis = mergeNodeAnalysisLines(currentAnalysis, nextAnalysis);
+  const mergedNextAnalysis = preserveOpeningLookup(
+    currentAnalysis,
+    mergeNodeAnalysisLines(currentAnalysis, nextAnalysis),
+  );
   if (!currentAnalysis) return nextAnalysis;
   if (mergedNextAnalysis.depth < currentAnalysis.depth) return currentAnalysis;
   if (mergedNextAnalysis.lines.length < currentAnalysis.lines.length) return currentAnalysis;
   if (!mergedNextAnalysis.isFinal && currentAnalysis.isFinal) return currentAnalysis;
   return mergedNextAnalysis;
+}
+
+function preserveOpeningLookup(currentAnalysis: NodeAnalysis | undefined, nextAnalysis: NodeAnalysis): NodeAnalysis {
+  if (!currentAnalysis) return nextAnalysis;
+  if (!currentAnalysis.openingLookupDone) return nextAnalysis;
+  if (nextAnalysis.openingLookupDone) return nextAnalysis;
+
+  return {
+    ...nextAnalysis,
+    opening: currentAnalysis.opening ?? null,
+    openingLookupDone: true,
+  };
 }
 
 function mergeNodeAnalysisLines(currentAnalysis: NodeAnalysis | undefined, nextAnalysis: NodeAnalysis): NodeAnalysis {
