@@ -1020,11 +1020,11 @@ function buildAnalysisTasks(
     (it) => (positionAnalysisMap[it]?.depth ?? -1) < selectedDepth || !(positionAnalysisMap[it]?.isFinal ?? false),
   );
 
-  addTasksForNodes(notAnalyzedNodes, selectedDepth, 1, EngineEvaluationPriorities.BACKGROUND);
+  addTasksForNodes(notAnalyzedNodes, selectedDepth, 2, EngineEvaluationPriorities.BACKGROUND);
 
   if (currentNodeId) {
     const currentNodeDepth = Math.max(selectedDepth, selectedDepth);
-    addTasksForNodes([currentNodeId], currentNodeDepth, 3, EngineEvaluationPriorities.BACKGROUND);
+    addTasksForNodes([currentNodeId], currentNodeDepth, 2, EngineEvaluationPriorities.BACKGROUND);
   }
 
   return tasks;
