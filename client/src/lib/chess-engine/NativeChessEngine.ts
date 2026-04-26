@@ -36,6 +36,7 @@ export namespace StockfishRuntime {
 
   const MT_WORKER_URL = "/stockfish/stockfish-18-lite.js";
   const SINGLE_WORKER_URL = "/stockfish/stockfish-18-lite-single.js";
+  const ENGINE_NAME_BASE = "Stockfish 18 Lite";
   const DEFAULT_THREADS = 1;
   const MAX_THREADS = 32;
 
@@ -68,6 +69,11 @@ export namespace StockfishRuntime {
       hasSharedArrayBuffer: typeof globalScope.SharedArrayBuffer !== "undefined",
       hardwareConcurrency: hardwareConcurrency > 0 ? hardwareConcurrency : DEFAULT_THREADS,
     };
+  }
+
+  export function toEngineName(config: Config): string {
+    if (config.mode === "lite-mt") return `${ENGINE_NAME_BASE} MT (${config.threads}T)`;
+    return `${ENGINE_NAME_BASE} Single`;
   }
 
   function supportsMultiThreading(capabilities: Capabilities): boolean {

@@ -15,6 +15,7 @@ describe("StockfishRuntime.resolve", function suite() {
       workerUrl: "/stockfish/stockfish-18-lite.js",
       threads: 8,
     });
+    expect(StockfishRuntime.toEngineName(runtime)).toBe("Stockfish 18 Lite MT (8T)");
   });
 
   it("falls back to single-threaded runtime when prerequisites are missing", function testCase() {
@@ -29,6 +30,7 @@ describe("StockfishRuntime.resolve", function suite() {
       workerUrl: "/stockfish/stockfish-18-lite-single.js",
       threads: 1,
     });
+    expect(StockfishRuntime.toEngineName(runtime)).toBe("Stockfish 18 Lite Single");
   });
 });
 

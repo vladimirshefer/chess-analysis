@@ -55,10 +55,11 @@ export interface ChessEngine {
   getLines(fen: string, minDepth?: number, amount?: number): Promise<ChessEngineLine[] | null>;
 }
 
+export const STOCKFISH_RUNTIME = StockfishRuntime.resolve();
+export const CURRENT_ENGINE_NAME = StockfishRuntime.toEngineName(STOCKFISH_RUNTIME);
+
 export function createChessEngine(): ChessEngine {
-  const runtime = StockfishRuntime.resolve();
-  console.log("Creating chess engine with runtime:", runtime);
-  const nativeEngine = new NativeChessEngine(runtime);
+  const nativeEngine = new NativeChessEngine(STOCKFISH_RUNTIME);
 
   return new CachedChessEngine(new PersistentChessEngine(new QueuedChessEngine(nativeEngine)), sharedEvaluationCache);
 }

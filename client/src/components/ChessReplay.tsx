@@ -19,6 +19,7 @@ import {
   type EngineEvaluationPriority,
   type EvaluationRequest,
   type FullMoveEvaluation,
+  CURRENT_ENGINE_NAME,
   getChessEngine,
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
@@ -267,6 +268,7 @@ function ChessReplay() {
   }, [activeLineId, tree]);
 
   const currentAnalysis = positionAnalysisMap[currentNodeId || ROOT_ANALYSIS_NODE_ID];
+  const statusLineText = statusText === "Analysis Complete" ? `${statusText} · ${CURRENT_ENGINE_NAME}` : statusText;
   const openingsReady = OpeningsBook.isReady();
 
   const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
@@ -855,7 +857,7 @@ function ChessReplay() {
                 </button>
               );
             })}
-            <div className="text-xs text-gray-400 text-right">{statusText}</div>
+            <div className="text-xs text-gray-400 text-right">{statusLineText}</div>
           </div>
         </div>
 
