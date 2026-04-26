@@ -422,7 +422,7 @@ function ChessReplay() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const tasks = buildAnalysisTasks(tree, currentNodeId, positionAnalysisMap, selectedDepth);
+      const tasks = buildAnalysisTasks(tree, activeLineId, currentNodeId, positionAnalysisMap, selectedDepth);
       if (cancelled) return;
       if (tasks.length === 0) {
         setStatusText("Nothing to analyze");
@@ -463,7 +463,7 @@ function ChessReplay() {
     return () => {
       cancelled = true;
     };
-  }, [tree, currentNodeId, engine, selectedDepth]);
+  }, [tree, activeLineId, currentNodeId, engine, selectedDepth]);
 
   useEffect(
     function clearSelectedSquareOnPositionChange() {
@@ -969,13 +969,41 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
   return getDeepestLeaf(node.children[0], tree);
 }
 
+function getActiveLineNodeIdsFromLeafToRoot(
+  activeLineId: string | null,
+  currentNodeId: string | null,
+  tree: Record<string, MoveNode>,
+): string[] {
+  const fallbackNodeId = currentNodeId ?? ROOT_ANALYSIS_NODE_ID;
+  const lineNodeId = activeLineId && tree[activeLineId] ? activeLineId : fallbackNodeId;
+  if (!lineNodeId || !tree[lineNodeId]) return [ROOT_ANALYSIS_NODE_ID];
+  if (lineNodeId === ROOT_ANALYSIS_NODE_ID) return [ROOT_ANALYSIS_NODE_ID];
+
+  const sanMoves = lineNodeId.split("|").filter(Boolean);
+  const rootToLeafNodeIds = sanMoves
+    .map(function buildNodeId(_, index, items) {
+      return items.slice(0, index + 1).join("|");
+    })
+    .filter(function keepExistingNode(nodeId) {
+      return Boolean(tree[nodeId]);
+    });
+
+  const leafToRootNodeIds = [...rootToLeafNodeIds].reverse();
+  if (tree[ROOT_ANALYSIS_NODE_ID]) {
+    leafToRootNodeIds.push(ROOT_ANALYSIS_NODE_ID);
+  }
+
+  return leafToRootNodeIds;
+}
+
 function buildAnalysisTasks(
   tree: Record<string, MoveNode>,
+  activeLineId: string | null,
   currentNodeId: string | null,
   positionAnalysisMap: Record<string, NodeAnalysis>,
   selectedDepth: number,
 ): ScheduledTask[] {
-  const allNodeIds = Object.keys(tree);
+  const lineNodeIds = getActiveLineNodeIdsFromLeafToRoot(activeLineId, currentNodeId, tree);
   const tasks: ScheduledTask[] = [];
   const taskKeys = new Set<string>();
 
@@ -1016,16 +1044,11 @@ function buildAnalysisTasks(
     }
   }
 
-  const notAnalyzedNodes = allNodeIds.filter(
+  const notAnalyzedNodes = lineNodeIds.filter(
     (it) => (positionAnalysisMap[it]?.depth ?? -1) < selectedDepth || !(positionAnalysisMap[it]?.isFinal ?? false),
   );
 
   addTasksForNodes(notAnalyzedNodes, selectedDepth, 2, EngineEvaluationPriorities.BACKGROUND);
-
-  if (currentNodeId) {
-    const currentNodeDepth = Math.max(selectedDepth, selectedDepth);
-    addTasksForNodes([currentNodeId], currentNodeDepth, 2, EngineEvaluationPriorities.BACKGROUND);
-  }
 
   return tasks;
 }
