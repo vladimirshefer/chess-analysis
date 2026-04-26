@@ -45,6 +45,7 @@ import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
 import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
+import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import { EngineDepthSelector } from "../pages/AnalyzerPage/EngineDepthSelector.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
@@ -144,6 +145,7 @@ function ChessReplay() {
   const [importedFullPgn, setImportedFullPgn] = useState("");
   const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const deepAnalysisDepth = Math.max(selectedDepth + 4, 22);
+  const hasExistingAnalysis = tree[ROOT_ANALYSIS_NODE_ID].children.length > 0 || importedFullPgn.length > 0;
 
   const engine = useMemo(() => getChessEngine(), []);
 
@@ -722,7 +724,7 @@ function ChessReplay() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
+    <div className="flex flex-col lg:flex-row gap-4 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
       <div className="flex-1 flex flex-col items-center gap-2">
         <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.top} />
@@ -757,7 +759,8 @@ function ChessReplay() {
       </div>
 
       <div className="w-full lg:w-md flex flex-col gap-4 shrink-0 lg:overflow-y-auto ">
-        <div className="flex items-center gap-4 mt-6 flex-wrap justify-center">
+        {!hasExistingAnalysis && <ChessComLastGameSuggestionPane />}
+        <div className="flex items-center gap-4 flex-wrap justify-center">
           <button
             onClick={goStart}
             className="inline-flex items-center justify-center p-4 bg-gray-100 hover:bg-gray-200 rounded font-bold"
@@ -854,7 +857,6 @@ function ChessReplay() {
             <div className="text-xs text-gray-400 text-right">{statusLineText}</div>
           </div>
         </div>
-
         <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
           <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
             <span className="flex items-center gap-2 min-w-0">
@@ -882,7 +884,6 @@ function ChessReplay() {
             setCurrentNodeId={setCurrentNodeId}
           />
         </div>
-
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold text-gray-800">PGN</h3>

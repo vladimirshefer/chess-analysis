@@ -2,6 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ChessComClient } from "../../lib/ChessComClient.ts";
 import { ChessComGamesStorage } from "../../lib/ChessComGamesStorage.ts";
+import { ChessComUser } from "../../lib/ChessComUser.ts";
 import { toImportedGameInfoFromChessComGame } from "../../lib/gameInfo.ts";
 import RenderIcon from "../../components/RenderIcon.tsx";
 import { FaArrowRight, FaMagnifyingGlass } from "react-icons/fa6";
@@ -20,7 +21,7 @@ function ChessComImportPage() {
   }, []);
 
   useEffect(function loadStoredUsername() {
-    const storedUsername = window.localStorage.getItem(CHESS_COM_USERNAME_STORAGE_KEY);
+    const storedUsername = ChessComUser.loadUsername();
     if (!storedUsername) return;
     setUsername(storedUsername);
     if (didAutoLoadRef.current) return;
@@ -37,7 +38,7 @@ function ChessComImportPage() {
 
     setIsLoading(true);
     setErrorText("");
-    window.localStorage.setItem(CHESS_COM_USERNAME_STORAGE_KEY, nextUsername);
+    ChessComUser.saveUsername(nextUsername);
 
     try {
       const result = await ChessComClient.getRecentGames(nextUsername, 10);
@@ -63,8 +64,7 @@ function ChessComImportPage() {
   }
 
   function openGame(game: ChessComClient.Dto.ChessComGameSummary) {
-    const storedUsername = window.localStorage.getItem(CHESS_COM_USERNAME_STORAGE_KEY);
-    const initialBoardOrientation = getInitialBoardOrientation(game, storedUsername);
+    const initialBoardOrientation = ChessComUser.getInitialBoardOrientation(game, ChessComUser.loadUsername());
 
     navigate("/", {
       state: {
@@ -181,8 +181,6 @@ function ChessComImportPage() {
   );
 }
 
-const CHESS_COM_USERNAME_STORAGE_KEY = "chess-com-username";
-
 function formatTimestamp(timestamp: number | null): string {
   if (!timestamp) return "Unknown date";
   return new Date(timestamp * 1000).toLocaleString();
@@ -191,16 +189,6 @@ function formatTimestamp(timestamp: number | null): string {
 function formatAccuracy(accuracy?: number): string {
   if (typeof accuracy !== "number") return "-";
   return `${accuracy.toFixed(1)}%`;
-}
-
-function getInitialBoardOrientation(
-  game: ChessComClient.Dto.ChessComGameSummary,
-  username: string | null,
-): "white" | "black" {
-  const normalizedUsername = username?.trim().toLowerCase();
-  if (!normalizedUsername) return "white";
-  if (game.black.username.trim().toLowerCase() === normalizedUsername) return "black";
-  return "white";
 }
 
 export default ChessComImportPage;
