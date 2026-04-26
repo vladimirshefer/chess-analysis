@@ -416,7 +416,7 @@ function ChessReplay() {
   useEffect(() => {
     if (!currentNodeId || currentNodeId === ROOT_ANALYSIS_NODE_ID) {
       setActiveLineId(ROOT_ANALYSIS_NODE_ID);
-    };
+    }
     setActiveLineId(getDeepestLeaf(currentNodeId, tree));
   }, [currentNodeId, tree]);
 
