@@ -12,8 +12,8 @@ export function AnalyticsConsentScreen({
   if (!isVisible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/45 p-4 flex items-center justify-center">
-      <div className="w-full max-w-xl rounded-xl border border-gray-200 bg-white p-6 shadow-2xl">
+    <div className="pointer-events-none fixed inset-0 z-50 p-4 sm:p-6">
+      <div className="pointer-events-auto absolute bottom-4 right-4 w-[calc(100%-2rem)] max-w-xl rounded-xl border border-gray-200 bg-white p-6 shadow-2xl sm:bottom-6 sm:right-6 sm:w-full">
         <h2 className="text-xl font-black text-gray-900">No ads. No tracking nonsense.</h2>
         <p className="mt-2 text-sm text-gray-600">
           I am an indie developer. If you allow it, I collect anonymous usage stats only to improve this app (for
