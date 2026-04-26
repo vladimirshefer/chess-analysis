@@ -1,6 +1,6 @@
 import { sharedEvaluationCache } from "./chess-engine/EvaluationCache.ts";
 import { CachedChessEngine } from "./chess-engine/CachedChessEngine.ts";
-import { NativeChessEngine } from "./chess-engine/NativeChessEngine.ts";
+import { NativeChessEngine, StockfishRuntime } from "./chess-engine/NativeChessEngine.ts";
 import { PersistentChessEngine } from "./chess-engine/PersistentChessEngine.ts";
 import { QueuedChessEngine } from "./chess-engine/QueuedChessEngine.ts";
 import type { EngineEvaluation } from "./evaluation";
@@ -56,10 +56,11 @@ export interface ChessEngine {
 }
 
 export function createChessEngine(): ChessEngine {
-  return new CachedChessEngine(
-    new PersistentChessEngine(new QueuedChessEngine(new NativeChessEngine())),
-    sharedEvaluationCache,
-  );
+  const runtime = StockfishRuntime.resolve();
+  console.log("Creating chess engine with runtime:", runtime);
+  const nativeEngine = new NativeChessEngine(runtime);
+
+  return new CachedChessEngine(new PersistentChessEngine(new QueuedChessEngine(nativeEngine)), sharedEvaluationCache);
 }
 
 let singleton: ChessEngine | null = null;

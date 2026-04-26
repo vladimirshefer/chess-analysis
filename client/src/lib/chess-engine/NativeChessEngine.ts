@@ -19,12 +19,82 @@ interface RunningEvaluation {
   collectedByMultiPv: Map<number, ChessEngineLine>;
 }
 
+export namespace StockfishRuntime {
+  export type Mode = "lite-mt" | "lite-single";
+
+  export interface Config {
+    mode: Mode;
+    workerUrl: string;
+    threads: number;
+  }
+
+  export interface Capabilities {
+    crossOriginIsolated: boolean;
+    hasSharedArrayBuffer: boolean;
+    hardwareConcurrency: number;
+  }
+
+  const MT_WORKER_URL = "/stockfish/stockfish-18-lite.js";
+  const SINGLE_WORKER_URL = "/stockfish/stockfish-18-lite-single.js";
+  const DEFAULT_THREADS = 1;
+  const MAX_THREADS = 32;
+
+  export function resolve(capabilities: Capabilities = detectCapabilities()): Config {
+    if (!supportsMultiThreading(capabilities)) {
+      return {
+        mode: "lite-single",
+        workerUrl: SINGLE_WORKER_URL,
+        threads: DEFAULT_THREADS,
+      };
+    }
+
+    return {
+      mode: "lite-mt",
+      workerUrl: MT_WORKER_URL,
+      threads: computeThreads(capabilities.hardwareConcurrency),
+    };
+  }
+
+  export function detectCapabilities(): Capabilities {
+    const globalScope = globalThis as unknown as {
+      crossOriginIsolated?: boolean;
+      SharedArrayBuffer?: typeof SharedArrayBuffer;
+      navigator?: Navigator;
+    };
+    const hardwareConcurrency = Math.trunc(globalScope.navigator?.hardwareConcurrency ?? DEFAULT_THREADS);
+
+    return {
+      crossOriginIsolated: globalScope.crossOriginIsolated === true,
+      hasSharedArrayBuffer: typeof globalScope.SharedArrayBuffer !== "undefined",
+      hardwareConcurrency: hardwareConcurrency > 0 ? hardwareConcurrency : DEFAULT_THREADS,
+    };
+  }
+
+  function supportsMultiThreading(capabilities: Capabilities): boolean {
+    return (
+      capabilities.crossOriginIsolated && capabilities.hasSharedArrayBuffer && capabilities.hardwareConcurrency >= 2
+    );
+  }
+
+  function computeThreads(hardwareConcurrency: number): number {
+    const normalized = Math.trunc(hardwareConcurrency);
+    if (normalized < 2) return 2;
+    if (normalized > MAX_THREADS) return MAX_THREADS;
+    return normalized;
+  }
+}
+
 export class NativeChessEngine implements ChessEngine {
   private readonly worker: Worker;
+  private readonly runtime: StockfishRuntime.Config;
   private currentEvaluation: RunningEvaluation | null = null;
 
-  constructor(workerFactory: () => Worker = createStockfishWorker) {
-    this.worker = workerFactory();
+  constructor(
+    runtime: StockfishRuntime.Config = StockfishRuntime.resolve(),
+    workerFactory: (workerUrl: string) => Worker = createStockfishWorker,
+  ) {
+    this.runtime = runtime;
+    this.worker = workerFactory(this.runtime.workerUrl);
     this.worker.onmessage = this.handleMessage.bind(this);
     this.worker.onerror = this.handleError.bind(this);
     this.worker.postMessage("uci");
@@ -53,6 +123,9 @@ export class NativeChessEngine implements ChessEngine {
         collectedByMultiPv: new Map<number, ChessEngineLine>(),
       };
 
+      if (this.runtime.mode === "lite-mt") {
+        this.worker.postMessage(`setoption name Threads value ${this.runtime.threads}`);
+      }
       this.worker.postMessage(`setoption name MultiPV value ${linesAmount}`);
       this.worker.postMessage(`position fen ${fen}`);
       this.worker.postMessage(`go depth ${options.minDepth}`);
@@ -117,8 +190,8 @@ export class NativeChessEngine implements ChessEngine {
   }
 }
 
-function createStockfishWorker(): Worker {
-  return new Worker("/stockfish/stockfish.js");
+function createStockfishWorker(workerUrl: string): Worker {
+  return new Worker(workerUrl);
 }
 
 function toChessEngineLine(fen: string, infoLine: UniversalChessInterface.InfoLineDto): ChessEngineLine | null {

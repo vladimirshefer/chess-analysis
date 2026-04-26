@@ -9,7 +9,7 @@ import {
 import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
 import { absoluteNumericEvaluationToEngineEvaluation, evalToNum } from "../evaluation.ts";
 
-const DEFAULT_ENGINE_ID = "stockfish.js-16.1-lite";
+export const DEFAULT_ENGINE_ID = "stockfish.js-16.1-lite";
 
 export class PersistentChessEngine implements ChessEngine {
   private readonly delegate: ChessEngine;

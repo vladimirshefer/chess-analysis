@@ -12,7 +12,7 @@ import {
 import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
 import { GameResult } from "../evaluation.ts";
 import { CachedChessEngine } from "./CachedChessEngine.ts";
-import { PersistentChessEngine } from "./PersistentChessEngine.ts";
+import { DEFAULT_ENGINE_ID, PersistentChessEngine } from "./PersistentChessEngine.ts";
 import { QueuedChessEngine } from "./QueuedChessEngine.ts";
 
 describe("CachedChessEngine", function suite() {
@@ -62,7 +62,7 @@ describe("PersistentChessEngine", function suite() {
     const repository = new TestDoubles.FakeRepository([
       {
         positionFen: fen,
-        engineId: "stockfish.js-16.1-lite",
+        engineId: DEFAULT_ENGINE_ID,
         searchDepth: 14,
         evaluation: 35,
         variationLines: [
@@ -133,7 +133,7 @@ describe("PersistentChessEngine", function suite() {
     const repository = new TestDoubles.FakeRepository([
       {
         positionFen: whiteToMoveFen,
-        engineId: "stockfish.js-16.1-lite",
+        engineId: DEFAULT_ENGINE_ID,
         searchDepth: 0,
         evaluation: 2_000_000,
         variationLines: [
@@ -145,7 +145,7 @@ describe("PersistentChessEngine", function suite() {
       },
       {
         positionFen: blackToMoveFen,
-        engineId: "stockfish.js-16.1-lite",
+        engineId: DEFAULT_ENGINE_ID,
         searchDepth: 0,
         evaluation: -2_000_000,
         variationLines: [
