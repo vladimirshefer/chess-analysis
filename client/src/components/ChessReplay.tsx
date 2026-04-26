@@ -116,8 +116,8 @@ const PLAN_CAPTURE_SQUARE_STYLE = {
   boxShadow: "inset 0 0 0 3px rgba(185, 28, 28, 0.85)",
 };
 
-const TREE_SEED = {
-  __root__: {
+const TREE_SEED: Record<string, MoveNode> = {
+  [ROOT_ANALYSIS_NODE_ID]: {
     id: ROOT_ANALYSIS_NODE_ID,
     san: "",
     fen: START_FEN,

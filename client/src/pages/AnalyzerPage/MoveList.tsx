@@ -132,18 +132,20 @@ function MoveRow({
         <div className="flex-1 grid grid-cols-2 gap-2">
           <HalfMoveCell
             node={row.whiteNode}
-            currentNodeId={currentNodeId}
-            positionAnalysisMap={positionAnalysisMap}
-            moveMarksMap={moveMarksMap}
             onSelect={setCurrentNodeId}
+            nodeAnalysis={positionAnalysisMap[row.whiteNode.id]}
+            isFocus={currentNodeId === row.whiteNode.id}
+            moveMark={moveMarksMap[row.whiteNode.id]}
           />
-          <HalfMoveCell
-            node={row.blackNode}
-            currentNodeId={currentNodeId}
-            positionAnalysisMap={positionAnalysisMap}
-            moveMarksMap={moveMarksMap}
-            onSelect={setCurrentNodeId}
-          />
+          {!!row.blackNode && (
+            <HalfMoveCell
+              node={row.blackNode}
+              onSelect={setCurrentNodeId}
+              nodeAnalysis={positionAnalysisMap[row.blackNode?.id ?? ""]}
+              isFocus={currentNodeId === row.blackNode?.id}
+              moveMark={moveMarksMap[row.blackNode?.id ?? ""]}
+            />
+          )}
         </div>
       </div>
 
@@ -167,25 +169,17 @@ function MoveRow({
 
 function HalfMoveCell({
   node,
-  currentNodeId,
-  positionAnalysisMap,
-  moveMarksMap,
   onSelect,
+  nodeAnalysis,
+  isFocus,
+  moveMark,
 }: {
   node: MoveNode | null;
-  currentNodeId: string;
-  positionAnalysisMap: Record<string, NodeAnalysis>;
-  moveMarksMap: Record<string, MoveMarkResult>;
   onSelect: (value: ((prevState: string) => string) | string) => void;
+  nodeAnalysis: NodeAnalysis;
+  isFocus: boolean;
+  moveMark: MoveMarkResult;
 }) {
-  if (!node) {
-    return <div className="w-full p-2 rounded border border-transparent" />;
-  }
-
-  const isFocus = node.id === currentNodeId;
-  const nodeAnalysis = positionAnalysisMap[node.id];
-  const moveMark = moveMarksMap[node.id];
-
   return (
     <button
       onClick={() => {
