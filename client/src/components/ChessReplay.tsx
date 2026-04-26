@@ -32,7 +32,6 @@ import {
 import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from "../lib/moveMarks";
 import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
-import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
 import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
@@ -133,14 +132,12 @@ function ChessReplay() {
   const [showPlans, setShowPlans] = useState(false);
   const [selectedDepth, setSelectedDepth] = useLocalStorageNumericState(ENGINE_DEPTH_STORAGE_KEY, 12);
   const [importedFullPgn, setImportedFullPgn] = useState("");
-  const [selectedSquare, setSelectedSquare] = useState<Square | null>(null);
   const deepAnalysisDepth = Math.max(selectedDepth + 4, 22);
   const hasExistingAnalysis = tree[ROOT_ANALYSIS_NODE_ID].children.length > 0 || importedFullPgn.length > 0;
 
   const engine = useMemo(() => getChessEngine(), []);
 
   const lastImportedRouteKeyRef = useRef<string | null>(null);
-  const moveMarksBySquareRef = useRef<Record<string, MoveMark>>({});
 
   function syncOpeningInfo(nodeId: string, opening: OpeningsBook.Opening | null): void {
     setPositionAnalysisMap((previous) => {
@@ -299,18 +296,6 @@ function ChessReplay() {
       [currentMoveSquares.to]: currentMoveMark.mark,
     };
   }, [currentMoveMark, currentMoveSquares]);
-
-  moveMarksBySquareRef.current = moveMarksBySquare;
-
-  const moveMarkSquareRenderer = useMemo(
-    () =>
-      createMoveMarkSquareRenderer({
-        getMark(square: string) {
-          return moveMarksBySquareRef.current[square];
-        },
-      }),
-    [],
-  );
 
   const currentFen: string = useMemo(() => tree[currentNodeId].fen, [currentNodeId, tree]);
 
@@ -610,10 +595,10 @@ function ChessReplay() {
               boardOrientation={boardOrientation}
               animationDuration={300}
               customArrows={planView.arrows}
-              customSquare={moveMarkSquareRenderer}
               customSquareStyles={boardSquareStyles}
               makeMove={(move) => makeMove(move, "board_click")}
               currentPositionGame={currentPositionGame}
+              moveMarksBySquare={moveMarksBySquare}
             />
           </div>
         </div>
