@@ -43,11 +43,6 @@ function App() {
     [consentDecision],
   );
 
-  function applyConsentDecision(nextDecision: AnalyticsConsent.Decision) {
-    AnalyticsConsent.save(nextDecision);
-    setConsentDecision(nextDecision);
-  }
-
   return (
     <AppShell>
       <AnalyticsRouteTracker />
@@ -69,11 +64,13 @@ function App() {
       </Routes>
       <AnalyticsConsentScreen
         isVisible={consentDecision === null}
-        onAccept={function handleConsentAccept() {
-          applyConsentDecision("accepted");
+        onAccept={() => {
+          AnalyticsConsent.save("accepted");
+          setConsentDecision("accepted");
         }}
-        onDecline={function handleConsentDecline() {
-          applyConsentDecision("declined");
+        onDecline={() => {
+          AnalyticsConsent.save("declined");
+          setConsentDecision("declined");
         }}
       />
     </AppShell>
