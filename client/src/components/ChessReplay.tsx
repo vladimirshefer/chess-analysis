@@ -1,15 +1,7 @@
 import { Chess, type Move, type Square } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  FaAnglesLeft,
-  FaChevronLeft,
-  FaChevronRight,
-  FaFileImport,
-  FaMagnifyingGlassPlus,
-  FaRotate,
-  FaTrashCan,
-} from "react-icons/fa6";
-import { GiPerspectiveDiceSixFacesRandom, GiStrikingArrows } from "react-icons/gi";
+import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
+import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Chessboard } from "react-chessboard";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
@@ -19,7 +11,6 @@ import {
   type EngineEvaluationPriority,
   type EvaluationRequest,
   type FullMoveEvaluation,
-  CURRENT_ENGINE_NAME,
   getChessEngine,
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
@@ -47,8 +38,8 @@ import { createMoveMarkSquareRenderer } from "./MoveMarkSquareRenderer";
 import RenderIcon from "./RenderIcon";
 import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
-import { EngineDepthSelector } from "../pages/AnalyzerPage/EngineDepthSelector.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
+import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export interface MoveNode {
@@ -59,7 +50,7 @@ export interface MoveNode {
   children: string[];
 }
 
-interface DisplayEngineLine {
+export interface DisplayEngineLine {
   /**
    * Suggested next move.
    * Example: "Bc2"
@@ -274,7 +265,6 @@ function ChessReplay() {
     [currentNodeId, positionAnalysisMap],
   );
 
-  const statusLineText = statusText === "Analysis Complete" ? `${statusText} · ${CURRENT_ENGINE_NAME}` : statusText;
   const openingsReady = OpeningsBook.isReady();
 
   const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
@@ -589,7 +579,8 @@ function ChessReplay() {
     }
   }
 
-  async function applyEngineMove(line: DisplayEngineLine, suggestedMoveUci: string): Promise<void> {
+  async function applyEngineMove(line: DisplayEngineLine): Promise<void> {
+    const suggestedMoveUci = line.suggestedMoveUci;
     const moveResult = makeMove(
       {
         from: suggestedMoveUci.substring(0, 2),
@@ -795,70 +786,16 @@ function ChessReplay() {
             <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
         </div>
-        <div className="flex flex-col gap-2 shadow rounded">
-          <div className="flex items-start justify-between gap-4 border-b border-gray-100">
-            <div className={"grow"}></div>
-            <div className="flex items-center">
-              <EngineDepthSelector
-                selectedDepth={selectedDepth}
-                onSelectDepth={(depth: number) => {
-                  if (depth === selectedDepth) return;
-
-                  Analytics.trackEvent("engine_depth_selected", { depth, previous_depth: selectedDepth });
-                  setSelectedDepth(depth);
-                }}
-              />
-              <button
-                className={`inline-flex items-center px-3 py-1.5 text-xs font-bold ${showPlans ? "text-olive-700 border-olive-300 bg-olive-50 hover:bg-olive-100" : "text-gray-600 border-gray-300 bg-white hover:bg-gray-100"}`}
-                onClick={() => setShowPlans((it) => !it)}
-                title={"Show engine plan arrows"}
-              >
-                <RenderIcon iconType={GiStrikingArrows} className="text-xs" />
-              </button>
-              <button
-                className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                onClick={runDeepAnalysis}
-                title={"Run deeper analysis"}
-              >
-                <RenderIcon iconType={FaMagnifyingGlassPlus} className="text-xs" />
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-col">
-            {(!currentAnalysis || (currentAnalysis.lines.length === 0 && !currentAnalysis.isFinal)) && (
-              <div className="text-xs text-gray-400 italic">Calculating best moves...</div>
-            )}
-            {currentAnalysis?.lines.map(function renderLine(line, index) {
-              const scoreValue = line.evaluation;
-              return (
-                <button
-                  key={index}
-                  onClick={() => {
-                    void applyEngineMove(line, line.suggestedMoveUci);
-                  }}
-                  className="flex flex-col gap-2 px-2 hover:bg-olive-100 group transition-all text-left rounded"
-                >
-                  <div className="flex items-baseline w-full gap-2">
-                    <span className="text-xs font-bold text-gray-300">{line.lineRank}.</span>
-                    <span className="font-bold text-gray-900 font-mono text-nowrap">{line.suggestedMove}</span>
-                    <div className="text-xs text-gray-700 font-mono truncate grow opacity-70">
-                      {line.engineLine.split(" ").slice(1).join(" ")}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`text-sm font-bold px-2 font-mono rounded ${scoreValue > 0 ? "bg-white text-black group-hover:bg-olive-200" : scoreValue < 0 ? "bg-black text-white group-hover:bg-olive-900" : "text-gray-500"}`}
-                      >
-                        {Evaluations.toString(line.evaluation)}
-                      </span>
-                      <span className="text-xs text-gray-400">d{line.depth}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-            <div className="text-[8px] text-gray-400 text-right">{statusLineText}</div>
-          </div>
-        </div>
+        <EnginePane
+          currentAnalysis={currentAnalysis}
+          showPlans={showPlans}
+          setShowPlans={(it) => setShowPlans(it)}
+          selectedDepth={selectedDepth}
+          setSelectedDepth={(it) => setSelectedDepth(it)}
+          statusText={statusText}
+          runDeepAnalysis={() => runDeepAnalysis()}
+          applyLine={(line) => applyEngineMove(line)}
+        />
         <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
           <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
             <span className="flex items-center gap-2 min-w-0">
