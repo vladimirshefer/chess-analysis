@@ -3,11 +3,6 @@ import { useState } from "react";
 export function PrivacyPolicyPage({ onRevokeConsent }: { onRevokeConsent: () => void }) {
   const [wasRevoked, setWasRevoked] = useState(false);
 
-  function handleRevokeConsentClick() {
-    onRevokeConsent();
-    setWasRevoked(true);
-  }
-
   return (
     <div className="max-w-3xl mx-auto">
       <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg border border-gray-100">
@@ -29,7 +24,10 @@ export function PrivacyPolicyPage({ onRevokeConsent }: { onRevokeConsent: () => 
             You can revoke your analytics choice anytime. We will stop analytics immediately and ask again later.
           </p>
           <button
-            onClick={handleRevokeConsentClick}
+            onClick={() => {
+              onRevokeConsent();
+              setWasRevoked(true);
+            }}
             className="mt-3 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-bold hover:bg-gray-100"
           >
             Revoke analytics consent
