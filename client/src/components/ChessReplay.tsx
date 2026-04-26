@@ -1,8 +1,7 @@
-import { Chess, type Move, type Square } from "chess.js";
+import { Chess, type Square } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
-import { Chessboard } from "react-chessboard";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
 import {
@@ -27,7 +26,6 @@ import {
   evalToNum,
   Evaluations,
   getAbsoluteTerminalEvaluation,
-  getTerminalEvaluation,
   START,
   START_FEN,
 } from "../lib/evaluation";
@@ -40,6 +38,7 @@ import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
+import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export interface MoveNode {
@@ -256,7 +255,6 @@ function ChessReplay() {
       current = node.parentId;
     }
 
-    console.log("visiblePath", path);
     return path;
   }, [activeLineId, tree]);
 
@@ -316,20 +314,9 @@ function ChessReplay() {
 
   const currentFen: string = useMemo(() => tree[currentNodeId].fen, [currentNodeId, tree]);
 
-  const currentPositionGame = useMemo(() => new Chess(currentFen), [currentFen]);
-  const selectedSquareMoves = useMemo<Move[]>(
-    function buildSelectedSquareMoves() {
-      if (!selectedSquare) return [];
+  const currentPositionGame: Chess = useMemo(() => new Chess(currentFen), [currentFen]);
 
-      try {
-        return currentPositionGame.moves({ square: selectedSquare, verbose: true });
-      } catch {
-        return [];
-      }
-    },
-    [currentPositionGame, selectedSquare],
-  );
-  const planView = useMemo(
+  const planView: AnalyzerPageEnginePlan.PlanView = useMemo(
     function buildPlanView() {
       if (!showPlans) return AnalyzerPageEnginePlan.toPlanView(currentFen, []);
       if (!currentAnalysis || currentAnalysis.lines.length === 0) {
@@ -347,6 +334,7 @@ function ChessReplay() {
     },
     [currentAnalysis, currentFen, showPlans],
   );
+
   const boardSquareStyles = useMemo(
     function buildBoardSquareStyles() {
       const stylesBySquare: Record<string, Record<string, string | number>> = {};
@@ -376,30 +364,11 @@ function ChessReplay() {
         mergeSquareStyle(square, PLAN_CAPTURE_SQUARE_STYLE);
       });
 
-      if (selectedSquare) {
-        mergeSquareStyle(selectedSquare, {
-          backgroundColor: "#fff6",
-          boxShadow: "inset 0 0 0 3px #fff6",
-        });
-      }
-
-      selectedSquareMoves.forEach(function applyLegalTargetStyle(move) {
-        const isCapture = move.isCapture();
-        mergeSquareStyle(move.to, {
-          ...(isCapture
-            ? {
-                boxShadow: "inset 0 0 0 4px #fff6",
-              }
-            : {
-                background: "radial-gradient(circle, #fff6 0%, #fff6 22%, #fff0 26%)",
-              }),
-        });
-      });
-
       return stylesBySquare;
     },
-    [planView.captureSquares, selectedSquare, selectedSquareMoves],
+    [planView.captureSquares],
   );
+
   const canGoForward = useMemo(() => tree[currentNodeId]?.children?.[0] ?? false, [currentNodeId, tree]);
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
@@ -417,57 +386,25 @@ function ChessReplay() {
   }, [currentNodeId, tree]);
 
   useEffect(() => {
-    let cancelled = false;
     void (async () => {
       const tasks = buildAnalysisTasks(tree, activeLineId, currentNodeId, positionAnalysisMap, selectedDepth);
-      if (cancelled) return;
       if (tasks.length === 0) {
-        setStatusText("Nothing to analyze");
-        return;
+        setStatusText("Analysis complete");
       }
-
-      setStatusText("Analyzing...");
-
-      const results = await Promise.allSettled(
+      await Promise.allSettled(
         tasks.map((task) =>
           engine
             .evaluate(task.fen, task.request, task.priority, (update) => {
-              if (cancelled) return;
               syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
               setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
             })
             .then((finalEvaluation) => {
-              if (cancelled) return;
               syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
             }),
         ),
       );
-
-      if (cancelled) return;
-      const hasFailures = results.some((result) => result.status === "rejected");
-      if (hasFailures) {
-        setStatusText(`Engine Error`);
-        console.error(`Engine Error`, results.map((it) => (it as any).reason).filter(Boolean));
-      } else {
-        setStatusText("Analysis Complete");
-      }
-    })().catch((error) => {
-      if (cancelled) return;
-      setStatusText("Engine Error");
-      console.error("Engine Error", error);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [tree, activeLineId, currentNodeId, engine, selectedDepth]);
-
-  useEffect(
-    function clearSelectedSquareOnPositionChange() {
-      setSelectedSquare(null);
-    },
-    [currentFen],
-  );
+    })();
+  }, [tree, activeLineId, currentNodeId, engine, selectedDepth, positionAnalysisMap]);
 
   function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
     setPositionAnalysisMap((previous) => {
@@ -503,73 +440,54 @@ function ChessReplay() {
   }
 
   function trackMoveAnalytics(
-    source: "board_drag" | "board_click" | "engine_suggestion",
+    source: "board_click" | "engine_suggestion",
     move: { from: string; to: string },
     san: string,
   ) {
-    if (source === "engine_suggestion") {
-      Analytics.trackEvent("engine_suggestion_applied", {
-        san,
-        from: move.from,
-        to: move.to,
-      });
-      return;
-    }
-
-    Analytics.trackEvent("move_made", {
+    Analytics.trackEvent(source, {
       san,
       from: move.from,
       to: move.to,
-      source,
     });
+    return;
   }
 
   function makeMove(
     move: { from: string; to: string; promotion?: string },
-    source: "board_drag" | "board_click" | "engine_suggestion",
+    source: "board_click" | "engine_suggestion",
   ): { nodeId: string; fen: string } | null {
     const tempGame = new Chess(currentFen);
 
     try {
       const result = tempGame.move(move);
-      if (!result) return null;
-
-      const nextFen = tempGame.fen();
-      const nextNodeId =
-        currentNodeId && currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}|${result.san}` : result.san;
-
-      if (tree[nextNodeId]) {
-        setCurrentNodeId(nextNodeId);
-        trackMoveAnalytics(source, move, result.san);
-        return {
-          nodeId: nextNodeId,
-          fen: nextFen,
-        };
+      if (!result) {
+        console.log("Illegal move!", move);
+        return null;
       }
 
-      setTree(function updateTree(previous) {
-        const nextTree: Record<string, MoveNode> = {
-          ...previous,
-          [nextNodeId]: {
+      const nextFen = tempGame.fen();
+      const nextNodeId = currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}|${result.san}` : result.san;
+
+      Analytics.trackEvent("move", {
+        source,
+        from: move.from,
+        to: move.to,
+      });
+
+      if (!tree[nextNodeId]) {
+        setTree((previous) =>
+          addNode(previous, currentNodeId, {
             id: nextNodeId,
             san: result.san,
             fen: nextFen,
             parentId: currentNodeId,
             children: [],
-          },
-        };
+          }),
+        );
+      }
 
-        if (currentNodeId) {
-          nextTree[currentNodeId] = {
-            ...previous[currentNodeId],
-            children: [...previous[currentNodeId].children, nextNodeId],
-          };
-        }
-
-        return nextTree;
-      });
       setCurrentNodeId(nextNodeId);
-      trackMoveAnalytics(source, move, result.san);
+
       return {
         nodeId: nextNodeId,
         fen: nextFen,
@@ -578,6 +496,8 @@ function ChessReplay() {
       return null;
     }
   }
+
+  useEffect(() => console.log("Tree changed", tree), [tree]);
 
   async function applyEngineMove(line: DisplayEngineLine): Promise<void> {
     const suggestedMoveUci = line.suggestedMoveUci;
@@ -591,61 +511,10 @@ function ChessReplay() {
     );
     if (!moveResult) return;
 
-    try {
-      const cachedEvaluation = await engine.getEvaluation(moveResult.fen, 0);
-      if (cachedEvaluation) {
-        syncSingleNodeAnalysis(moveResult.nodeId, toNodeAnalysis(moveResult.fen, cachedEvaluation, true));
-        return;
-      }
-
-      const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
-      if (seededAnalysis) {
-        syncSingleNodeAnalysis(moveResult.nodeId, seededAnalysis);
-      }
-    } catch (error) {
-      console.error("Failed to seed analysis after applying engine move", error);
+    const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
+    if (seededAnalysis) {
+      syncSingleNodeAnalysis(moveResult.nodeId, seededAnalysis);
     }
-  }
-
-  function onDrop(sourceSquare: string, targetSquare: string) {
-    const moveResult = makeMove({ from: sourceSquare, to: targetSquare, promotion: "q" }, "board_drag");
-    if (!moveResult) return false;
-    setSelectedSquare(null);
-    return true;
-  }
-
-  function onSquareClick(square: string) {
-    const clickedSquare = square as Square;
-
-    function isMovableOwnPiece(targetSquare: Square) {
-      const piece = currentPositionGame.get(targetSquare);
-      if (!piece) return false;
-      if (piece.color !== currentPositionGame.turn()) return false;
-      return currentPositionGame.moves({ square: targetSquare, verbose: true }).length > 0;
-    }
-
-    if (!selectedSquare) {
-      if (isMovableOwnPiece(clickedSquare)) setSelectedSquare(clickedSquare);
-      return;
-    }
-
-    if (selectedSquare === clickedSquare) {
-      setSelectedSquare(null);
-      return;
-    }
-
-    const moveResult = makeMove({ from: selectedSquare, to: clickedSquare, promotion: "q" }, "board_click");
-    if (moveResult) {
-      setSelectedSquare(null);
-      return;
-    }
-
-    if (isMovableOwnPiece(clickedSquare)) {
-      setSelectedSquare(clickedSquare);
-      return;
-    }
-
-    setSelectedSquare(null);
   }
 
   function importPgn(
@@ -735,16 +604,16 @@ function ChessReplay() {
             className="w-6 self-stretch"
           />
           <div className="flex-1 min-w-0 shadow-2xl overflow-hidden">
-            <Chessboard
+            <ExtendedChessBoard
               id="AnalysisBoard"
               position={currentNodeId ? tree[currentNodeId].fen : START_FEN}
-              onPieceDrop={onDrop}
-              onSquareClick={onSquareClick}
               boardOrientation={boardOrientation}
               animationDuration={300}
               customArrows={planView.arrows}
               customSquare={moveMarkSquareRenderer}
               customSquareStyles={boardSquareStyles}
+              makeMove={(move) => makeMove(move, "board_click")}
+              currentPositionGame={currentPositionGame}
             />
           </div>
         </div>
@@ -943,6 +812,7 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
   return getDeepestLeaf(node.children[0], tree);
 }
 
+// TODO: Dirty! Refactor this or inline.
 function getActiveLineNodeIdsFromLeafToRoot(
   activeLineId: string | null,
   currentNodeId: string | null,
@@ -958,9 +828,7 @@ function getActiveLineNodeIdsFromLeafToRoot(
     .map(function buildNodeId(_, index, items) {
       return items.slice(0, index + 1).join("|");
     })
-    .filter(function keepExistingNode(nodeId) {
-      return Boolean(tree[nodeId]);
-    });
+    .filter((nodeId) => Boolean(tree[nodeId]));
 
   const leafToRootNodeIds = [...rootToLeafNodeIds].reverse();
   if (tree[ROOT_ANALYSIS_NODE_ID]) {
@@ -978,53 +846,18 @@ function buildAnalysisTasks(
   selectedDepth: number,
 ): ScheduledTask[] {
   const lineNodeIds = getActiveLineNodeIdsFromLeafToRoot(activeLineId, currentNodeId, tree);
-  const tasks: ScheduledTask[] = [];
-  const taskKeys = new Set<string>();
-
-  function addTask(
-    nodeId: string,
-    fen: string,
-    label: string,
-    minDepth: number,
-    linesAmount: number,
-    priority: EngineEvaluationPriority,
-  ): void {
-    if (getTerminalEvaluation(fen)) return;
-
-    const key = [nodeId, fen, minDepth, linesAmount, priority].join("|");
-    if (taskKeys.has(key)) return;
-
-    taskKeys.add(key);
-    tasks.push({
-      nodeId,
-      fen,
-      label,
-      request: { minDepth, linesAmount },
-      priority,
-    });
-  }
-
-  function addTasksForNodes(
-    nodeIds: string[],
-    minDepth: number,
-    linesAmount: number,
-    priority: EngineEvaluationPriority,
-  ): void {
-    for (const nodeId of nodeIds) {
-      if (!tree[nodeId]) continue;
-      const fen = tree[nodeId].fen;
-      const label = tree[nodeId].san;
-      addTask(nodeId, fen, label, minDepth, linesAmount, priority);
-    }
-  }
 
   const notAnalyzedNodes = lineNodeIds.filter(
     (it) => (positionAnalysisMap[it]?.depth ?? -1) < selectedDepth || !(positionAnalysisMap[it]?.isFinal ?? false),
   );
 
-  addTasksForNodes(notAnalyzedNodes, selectedDepth, 2, EngineEvaluationPriorities.BACKGROUND);
-
-  return tasks;
+  return notAnalyzedNodes.map((nodeId) => ({
+    nodeId,
+    fen: tree[nodeId].fen,
+    label: tree[nodeId].san,
+    request: { minDepth: selectedDepth, linesAmount: 2 },
+    priority: EngineEvaluationPriorities.BACKGROUND,
+  }));
 }
 
 function getSelectedAnalysisTarget(
@@ -1375,6 +1208,26 @@ function mergeNodeAnalysisLines(currentAnalysis: NodeAnalysis | undefined, nextA
       return left.lineRank - right.lineRank;
     }),
   };
+}
+
+function addNode(
+  tree: Record<string, MoveNode>,
+  parentId: string | null,
+  newChild: MoveNode,
+): Record<string, MoveNode> {
+  const nextTree: Record<string, MoveNode> = {
+    ...tree,
+    [newChild.id]: newChild,
+  };
+
+  if (parentId) {
+    nextTree[parentId] = {
+      ...tree[parentId],
+      children: [...tree[parentId].children, newChild.id],
+    };
+  }
+
+  return nextTree;
 }
 
 export default ChessReplay;
