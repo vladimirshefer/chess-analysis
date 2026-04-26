@@ -55,7 +55,17 @@ function App() {
         <Route path="/" element={<AnalyzerPage />} />
         <Route path="/import/chess-com" element={<ChessComImportPage />} />
         <Route path="/about" element={<AboutPage />} />
-        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route
+          path="/privacy"
+          element={
+            <PrivacyPolicyPage
+              onRevokeConsent={() => {
+                AnalyticsConsent.reset();
+                setConsentDecision(null);
+              }}
+            />
+          }
+        />
       </Routes>
       <AnalyticsConsentScreen
         isVisible={consentDecision === null}
