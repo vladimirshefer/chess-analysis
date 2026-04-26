@@ -8,16 +8,33 @@ declare global {
 
 export namespace Analytics {
   type EventParams = Record<string, string | number | boolean | undefined>;
+  export type ConsentDecision = "accepted" | "declined" | null;
 
   const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID?.trim();
   let initialized = false;
+  let hasConsent = false;
 
   export function isConfigured(): boolean {
     return Boolean(measurementId);
   }
 
+  export function setConsent(decision: ConsentDecision): void {
+    hasConsent = decision === "accepted";
+    if (hasConsent) {
+      init();
+    }
+  }
+
   export function init(): void {
-    if (!measurementId || initialized) return;
+    if (!measurementId) {
+      logFallback("init", { configured: false });
+      return;
+    }
+    if (!hasConsent) {
+      logFallback("init", { configured: true, consent: false });
+      return;
+    }
+    if (initialized) return;
     initialized = true;
 
     if (!window.dataLayer) {
@@ -36,18 +53,26 @@ export namespace Analytics {
   }
 
   export function trackPageView(path: string): void {
-    if (!measurementId) return;
-
-    window.gtag?.("event", "page_view", {
+    const pageViewPayload = {
       page_path: path,
       page_title: document.title,
       page_location: window.location.href,
-    });
+    };
+    if (!measurementId || !hasConsent) {
+      logFallback("page_view", pageViewPayload);
+      return;
+    }
+
+    window.gtag?.("event", "page_view", pageViewPayload);
   }
 
   export function trackEvent(eventName: string, params: EventParams = {}): void {
-    if (!measurementId) return;
-    window.gtag?.("event", eventName, sanitizeParams(params));
+    const payload = sanitizeParams(params);
+    if (!measurementId || !hasConsent) {
+      logFallback(eventName, payload);
+      return;
+    }
+    window.gtag?.("event", eventName, payload);
   }
 
   function sanitizeParams(params: EventParams): Record<string, string | number | boolean> {
@@ -67,5 +92,9 @@ export namespace Analytics {
     script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
     script.setAttribute("data-gtag-id", id);
     document.head.appendChild(script);
+  }
+
+  function logFallback(eventName: string, payload: Record<string, string | number | boolean>): void {
+    console.info("[analytics:fallback]", eventName, payload);
   }
 }
