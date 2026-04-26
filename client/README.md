@@ -2,6 +2,22 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Google Analytics (GA4)
+
+Create `.env.local` with your GA4 measurement id:
+
+```bash
+VITE_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+When `VITE_GA_MEASUREMENT_ID` is set, the app sends:
+
+- SPA page views on route change
+- `move_made` events for board moves
+- `engine_depth_selected` events when depth changes
+
+The app now shows a consent screen first. Analytics runs only after `Accept`.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)

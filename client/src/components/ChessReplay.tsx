@@ -21,6 +21,7 @@ import {
   type FullMoveEvaluation,
   getChessEngine,
 } from "../lib/ChessEngine.ts";
+import { Analytics } from "../lib/Analytics.ts";
 import {
   type GamePlayersInfo,
   type ImportedGameInfo,
@@ -505,7 +506,32 @@ function ChessReplay() {
       });
   }
 
-  function makeMove(move: { from: string; to: string; promotion?: string }): { nodeId: string; fen: string } | null {
+  function trackMoveAnalytics(
+    source: "board_drag" | "board_click" | "engine_suggestion",
+    move: { from: string; to: string },
+    san: string,
+  ) {
+    if (source === "engine_suggestion") {
+      Analytics.trackEvent("engine_suggestion_applied", {
+        san,
+        from: move.from,
+        to: move.to,
+      });
+      return;
+    }
+
+    Analytics.trackEvent("move_made", {
+      san,
+      from: move.from,
+      to: move.to,
+      source,
+    });
+  }
+
+  function makeMove(
+    move: { from: string; to: string; promotion?: string },
+    source: "board_drag" | "board_click" | "engine_suggestion",
+  ): { nodeId: string; fen: string } | null {
     const tempGame = new Chess(currentFen);
 
     try {
@@ -519,6 +545,7 @@ function ChessReplay() {
       if (tree[nextNodeId]) {
         setCurrentNodeId(nextNodeId);
         setActiveLineId(nextNodeId);
+        trackMoveAnalytics(source, move, result.san);
         return {
           nodeId: nextNodeId,
           fen: nextFen,
@@ -548,6 +575,7 @@ function ChessReplay() {
       });
       setCurrentNodeId(nextNodeId);
       setActiveLineId(nextNodeId);
+      trackMoveAnalytics(source, move, result.san);
       return {
         nodeId: nextNodeId,
         fen: nextFen,
@@ -558,11 +586,14 @@ function ChessReplay() {
   }
 
   async function applyEngineMove(line: DisplayEngineLine, suggestedMoveUci: string): Promise<void> {
-    const moveResult = makeMove({
-      from: suggestedMoveUci.substring(0, 2),
-      to: suggestedMoveUci.substring(2, 4),
-      promotion: suggestedMoveUci[4] || "q",
-    });
+    const moveResult = makeMove(
+      {
+        from: suggestedMoveUci.substring(0, 2),
+        to: suggestedMoveUci.substring(2, 4),
+        promotion: suggestedMoveUci[4] || "q",
+      },
+      "engine_suggestion",
+    );
     if (!moveResult) return;
 
     try {
@@ -582,7 +613,7 @@ function ChessReplay() {
   }
 
   function onDrop(sourceSquare: string, targetSquare: string) {
-    const moveResult = makeMove({ from: sourceSquare, to: targetSquare, promotion: "q" });
+    const moveResult = makeMove({ from: sourceSquare, to: targetSquare, promotion: "q" }, "board_drag");
     if (!moveResult) return false;
     setSelectedSquare(null);
     return true;
@@ -608,7 +639,7 @@ function ChessReplay() {
       return;
     }
 
-    const moveResult = makeMove({ from: selectedSquare, to: clickedSquare, promotion: "q" });
+    const moveResult = makeMove({ from: selectedSquare, to: clickedSquare, promotion: "q" }, "board_click");
     if (moveResult) {
       setSelectedSquare(null);
       return;
@@ -767,7 +798,15 @@ function ChessReplay() {
               <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
             </div>
             <div className="flex items-center gap-2">
-              <EngineDepthSelector selectedDepth={selectedDepth} onSelectDepth={setSelectedDepth} />
+              <EngineDepthSelector
+                selectedDepth={selectedDepth}
+                onSelectDepth={function (depth: number) {
+                  if (depth === selectedDepth) return;
+
+                  Analytics.trackEvent("engine_depth_selected", { depth, previous_depth: selectedDepth });
+                  setSelectedDepth(depth);
+                }}
+              />
               <button
                 onClick={() => setShowPlans((it) => !it)}
                 title={"Show engine plan arrows"}
