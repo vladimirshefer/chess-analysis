@@ -35,20 +35,22 @@ function App() {
       return AnalyticsConsent.read();
     },
   );
-  const isConsentRequired = Analytics.isConfigured();
-  const isTrackingEnabled = isConsentRequired && consentDecision === "accepted";
+
+  useEffect(
+    function syncAnalyticsConsent() {
+      Analytics.setConsent(consentDecision);
+    },
+    [consentDecision],
+  );
 
   function applyConsentDecision(nextDecision: AnalyticsConsent.Decision) {
     AnalyticsConsent.save(nextDecision);
-    if (nextDecision === "accepted") {
-      Analytics.init();
-    }
     setConsentDecision(nextDecision);
   }
 
   return (
     <AppShell>
-      <AnalyticsRouteTracker isEnabled={isTrackingEnabled} />
+      <AnalyticsRouteTracker />
       <Routes>
         <Route path="/" element={<AnalyzerPage />} />
         <Route path="/import/chess-com" element={<ChessComImportPage />} />
@@ -56,7 +58,7 @@ function App() {
         <Route path="/privacy" element={<PrivacyPolicyPage />} />
       </Routes>
       <AnalyticsConsentScreen
-        isVisible={isConsentRequired && consentDecision === null}
+        isVisible={consentDecision === null}
         onAccept={function handleConsentAccept() {
           applyConsentDecision("accepted");
         }}
@@ -68,16 +70,15 @@ function App() {
   );
 }
 
-function AnalyticsRouteTracker({ isEnabled }: { isEnabled: boolean }) {
+function AnalyticsRouteTracker() {
   const location = useLocation();
 
   useEffect(
     function trackRoutePageView() {
-      if (!isEnabled) return;
       const path = `${location.pathname}${location.search}${location.hash}`;
       Analytics.trackPageView(path);
     },
-    [isEnabled, location.hash, location.pathname, location.search],
+    [location.hash, location.pathname, location.search],
   );
 
   return null;
