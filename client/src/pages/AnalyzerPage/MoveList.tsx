@@ -51,7 +51,6 @@ namespace MoveListView {
 }
 
 export function MoveList({
-  setActiveLineId,
   currentNodeId,
   setCurrentNodeId,
   moveMarksMap,
@@ -65,7 +64,6 @@ export function MoveList({
   positionAnalysisMap: Record<string, NodeAnalysis>;
   moveMarksMap: Record<string, MoveMarkResult>;
   setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
-  setActiveLineId: (value: string) => void;
 }) {
   const rows = MoveListView.getRows(visiblePath, tree);
 
@@ -76,9 +74,7 @@ export function MoveList({
         currentNodeId={currentNodeId}
         positionAnalysisMap={positionAnalysisMap}
         moveMarksMap={moveMarksMap}
-        tree={tree}
         setCurrentNodeId={setCurrentNodeId}
-        setActiveLineId={setActiveLineId}
       />
     </div>
   );
@@ -89,17 +85,13 @@ function MoveListRows({
   currentNodeId,
   positionAnalysisMap,
   moveMarksMap,
-  tree,
   setCurrentNodeId,
-  setActiveLineId,
 }: {
   rows: MoveListView.Row[];
   currentNodeId: string;
   positionAnalysisMap: Record<string, NodeAnalysis>;
   moveMarksMap: Record<string, MoveMarkResult>;
-  tree: Record<string, MoveNode>;
   setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
-  setActiveLineId: (value: string) => void;
 }) {
   return (
     <>
@@ -110,9 +102,7 @@ function MoveListRows({
           currentNodeId={currentNodeId}
           positionAnalysisMap={positionAnalysisMap}
           moveMarksMap={moveMarksMap}
-          tree={tree}
           setCurrentNodeId={setCurrentNodeId}
-          setActiveLineId={setActiveLineId}
         />
       ))}
     </>
@@ -124,17 +114,13 @@ function MoveRow({
   currentNodeId,
   positionAnalysisMap,
   moveMarksMap,
-  tree,
   setCurrentNodeId,
-  setActiveLineId,
 }: {
   row: MoveListView.Row;
   currentNodeId: string;
   positionAnalysisMap: Record<string, NodeAnalysis>;
   moveMarksMap: Record<string, MoveMarkResult>;
-  tree: Record<string, MoveNode>;
   setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
-  setActiveLineId: (value: string) => void;
 }) {
   const hasWhiteVariations = row.whiteVariations.length > 1;
   const hasBlackVariations = row.blackVariations.length > 1;
@@ -166,16 +152,12 @@ function MoveRow({
           <VariationColumn
             variations={hasWhiteVariations ? row.whiteVariations : []}
             activeNodeId={row.whiteNode.id}
-            tree={tree}
             setCurrentNodeId={setCurrentNodeId}
-            setActiveLineId={setActiveLineId}
           />
           <VariationColumn
             variations={hasBlackVariations ? row.blackVariations : []}
             activeNodeId={row.blackNode?.id ?? null}
-            tree={tree}
             setCurrentNodeId={setCurrentNodeId}
-            setActiveLineId={setActiveLineId}
           />
         </div>
       )}
@@ -249,15 +231,11 @@ function HalfMoveCell({
 function VariationColumn({
   variations,
   activeNodeId,
-  tree,
   setCurrentNodeId,
-  setActiveLineId,
 }: {
   variations: MoveNode[];
   activeNodeId: string | null;
-  tree: Record<string, MoveNode>;
   setCurrentNodeId: (value: ((prevState: string) => string) | string) => void;
-  setActiveLineId: (value: string) => void;
 }) {
   return (
     <div className="min-h-0 border-l-2 border-indigo-100 pl-3 py-1 flex flex-wrap gap-1">
@@ -271,7 +249,6 @@ function VariationColumn({
             key={variation.id}
             onClick={() => {
               setCurrentNodeId(variation.id);
-              setActiveLineId(getDeepestLeaf(variation.id, tree));
             }}
             className="text-[9px] px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded font-bold transition-colors"
           >
@@ -331,10 +308,4 @@ function getMoveMarkIconPath(mark: MoveMark): string {
     default:
       return "/movemarks/good.svg";
   }
-}
-
-function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string {
-  const node = tree[nodeId];
-  if (!node || node.children.length === 0) return nodeId;
-  return getDeepestLeaf(node.children[0], tree);
 }

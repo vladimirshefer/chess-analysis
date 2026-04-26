@@ -413,14 +413,12 @@ function ChessReplay() {
     setPgnInput(fullTreePgn);
   }, [fullTreePgn]);
 
-  useEffect(
-    function keepActiveLineVisible() {
-      if (!currentNodeId || currentNodeId === ROOT_ANALYSIS_NODE_ID) return;
-      if (visiblePath.some((node) => node.id === currentNodeId)) return;
-      setActiveLineId(getDeepestLeaf(currentNodeId, tree));
-    },
-    [currentNodeId, tree, visiblePath],
-  );
+  useEffect(() => {
+    if (!currentNodeId || currentNodeId === ROOT_ANALYSIS_NODE_ID) {
+      setActiveLineId(ROOT_ANALYSIS_NODE_ID);
+    };
+    setActiveLineId(getDeepestLeaf(currentNodeId, tree));
+  }, [currentNodeId, tree]);
 
   useEffect(() => {
     let cancelled = false;
@@ -546,7 +544,6 @@ function ChessReplay() {
 
       if (tree[nextNodeId]) {
         setCurrentNodeId(nextNodeId);
-        setActiveLineId(nextNodeId);
         trackMoveAnalytics(source, move, result.san);
         return {
           nodeId: nextNodeId,
@@ -576,7 +573,6 @@ function ChessReplay() {
         return nextTree;
       });
       setCurrentNodeId(nextNodeId);
-      setActiveLineId(nextNodeId);
       trackMoveAnalytics(source, move, result.san);
       return {
         nodeId: nextNodeId,
@@ -696,7 +692,6 @@ function ChessReplay() {
       });
 
       setTree(nextTree);
-      setActiveLineId(lastNodeId);
       setCurrentNodeId(lastNodeId);
       setPgnInput(pgn);
       setImportedFullPgn(pgn.trim());
@@ -718,7 +713,6 @@ function ChessReplay() {
   function clearTree() {
     setTree({ ...TREE_SEED });
     setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
-    setActiveLineId(ROOT_ANALYSIS_NODE_ID);
     setPgnInput("");
     setImportedFullPgn("");
     setPlayersInfo(null);
@@ -886,7 +880,6 @@ function ChessReplay() {
             positionAnalysisMap={positionAnalysisMap}
             moveMarksMap={moveMarksMap}
             setCurrentNodeId={setCurrentNodeId}
-            setActiveLineId={setActiveLineId}
           />
         </div>
 
