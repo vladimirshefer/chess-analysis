@@ -19,15 +19,14 @@ export function EngineDepthSelector({
   return (
     <div className="relative">
       <button
+        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm tracking-wide bg-white border-gray-300 hover:bg-gray-100"
         onClick={() => setIsOpen((it) => !it)}
         title={"Engine settings"}
-        className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-100"
       >
         <RenderIcon iconType={FaGear} className="text-xs" />
-        <span>{selectedDepth === 12 ? "Fast (d12)" : selectedDepth === 16 ? "Normal (d16)" : "Deep (d20)"}</span>
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 z-20 min-w-40 rounded border border-gray-200 bg-white shadow-lg p-1 flex flex-col gap-1">
+        <div className="absolute top-full mt-1 z-20 min-w-40 rounded border border-gray-200 bg-white shadow-lg p-1 flex flex-col gap-1">
           <button
             onClick={() => selectDepth(12)}
             className={`px-2 py-1 text-left text-xs rounded ${selectedDepth === 12 ? "bg-blue-50 text-blue-700 font-bold" : "text-gray-700 hover:bg-gray-100"}`}

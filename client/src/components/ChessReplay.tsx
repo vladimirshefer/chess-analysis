@@ -269,7 +269,11 @@ function ChessReplay() {
     return path;
   }, [activeLineId, tree]);
 
-  const currentAnalysis = positionAnalysisMap[currentNodeId || ROOT_ANALYSIS_NODE_ID];
+  const currentAnalysis: NodeAnalysis | undefined = useMemo(
+    () => positionAnalysisMap[currentNodeId || ROOT_ANALYSIS_NODE_ID],
+    [currentNodeId, positionAnalysisMap],
+  );
+
   const statusLineText = statusText === "Analysis Complete" ? `${statusText} · ${CURRENT_ENGINE_NAME}` : statusText;
   const openingsReady = OpeningsBook.isReady();
 
@@ -791,15 +795,13 @@ function ChessReplay() {
             <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
         </div>
-        <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <div>
-              <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400">Engine</h3>
-            </div>
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 shadow rounded">
+          <div className="flex items-start justify-between gap-4 border-b border-gray-100">
+            <div className={"grow"}></div>
+            <div className="flex items-center">
               <EngineDepthSelector
                 selectedDepth={selectedDepth}
-                onSelectDepth={function (depth: number) {
+                onSelectDepth={(depth: number) => {
                   if (depth === selectedDepth) return;
 
                   Analytics.trackEvent("engine_depth_selected", { depth, previous_depth: selectedDepth });
@@ -807,24 +809,24 @@ function ChessReplay() {
                 }}
               />
               <button
+                className={`inline-flex items-center px-3 py-1.5 text-xs font-bold ${showPlans ? "text-olive-700 border-olive-300 bg-olive-50 hover:bg-olive-100" : "text-gray-600 border-gray-300 bg-white hover:bg-gray-100"}`}
                 onClick={() => setShowPlans((it) => !it)}
                 title={"Show engine plan arrows"}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wide rounded border ${showPlans ? "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100" : "text-gray-600 border-gray-300 bg-white hover:bg-gray-100"}`}
               >
                 <RenderIcon iconType={GiStrikingArrows} className="text-xs" />
               </button>
               <button
+                className="inline-flex items-center px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 onClick={runDeepAnalysis}
                 title={"Run deeper analysis"}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-white bg-gray-800 rounded hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <RenderIcon iconType={FaMagnifyingGlassPlus} className="text-xs" />
               </button>
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {(!currentAnalysis || (currentAnalysis.lines.length === 0 && !currentAnalysis.isFinal)) && (
-              <div className="text-xs text-gray-400 italic py-2">Calculating best moves...</div>
+              <div className="text-xs text-gray-400 italic">Calculating best moves...</div>
             )}
             {currentAnalysis?.lines.map(function renderLine(line, index) {
               const scoreValue = line.evaluation;
@@ -834,17 +836,17 @@ function ChessReplay() {
                   onClick={() => {
                     void applyEngineMove(line, line.suggestedMoveUci);
                   }}
-                  className="flex flex-col gap-2 px-2 bg-white border border-gray-200 rounded hover:border-indigo-500 hover:shadow-sm transition-all text-left"
+                  className="flex flex-col gap-2 px-2 hover:bg-olive-100 group transition-all text-left rounded"
                 >
                   <div className="flex items-baseline w-full gap-2">
                     <span className="text-xs font-bold text-gray-300">{line.lineRank}.</span>
-                    <span className="font-bold text-gray-800 font-mono text-nowrap">{line.suggestedMove}</span>
-                    <div className="text-xs text-gray-500 font-mono truncate grow opacity-70">
+                    <span className="font-bold text-gray-900 font-mono text-nowrap">{line.suggestedMove}</span>
+                    <div className="text-xs text-gray-700 font-mono truncate grow opacity-70">
                       {line.engineLine.split(" ").slice(1).join(" ")}
                     </div>
                     <div className="flex items-center gap-3">
                       <span
-                        className={`text-sm font-bold ${scoreValue > 0 ? "text-green-600" : scoreValue < 0 ? "text-red-600" : "text-gray-500"}`}
+                        className={`text-sm font-bold px-2 font-mono rounded ${scoreValue > 0 ? "bg-white text-black group-hover:bg-olive-200" : scoreValue < 0 ? "bg-black text-white group-hover:bg-olive-900" : "text-gray-500"}`}
                       >
                         {Evaluations.toString(line.evaluation)}
                       </span>
@@ -854,7 +856,7 @@ function ChessReplay() {
                 </button>
               );
             })}
-            <div className="text-xs text-gray-400 text-right">{statusLineText}</div>
+            <div className="text-[8px] text-gray-400 text-right">{statusLineText}</div>
           </div>
         </div>
         <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
@@ -888,12 +890,12 @@ function ChessReplay() {
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold text-gray-800">PGN</h3>
             <div className="flex items-center gap-3">
-              <Link to="/import/chess-com" className="text-[10px] text-indigo-600 font-bold hover:underline">
+              <Link to="/import/chess-com" className="text-[10px] text-olive-600 font-bold hover:underline">
                 Chess.com
               </Link>
               <button
                 onClick={loadSample}
-                className="inline-flex items-center gap-1.5 text-[10px] text-indigo-600 font-bold hover:underline"
+                className="inline-flex items-center gap-1.5 text-[10px] text-olive-600 font-bold hover:underline"
               >
                 <RenderIcon iconType={GiPerspectiveDiceSixFacesRandom} className="text-xs" />
                 <span>Sample</span>
