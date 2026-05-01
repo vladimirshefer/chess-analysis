@@ -2,7 +2,7 @@ import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
 import {
   type ChessEngine,
@@ -404,34 +404,48 @@ function ChessReplayImpl({
     setPgnInputText(fullTreePgn);
   }, [fullTreePgn]);
 
-  useEffect(() => {
-    if (!currentNodeId || currentNodeId === ROOT_ANALYSIS_NODE_ID) {
-      setActiveLineId(ROOT_ANALYSIS_NODE_ID);
-    }
-    setActiveLineId(getDeepestLeaf(currentNodeId, tree));
-  }, [currentNodeId, tree]);
+  useEffect(
+    function calculateActiveLineId() {
+      if (getLineNodeIds(activeLineId, tree).includes(currentNodeId)) return;
+      setActiveLineId(getDeepestLeaf(currentNodeId, tree));
+    },
+    [currentNodeId, tree, activeLineId],
+  );
+
+  const activeLineNodeIds = useMemo(() => getLineNodeIds(activeLineId, tree), [activeLineId, tree]);
 
   useEffect(() => {
-    if (!engine) return;
-    void (async () => {
-      const tasks = buildAnalysisTasks(tree, activeLineId, currentNodeId, positionAnalysisMap, selectedDepth);
-      if (tasks.length === 0) {
+    async function scheduleAnalysisForNodes() {
+      if (!engine) return;
+      const nodeId = activeLineNodeIds.find((it) => {
+        const positionAnalysisMapElement = positionAnalysisMap[tree[it].fen];
+        return (
+          (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
+        );
+      });
+
+      if (!nodeId) {
         setStatusText("Analysis complete");
       }
-
-      for (const task of tasks) {
-        console.log("Evaluating", task.label, task.fen, task.request.minDepth);
-        const finalEvaluation = await engine.evaluate(task.fen, task.request, task.priority, (update) => {
-          syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, update, update.isFinal));
-          setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
-        });
-        syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
-      }
-    })();
-  }, [tree, activeLineId, currentNodeId, engine, selectedDepth, positionAnalysisMap]);
+      const task = {
+        nodeId,
+        fen: tree[nodeId].fen,
+        label: tree[nodeId].san,
+        request: { minDepth: selectedDepth, linesAmount: 1 },
+        priority: EngineEvaluationPriorities.BACKGROUND,
+      };
+      console.log("Evaluating", task.label, task.fen, task.request.minDepth);
+      const finalEvaluation = await engine.evaluate(task.fen, task.request, task.priority, (update) => {
+        syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, update, update.isFinal));
+        setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
+      });
+      syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
+    }
+    void scheduleAnalysisForNodes();
+  }, [tree, activeLineNodeIds, engine, selectedDepth, positionAnalysisMap]);
 
   function syncSingleNodeAnalysis(fen: string, analysis: NodeAnalysis) {
-    setPositionAnalysisMap((previous) => {
+    setPositionAnalysisMap((previous: Record<string, NodeAnalysis>): Record<string, NodeAnalysis> => {
       const currentAnalysisEntry = previous[fen];
       const preferredAnalysis = pickPreferredAnalysis(currentAnalysisEntry, analysis);
       if (areNodeAnalysesEqual(currentAnalysisEntry, preferredAnalysis)) return previous;
@@ -778,35 +792,6 @@ function getLineNodeIds(currentNodeId: string, tree: Record<string, MoveNode>): 
   return result.reverse();
 }
 
-function buildAnalysisTasks(
-  tree: Record<string, MoveNode>,
-  activeLineId: string | null,
-  currentNodeId: string,
-  positionAnalysisMap: Record<string, NodeAnalysis>,
-  selectedDepth: number,
-): ScheduledTask[] {
-  const lineIds = getLineNodeIds(currentNodeId, tree);
-
-  const notAnalyzedNodes = lineIds
-    .filter((it) => {
-      const positionAnalysisMapElement = positionAnalysisMap[tree[it].fen];
-      return (
-        (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
-      );
-    })
-    .slice(0, 2);
-
-  return notAnalyzedNodes.map(
-    (nodeId): ScheduledTask => ({
-      nodeId,
-      fen: tree[nodeId].fen,
-      label: tree[nodeId].san,
-      request: { minDepth: selectedDepth, linesAmount: 1 },
-      priority: EngineEvaluationPriorities.BACKGROUND,
-    }),
-  );
-}
-
 function getSelectedAnalysisTarget(
   tree: Record<string, MoveNode>,
   currentNodeId: string | null,
@@ -819,7 +804,7 @@ function getSelectedAnalysisTarget(
   return {
     nodeId: node.id,
     fen: node.fen,
-    label: node.san || "___",
+    label: node.san,
     request: { minDepth: deepAnalysisDepth, linesAmount: 3 },
     priority: EngineEvaluationPriorities.IMMEDIATE,
   };
@@ -999,19 +984,6 @@ function getPgnToPosition(
   cache.set(nodeId, nodePathKey);
   return nodePathKey;
 }
-
-function toPgnFromSanMoves(sanMoves: string[]): string {
-  return sanMoves
-    .map(function toPgnToken(sanMove, index) {
-      if (index % 2 === 0) {
-        return `${Math.floor(index / 2) + 1}. ${sanMove}`;
-      }
-
-      return sanMove;
-    })
-    .join(" ");
-}
-
 function getMoveSquares(baseFen: string, san: string): { from: string; to: string } | null {
   const tempGame = new Chess(baseFen === START ? undefined : baseFen);
 
