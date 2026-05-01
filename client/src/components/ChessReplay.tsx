@@ -5,6 +5,7 @@ import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
 import {
+  type ChessEngine,
   type ChessEngineLine,
   EngineEvaluationPriorities,
   type EngineEvaluationPriority,
@@ -13,19 +14,12 @@ import {
   getChessEngine,
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
-import {
-  type GamePlayersInfo,
-  type ImportedGameInfo,
-  mergePlayersInfo,
-  parsePgnPlayersInfo,
-  type PlayerInfo,
-} from "../lib/gameInfo";
+import { type GamePlayersInfo, type ImportedGameInfo, mergePlayersInfo, type PlayerInfo } from "../lib/gameInfo";
 import {
   type AbsoluteNumericEvaluation,
   absoluteNumericEvaluationToEngineEvaluation,
   evalToNum,
   Evaluations,
-  getAbsoluteTerminalEvaluation,
   START,
   START_FEN,
 } from "../lib/evaluation";
@@ -38,6 +32,7 @@ import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
 import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
+import { useQuery } from "@tanstack/react-query";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export interface MoveNode {
@@ -115,79 +110,14 @@ const TREE_SEED: Record<string, MoveNode> = {
     children: [],
   },
 };
+
 const ENGINE_DEPTH_STORAGE_KEY = "analyzer-engine-selected-depth";
+const NODE_ID_DELIMITER = `|`;
 
 function ChessReplay() {
+  const [originalPgn, setOriginalPgn] = useState("");
   const location = useLocation();
-  const navigate = useNavigate();
-  const [pgnInput, setPgnInput] = useState("");
-  const [tree, setTree] = useState<Record<string, MoveNode>>({ ...TREE_SEED });
-
-  const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
-  const [activeLineId, setActiveLineId] = useState<string | null>(null);
-  const [positionAnalysisMap, setPositionAnalysisMap] = useState<Record<string, NodeAnalysis>>({});
-  const [statusText, setStatusText] = useState("Interactive Mode");
-  const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
-  const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
-  const [showPlans, setShowPlans] = useState(false);
-  const [selectedDepth, setSelectedDepth] = useLocalStorageNumericState(ENGINE_DEPTH_STORAGE_KEY, 12);
-  const [importedFullPgn, setImportedFullPgn] = useState("");
-  const deepAnalysisDepth = Math.max(selectedDepth + 4, 22);
-  const hasExistingAnalysis = tree[ROOT_ANALYSIS_NODE_ID].children.length > 0 || importedFullPgn.length > 0;
-
-  const engine = useMemo(() => getChessEngine(), []);
-
   const lastImportedRouteKeyRef = useRef<string | null>(null);
-
-  function syncOpeningInfo(nodeId: string, opening: OpeningsBook.Opening | null): void {
-    setPositionAnalysisMap((previous) => {
-      const nodeAnalysis = previous[nodeId];
-      if (!nodeAnalysis || nodeAnalysis.openingLookupDone) return previous;
-
-      const nextNodeAnalysis: NodeAnalysis = {
-        ...nodeAnalysis,
-        opening: opening ?? null,
-        openingLookupDone: true,
-      };
-      if (areNodeAnalysesEqual(nodeAnalysis, nextNodeAnalysis)) return previous;
-
-      return {
-        ...previous,
-        [nodeId]: nextNodeAnalysis,
-      };
-    });
-  }
-
-  function ensureNodeOpeningLookup(nodeId: string, analysis: NodeAnalysis): void {
-    if (analysis.openingLookupDone) return;
-    const linePgn = toLinePgnFromNodeId(nodeId)?.trim();
-    if (!linePgn) {
-      syncOpeningInfo(nodeId, null);
-      return;
-    }
-
-    void OpeningsBook.getOpeningByPgn(linePgn)
-      .then((openingByPgn) => {
-        syncOpeningInfo(nodeId, openingByPgn ?? null);
-      })
-      .catch((error) => {
-        console.error(`Failed to resolve opening name for node ${nodeId}`, error);
-      });
-  }
-
-  function goStart() {
-    setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
-  }
-
-  const goBack = useCallback(() => {
-    setCurrentNodeId((previous) => {
-      return tree[previous]?.parentId ?? ROOT_ANALYSIS_NODE_ID;
-    });
-  }, [tree]);
-
-  const goForward = useCallback(() => {
-    setCurrentNodeId((previous) => getNextNodeId(previous, tree) ?? previous);
-  }, [tree]);
 
   useEffect(() => {
     const locationState = location.state as AnalyzerLocationState | null;
@@ -196,9 +126,126 @@ function ChessReplay() {
     if (lastImportedRouteKeyRef.current === location.key) return;
 
     lastImportedRouteKeyRef.current = location.key;
-    importPgn(importedPgn, locationState?.importedGameInfo ?? null, locationState?.initialBoardOrientation ?? "white");
-    navigate(location.pathname, { replace: true, state: null });
-  }, [location.key, location.pathname, location.state, navigate]);
+    history.pushState(null, "", location.pathname);
+    // eslint-disable-next-line
+    setOriginalPgn(importedPgn);
+  }, [location, location.key, location.pathname, location.state]);
+
+  return <ChessReplayImpl originalPgn={originalPgn} setOriginalPgn={(pgn) => setOriginalPgn(pgn)} />;
+}
+
+function ChessReplayImpl({
+  originalPgn,
+  setOriginalPgn,
+}: {
+  originalPgn: string;
+  setOriginalPgn: (pgn: string) => void;
+}) {
+  const [pgnInputText, setPgnInputText] = useState(originalPgn);
+  const [tree, setTree] = useState<Record<string, MoveNode>>({ ...TREE_SEED });
+
+  const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
+  const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  const [positionAnalysisMap, setPositionAnalysisMap] = useState<Record<string, NodeAnalysis>>({});
+  const [statusText, setStatusText] = useState("Welcome");
+  const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
+  const [playersInfo, setPlayersInfo] = useState<GamePlayersInfo | null>(null);
+  const [showPlans, setShowPlans] = useState(false);
+  const [selectedDepth, setSelectedDepth] = useLocalStorageNumericState(ENGINE_DEPTH_STORAGE_KEY, 12);
+  const deepAnalysisDepth = Math.max(selectedDepth + 4, 22);
+  const hasExistingAnalysis = tree[ROOT_ANALYSIS_NODE_ID].children.length > 0;
+  const currentFen: string = useMemo(() => tree[currentNodeId]?.fen ?? START_FEN, [currentNodeId, tree]);
+
+  const engineQuery = useQuery({
+    queryKey: ["engine"],
+    queryFn: async () => getChessEngine(),
+  });
+
+  const engine = useMemo(() => engineQuery.data as ChessEngine | undefined, [engineQuery.data]);
+
+  const openingsBookQuery = useQuery({
+    queryKey: ["openingsBook"],
+    queryFn: async () => {
+      await OpeningsBook.getKnownPositionEpds();
+      return true;
+    },
+  });
+
+  const openingsReady = useMemo(() => !!openingsBookQuery.data, [openingsBookQuery.data]);
+
+  useEffect(() => {
+    const tempGame = new Chess();
+
+    try {
+      tempGame.loadPgn(originalPgn);
+    } catch {
+      console.error("Invalid PGN", originalPgn);
+      setStatusText("Invalid PGN");
+    }
+
+    const headers = tempGame.getHeaders();
+
+    function toInt(rating: string | number | undefined) {
+      return rating ? parseInt(rating + "", 10) : undefined;
+    }
+
+    const parsedPlayersInfo = {
+      white: {
+        name: headers.White,
+        rating: toInt(headers.WhiteElo),
+      },
+      black: {
+        name: headers.Black,
+        rating: toInt(headers.BlackElo),
+      },
+    };
+
+    const mergedPlayersInfo = mergePlayersInfo(parsedPlayersInfo, null);
+    const moves = tempGame.history();
+    let lastNodeId: string | null = null;
+    const nextTree: Record<string, MoveNode> = { ...TREE_SEED };
+    const walker = new Chess();
+
+    moves.forEach(function addMove(moveSan) {
+      const result = walker.move(moveSan);
+      const nodeId = lastNodeId ? `${lastNodeId}${NODE_ID_DELIMITER}${result.san}` : result.san;
+      const parent = lastNodeId || ROOT_ANALYSIS_NODE_ID;
+
+      if (!nextTree[nodeId]) {
+        nextTree[nodeId] = {
+          id: nodeId,
+          san: result.san,
+          fen: walker.fen(),
+          parentId: parent,
+          children: [],
+        };
+        if (parent) {
+          nextTree[parent] = {
+            ...nextTree[parent],
+            children: [...nextTree[parent].children, nodeId],
+          };
+        }
+      }
+
+      lastNodeId = nodeId;
+    });
+
+    setTree(nextTree);
+    setCurrentNodeId(lastNodeId);
+    setPlayersInfo(mergedPlayersInfo);
+  }, [originalPgn]);
+
+  function goStart() {
+    setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
+  }
+
+  const goBack = useCallback(() => {
+    setCurrentNodeId((previous) => tree[previous]?.parentId ?? ROOT_ANALYSIS_NODE_ID);
+  }, [tree]);
+
+  const goForward = useCallback(() => {
+    setCurrentNodeId((previous) => getNextNodeId(previous, tree) ?? previous);
+  }, [tree]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -211,7 +258,7 @@ function ChessReplay() {
     return function cleanup() {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [goBack, tree]);
+  }, [goBack]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -224,7 +271,7 @@ function ChessReplay() {
     return function cleanup() {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [goForward, tree]);
+  }, [goForward]);
 
   const fullTreePgn = useMemo(() => {
     const roots = Object.values(tree).filter((node) => node.parentId === null);
@@ -255,14 +302,10 @@ function ChessReplay() {
     return path;
   }, [activeLineId, tree]);
 
-  const currentFen: string = useMemo(() => tree[currentNodeId].fen, [currentNodeId, tree]);
-
   const currentAnalysis: NodeAnalysis | undefined = useMemo(
     () => positionAnalysisMap[currentFen],
     [currentFen, positionAnalysisMap],
   );
-
-  const openingsReady = OpeningsBook.isReady();
 
   const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
     if (!openingsReady) return {};
@@ -270,9 +313,7 @@ function ChessReplay() {
   }, [openingsReady, positionAnalysisMap, tree]);
 
   const lastBookOpeningName = useMemo(
-    function resolveLastBookOpeningName() {
-      return findClosestOpeningName(currentNodeId, tree, positionAnalysisMap);
-    },
+    () => findClosestOpeningName(currentNodeId, tree, positionAnalysisMap),
     [currentNodeId, positionAnalysisMap, tree],
   );
 
@@ -360,7 +401,7 @@ function ChessReplay() {
 
   useEffect(() => {
     if (!fullTreePgn) return;
-    setPgnInput(fullTreePgn);
+    setPgnInputText(fullTreePgn);
   }, [fullTreePgn]);
 
   useEffect(() => {
@@ -371,6 +412,7 @@ function ChessReplay() {
   }, [currentNodeId, tree]);
 
   useEffect(() => {
+    if (!engine) return;
     void (async () => {
       const tasks = buildAnalysisTasks(tree, activeLineId, currentNodeId, positionAnalysisMap, selectedDepth);
       if (tasks.length === 0) {
@@ -401,6 +443,7 @@ function ChessReplay() {
   }
 
   function runDeepAnalysis() {
+    if (!engine) return;
     const target = getSelectedAnalysisTarget(tree, currentNodeId, deepAnalysisDepth);
     if (!target) return;
 
@@ -419,19 +462,6 @@ function ChessReplay() {
       });
   }
 
-  function trackMoveAnalytics(
-    source: "board_click" | "engine_suggestion",
-    move: { from: string; to: string },
-    san: string,
-  ) {
-    Analytics.trackEvent(source, {
-      san,
-      from: move.from,
-      to: move.to,
-    });
-    return;
-  }
-
   function makeMove(
     move: { from: string; to: string; promotion?: string },
     source: "board_click" | "engine_suggestion",
@@ -446,7 +476,8 @@ function ChessReplay() {
       }
 
       const nextFen = tempGame.fen();
-      const nextNodeId = currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}|${result.san}` : result.san;
+      const nextNodeId =
+        currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}${NODE_ID_DELIMITER}${result.san}` : result.san;
 
       Analytics.trackEvent("move", {
         source,
@@ -497,74 +528,14 @@ function ChessReplay() {
     }
   }
 
-  function importPgn(
-    pgn: string,
-    importedGameInfo: ImportedGameInfo | null = null,
-    initialBoardOrientation: "white" | "black" = "white",
-  ) {
-    const tempGame = new Chess();
-
-    try {
-      tempGame.loadPgn(pgn);
-      const parsedPlayersInfo = parsePgnPlayersInfo(tempGame.getHeaders());
-      const mergedPlayersInfo = mergePlayersInfo(parsedPlayersInfo, importedGameInfo?.players ?? null);
-      const moves = tempGame.history();
-      let lastNodeId: string | null = null;
-      const nextTree: Record<string, MoveNode> = { ...TREE_SEED };
-      const walker = new Chess();
-
-      moves.forEach(function addMove(moveSan) {
-        const result = walker.move(moveSan);
-        const nodeId = lastNodeId ? `${lastNodeId}|${result.san}` : result.san;
-        const parent = lastNodeId || ROOT_ANALYSIS_NODE_ID;
-
-        if (!nextTree[nodeId]) {
-          nextTree[nodeId] = {
-            id: nodeId,
-            san: result.san,
-            fen: walker.fen(),
-            parentId: parent,
-            children: [],
-          };
-          if (parent) {
-            nextTree[parent] = {
-              ...nextTree[parent],
-              children: [...nextTree[parent].children, nodeId],
-            };
-          }
-        }
-
-        lastNodeId = nodeId;
-      });
-
-      setTree(nextTree);
-      setCurrentNodeId(lastNodeId);
-      setPgnInput(pgn);
-      setImportedFullPgn(pgn.trim());
-      setPlayersInfo(mergedPlayersInfo);
-      setPositionAnalysisMap({});
-      setStatusText("PGN Imported");
-      setBoardOrientation(initialBoardOrientation);
-    } catch {
-      setStatusText("Invalid PGN");
-    }
-  }
-
   function loadSample() {
-    importPgn(
+    setOriginalPgn(
       "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7",
     );
   }
 
   function clearTree() {
-    setTree({ ...TREE_SEED });
-    setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
-    setPgnInput("");
-    setImportedFullPgn("");
-    setPlayersInfo(null);
-    setPositionAnalysisMap({});
-    setStatusText("Interactive Mode");
-    setBoardOrientation("white");
+    setOriginalPgn("");
   }
 
   return (
@@ -691,15 +662,15 @@ function ChessReplay() {
           <form
             onSubmit={function submitPgn(event) {
               event.preventDefault();
-              importPgn(pgnInput);
+              setOriginalPgn(pgnInputText.trim());
             }}
             className="flex flex-col gap-2"
           >
             <textarea
               className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white"
-              value={pgnInput}
+              value={pgnInputText}
               onChange={(event) => {
-                setPgnInput(event.target.value);
+                setPgnInputText(event.target.value);
               }}
             />
             <button className="inline-flex items-center justify-center gap-2 py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">
@@ -823,7 +794,7 @@ function buildAnalysisTasks(
         (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
       );
     })
-    .slice(0, 5);
+    .slice(0, 2);
 
   return notAnalyzedNodes.map(
     (nodeId): ScheduledTask => ({
@@ -931,21 +902,6 @@ function buildSeededNodeAnalysis(
   };
 }
 
-function buildTerminalNodeAnalysis(fen: string): NodeAnalysis | null {
-  const absoluteTerminalEvaluation = getAbsoluteTerminalEvaluation(fen);
-  if (absoluteTerminalEvaluation === null || absoluteTerminalEvaluation === undefined) {
-    return null;
-  }
-
-  return {
-    fen,
-    evaluation: absoluteTerminalEvaluation,
-    depth: 0,
-    lines: [],
-    isFinal: true,
-  };
-}
-
 function toSeededDisplayLines(
   lineNextMovesUci: string[],
   score: AbsoluteNumericEvaluation,
@@ -1044,14 +1000,6 @@ function getPgnToPosition(
   return nodePathKey;
 }
 
-function toLinePgnFromNodeId(nodeId: string): string | null {
-  if (!nodeId || nodeId === ROOT_ANALYSIS_NODE_ID) return null;
-
-  const sanMoves = nodeId.split("|").filter(Boolean);
-  if (sanMoves.length === 0) return null;
-  return toPgnFromSanMoves(sanMoves);
-}
-
 function toPgnFromSanMoves(sanMoves: string[]): string {
   return sanMoves
     .map(function toPgnToken(sanMove, index) {
@@ -1079,12 +1027,12 @@ function getMoveSquares(baseFen: string, san: string): { from: string; to: strin
 function findClosestOpeningName(
   startNodeId: string,
   tree: Record<string, MoveNode>,
-  analysesByFen: Record<string, NodeAnalysis>,
+  analysisByFen: Record<string, NodeAnalysis>,
 ): string | null {
   let nodeId: string | null = startNodeId;
 
   while (nodeId) {
-    const nodeAnalysis = analysesByFen[tree[nodeId].fen];
+    const nodeAnalysis = analysisByFen[tree[nodeId].fen];
     if (nodeAnalysis?.opening?.name) return nodeAnalysis.opening.name;
     nodeId = tree[nodeId]?.parentId ?? null;
   }

@@ -178,8 +178,9 @@ function HalfMoveCell({
   onSelect: (value: ((prevState: string) => string) | string) => void;
   nodeAnalysis: NodeAnalysis;
   isFocus: boolean;
-  moveMark: MoveMarkResult;
+  moveMark: MoveMarkResult | null;
 }) {
+  const mark: MoveMark | null = moveMark?.mark;
   return (
     <button
       onClick={() => {
@@ -189,19 +190,15 @@ function HalfMoveCell({
     >
       <span className="flex items-center gap-1 overflow-hidden">
         <span className="font-bold font-mono text-md md:text-sm">{node.san}</span>
-        {moveMark && (
+        {mark && (
           <>
             <span
-              className={`hidden md:block text-xs px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ellipsis ${getMoveMarkBadgeClass(moveMark.mark, isFocus)}`}
+              className={`hidden md:block text-xs px-1.5 py-0.5 rounded font-bold uppercase tracking-wide ellipsis ${getMoveMarkBadgeClass(mark, isFocus)}`}
             >
-              {MoveMarksName[moveMark.mark]}
+              {MoveMarksName[mark]}
             </span>
             <span className={`block md:hidden text-xs`}>
-              <img
-                src={getMoveMarkIconPath(moveMark.mark)}
-                alt={MoveMarksShort[moveMark.mark]}
-                className="w-[1em] h-[1-em]"
-              />
+              <img src={getMoveMarkIconPath(mark)} alt={MoveMarksShort[mark]} className="w-[1em] h-[1-em]" />
             </span>
           </>
         )}

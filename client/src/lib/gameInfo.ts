@@ -15,24 +15,6 @@ export interface ImportedGameInfo {
   source: "pgn" | "chesscom";
 }
 
-export function parsePgnPlayersInfo(headers: Record<string, string>): GamePlayersInfo | null {
-  const white = {
-    name: headers.White,
-    rating: toInt(headers.WhiteElo),
-  };
-  const black = {
-    name: headers.Black,
-    rating: toInt(headers.BlackElo),
-  };
-
-  if (!white && !black) return null;
-
-  return {
-    white,
-    black,
-  };
-}
-
 export function mergePlayersInfo(
   base: GamePlayersInfo | null,
   override: GamePlayersInfo | null,
@@ -63,8 +45,4 @@ export function toImportedGameInfoFromChessComGame(game: ChessComClient.Dto.Ches
       },
     },
   };
-}
-
-function toInt(rating: string | number | undefined) {
-  return rating ? parseInt(rating + "", 10) : undefined;
 }
