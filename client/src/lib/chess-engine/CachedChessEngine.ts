@@ -29,7 +29,7 @@ export class CachedChessEngine implements ChessEngine {
       const terminalResult: EvaluationUpdate = {
         fen,
         evaluation: terminalEvaluation,
-        depth: 0,
+        depth: options.minDepth,
         lines: [],
         isFinal: true,
       };
