@@ -133,7 +133,7 @@ function MoveRow({
           <HalfMoveCell
             node={row.whiteNode}
             onSelect={setCurrentNodeId}
-            nodeAnalysis={positionAnalysisMap[row.whiteNode.id]}
+            nodeAnalysis={positionAnalysisMap[row.whiteNode.fen]}
             isFocus={currentNodeId === row.whiteNode.id}
             moveMark={moveMarksMap[row.whiteNode.id]}
           />
@@ -141,7 +141,7 @@ function MoveRow({
             <HalfMoveCell
               node={row.blackNode}
               onSelect={setCurrentNodeId}
-              nodeAnalysis={positionAnalysisMap[row.blackNode?.id ?? ""]}
+              nodeAnalysis={positionAnalysisMap[row.blackNode?.fen ?? ""]}
               isFocus={currentNodeId === row.blackNode?.id}
               moveMark={moveMarksMap[row.blackNode?.id ?? ""]}
             />

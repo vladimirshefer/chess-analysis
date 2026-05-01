@@ -1,4 +1,4 @@
-import { Chess, type Square } from "chess.js";
+import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
@@ -255,16 +255,18 @@ function ChessReplay() {
     return path;
   }, [activeLineId, tree]);
 
+  const currentFen: string = useMemo(() => tree[currentNodeId].fen, [currentNodeId, tree]);
+
   const currentAnalysis: NodeAnalysis | undefined = useMemo(
-    () => positionAnalysisMap[currentNodeId || ROOT_ANALYSIS_NODE_ID],
-    [currentNodeId, positionAnalysisMap],
+    () => positionAnalysisMap[currentFen],
+    [currentFen, positionAnalysisMap],
   );
 
   const openingsReady = OpeningsBook.isReady();
 
   const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
     if (!openingsReady) return {};
-    return buildMoveMarksByNodeId(tree, positionAnalysisMap);
+    return buildMoveMarks(tree, positionAnalysisMap);
   }, [openingsReady, positionAnalysisMap, tree]);
 
   const lastBookOpeningName = useMemo(
@@ -296,8 +298,6 @@ function ChessReplay() {
       [currentMoveSquares.to]: currentMoveMark.mark,
     };
   }, [currentMoveMark, currentMoveSquares]);
-
-  const currentFen: string = useMemo(() => tree[currentNodeId].fen, [currentNodeId, tree]);
 
   const currentPositionGame: Chess = useMemo(() => new Chess(currentFen), [currentFen]);
 
@@ -376,33 +376,28 @@ function ChessReplay() {
       if (tasks.length === 0) {
         setStatusText("Analysis complete");
       }
-      await Promise.allSettled(
-        tasks.map((task) =>
-          engine
-            .evaluate(task.fen, task.request, task.priority, (update) => {
-              syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, update, update.isFinal));
-              setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
-            })
-            .then((finalEvaluation) => {
-              syncSingleNodeAnalysis(task.nodeId, toNodeAnalysis(task.fen, finalEvaluation, true));
-            }),
-        ),
-      );
+
+      for (const task of tasks) {
+        console.log("Evaluating", task.label, task.fen, task.request.minDepth);
+        const finalEvaluation = await engine.evaluate(task.fen, task.request, task.priority, (update) => {
+          syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, update, update.isFinal));
+          setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
+        });
+        syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
+      }
     })();
   }, [tree, activeLineId, currentNodeId, engine, selectedDepth, positionAnalysisMap]);
 
-  function syncSingleNodeAnalysis(nodeId: string, analysis: NodeAnalysis) {
+  function syncSingleNodeAnalysis(fen: string, analysis: NodeAnalysis) {
     setPositionAnalysisMap((previous) => {
-      const currentAnalysisEntry = previous[nodeId];
+      const currentAnalysisEntry = previous[fen];
       const preferredAnalysis = pickPreferredAnalysis(currentAnalysisEntry, analysis);
       if (areNodeAnalysesEqual(currentAnalysisEntry, preferredAnalysis)) return previous;
       return {
         ...previous,
-        [nodeId]: preferredAnalysis,
+        [fen]: preferredAnalysis,
       };
     });
-
-    ensureNodeOpeningLookup(nodeId, analysis);
   }
 
   function runDeepAnalysis() {
@@ -411,11 +406,11 @@ function ChessReplay() {
 
     void engine
       .evaluate(target.fen, target.request, EngineEvaluationPriorities.IMMEDIATE, (update) => {
-        syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, update, update.isFinal));
+        syncSingleNodeAnalysis(target.fen, toNodeAnalysis(target.fen, update, update.isFinal));
         setStatusText(`Analyzing ${target.label} (d${deepAnalysisDepth})...`);
       })
       .then((result) => {
-        syncSingleNodeAnalysis(target.nodeId, toNodeAnalysis(target.fen, result, true));
+        syncSingleNodeAnalysis(target.fen, toNodeAnalysis(target.fen, result, true));
         setStatusText("Analysis Complete");
       })
       .catch((e) => {
@@ -498,7 +493,7 @@ function ChessReplay() {
 
     const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
     if (seededAnalysis) {
-      syncSingleNodeAnalysis(moveResult.nodeId, seededAnalysis);
+      syncSingleNodeAnalysis(moveResult.fen, seededAnalysis);
     }
   }
 
@@ -797,52 +792,48 @@ function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string 
   return getDeepestLeaf(node.children[0], tree);
 }
 
-// TODO: Dirty! Refactor this or inline.
-function getActiveLineNodeIdsFromLeafToRoot(
-  activeLineId: string | null,
-  currentNodeId: string | null,
-  tree: Record<string, MoveNode>,
-): string[] {
-  const fallbackNodeId = currentNodeId ?? ROOT_ANALYSIS_NODE_ID;
-  const lineNodeId = activeLineId && tree[activeLineId] ? activeLineId : fallbackNodeId;
-  if (!lineNodeId || !tree[lineNodeId]) return [ROOT_ANALYSIS_NODE_ID];
-  if (lineNodeId === ROOT_ANALYSIS_NODE_ID) return [ROOT_ANALYSIS_NODE_ID];
+function getLineNodeIds(currentNodeId: string, tree: Record<string, MoveNode>): string[] {
+  if (!tree[currentNodeId]) return [START_FEN];
 
-  const sanMoves = lineNodeId.split("|").filter(Boolean);
-  const rootToLeafNodeIds = sanMoves
-    .map(function buildNodeId(_, index, items) {
-      return items.slice(0, index + 1).join("|");
-    })
-    .filter((nodeId) => Boolean(tree[nodeId]));
-
-  const leafToRootNodeIds = [...rootToLeafNodeIds].reverse();
-  if (tree[ROOT_ANALYSIS_NODE_ID]) {
-    leafToRootNodeIds.push(ROOT_ANALYSIS_NODE_ID);
+  while (tree[currentNodeId].children.length > 0) {
+    currentNodeId = tree[currentNodeId].children[0];
   }
 
-  return leafToRootNodeIds;
+  const result: string[] = [];
+  for (let id = currentNodeId; id && tree[id]; id = tree[id].parentId) {
+    result.push(id);
+  }
+
+  return result.reverse();
 }
 
 function buildAnalysisTasks(
   tree: Record<string, MoveNode>,
   activeLineId: string | null,
-  currentNodeId: string | null,
+  currentNodeId: string,
   positionAnalysisMap: Record<string, NodeAnalysis>,
   selectedDepth: number,
 ): ScheduledTask[] {
-  const lineNodeIds = getActiveLineNodeIdsFromLeafToRoot(activeLineId, currentNodeId, tree);
+  const lineIds = getLineNodeIds(currentNodeId, tree);
 
-  const notAnalyzedNodes = lineNodeIds.filter(
-    (it) => (positionAnalysisMap[it]?.depth ?? -1) < selectedDepth || !(positionAnalysisMap[it]?.isFinal ?? false),
+  const notAnalyzedNodes = lineIds
+    .filter((it) => {
+      const positionAnalysisMapElement = positionAnalysisMap[tree[it].fen];
+      return (
+        (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
+      );
+    })
+    .slice(0, 5);
+
+  return notAnalyzedNodes.map(
+    (nodeId): ScheduledTask => ({
+      nodeId,
+      fen: tree[nodeId].fen,
+      label: tree[nodeId].san,
+      request: { minDepth: selectedDepth, linesAmount: 1 },
+      priority: EngineEvaluationPriorities.BACKGROUND,
+    }),
   );
-
-  return notAnalyzedNodes.map((nodeId) => ({
-    nodeId,
-    fen: tree[nodeId].fen,
-    label: tree[nodeId].san,
-    request: { minDepth: selectedDepth, linesAmount: 2 },
-    priority: EngineEvaluationPriorities.BACKGROUND,
-  }));
 }
 
 function getSelectedAnalysisTarget(
@@ -976,9 +967,9 @@ function toSeededDisplayLines(
   ];
 }
 
-function buildMoveMarksByNodeId(
+function buildMoveMarks(
   tree: Record<string, MoveNode>,
-  analysesByNodeId: Record<string, NodeAnalysis>,
+  analysesByFen: Record<string, NodeAnalysis>,
 ): Record<string, MoveMarkResult> {
   const marksByNodeId: Record<string, MoveMarkResult> = {};
   const pathKeyByNodeId = new Map<string, string | null>();
@@ -997,9 +988,9 @@ function buildMoveMarksByNodeId(
       return;
     }
 
-    const parentAnalysis = analysesByNodeId[node.parentId ?? ROOT_ANALYSIS_NODE_ID];
-    const nodeAnalysis = analysesByNodeId[node.id];
+    const nodeAnalysis = analysesByFen[node.fen];
     const parentFen = node.parentId ? tree[node.parentId]?.fen : START_FEN;
+    const parentAnalysis = analysesByFen[parentFen];
     if (!parentFen) return;
     if (!parentAnalysis?.isFinal || !nodeAnalysis?.isFinal) return;
     if (parentAnalysis.lines.length === 0) return;
@@ -1008,12 +999,10 @@ function buildMoveMarksByNodeId(
       parentFen,
       playedMoveSan: node.san,
       playedEvaluation: nodeAnalysis.evaluation,
-      parentLines: parentAnalysis.lines.map(function toEngineLine(line: DisplayEngineLine) {
-        return {
-          uci: line.suggestedMoveUci,
-          evaluation: line.evaluation,
-        };
-      }),
+      parentLines: parentAnalysis.lines.map((line: DisplayEngineLine) => ({
+        uci: line.suggestedMoveUci,
+        evaluation: line.evaluation,
+      })),
     });
 
     if (mark) marksByNodeId[node.id] = mark;
@@ -1090,12 +1079,12 @@ function getMoveSquares(baseFen: string, san: string): { from: string; to: strin
 function findClosestOpeningName(
   startNodeId: string,
   tree: Record<string, MoveNode>,
-  analysesByNodeId: Record<string, NodeAnalysis>,
+  analysesByFen: Record<string, NodeAnalysis>,
 ): string | null {
   let nodeId: string | null = startNodeId;
 
   while (nodeId) {
-    const nodeAnalysis = analysesByNodeId[nodeId];
+    const nodeAnalysis = analysesByFen[tree[nodeId].fen];
     if (nodeAnalysis?.opening?.name) return nodeAnalysis.opening.name;
     nodeId = tree[nodeId]?.parentId ?? null;
   }
