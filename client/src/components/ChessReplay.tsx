@@ -569,6 +569,7 @@ function ChessReplayImpl({
             activeLine={activeLineNodes.slice(1)}
             positionEvaluations={positionAnalysisMap}
             moveMarks={moveMarksMap}
+            selectNode={(id) => setCurrentNodeId(id)}
           />
         )}
         <div className="flex items-center gap-4 flex-wrap justify-center">
