@@ -18,7 +18,7 @@ function ValuesHistogram({
   const barWidth = 2;
   const width = pointsCount * barWidth;
   const baseline = height / 2;
-  const maxBarHeight = height / 2 - 4;
+  const maxBarHeight = height / 2;
   const limit = 300;
   const pixelsPerUnit = maxBarHeight / limit;
 
