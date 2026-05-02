@@ -145,7 +145,7 @@ function ChessReplayImpl({
   const [tree, setTree] = useState<Record<string, MoveNode>>({ ...TREE_SEED });
 
   const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
-  const [activeLineId, setActiveLineId] = useState<string | null>(null);
+  const [activeLineId, setActiveLineId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
   const [positionAnalysisMap, setPositionAnalysisMap] = useState<Record<string, NodeAnalysis>>({});
   const [statusText, setStatusText] = useState("Welcome");
   const [boardOrientation, setBoardOrientation] = useState<"white" | "black">("white");
@@ -273,34 +273,11 @@ function ChessReplayImpl({
     };
   }, [goForward]);
 
-  const fullTreePgn = useMemo(() => {
-    const roots = Object.values(tree).filter((node) => node.parentId === null);
-    if (roots.length === 0) return "";
+  const activeLineNodeIds = useMemo(() => getLineNodeIds(activeLineId, tree), [activeLineId, tree]);
 
-    let result = "";
-    roots.forEach((root, index) => {
-      result +=
-        (index === 0 ? "" : "(") +
-        generatePgnString(root.id, 1, true, index !== 0, tree).trim() +
-        (index === 0 ? " " : ") ");
-    });
-    return result.trim();
-  }, [tree]);
-
-  const visiblePath: MoveNode[] = useMemo(() => {
-    const path: MoveNode[] = [];
-    let current = activeLineId;
-
-    while (current) {
-      const node = tree[current];
-      if (!node) break;
-      if (node.parentId === null) break;
-      path.unshift(node);
-      current = node.parentId;
-    }
-
-    return path;
-  }, [activeLineId, tree]);
+  const activeLineNodes: MoveNode[] = useMemo(() => {
+    return activeLineNodeIds.map((id) => tree[id]);
+  }, [activeLineNodeIds, tree]);
 
   const currentAnalysis: NodeAnalysis | undefined = useMemo(
     () => positionAnalysisMap[currentFen],
@@ -399,20 +376,15 @@ function ChessReplayImpl({
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
 
-  useEffect(() => {
-    if (!fullTreePgn) return;
-    setPgnInputText(fullTreePgn);
-  }, [fullTreePgn]);
-
   useEffect(
     function calculateActiveLineId() {
-      if (getLineNodeIds(activeLineId, tree).includes(currentNodeId)) return;
-      setActiveLineId(getDeepestLeaf(currentNodeId, tree));
+      const previousActiveLineIds = getLineNodeIds(activeLineId, tree);
+      if (previousActiveLineIds.includes(currentNodeId)) return;
+      const newActiveLineIds = getLineNodeIds(currentNodeId, tree);
+      setActiveLineId(newActiveLineIds[newActiveLineIds.length - 1]);
     },
     [currentNodeId, tree, activeLineId],
   );
-
-  const activeLineNodeIds = useMemo(() => getLineNodeIds(activeLineId, tree), [activeLineId, tree]);
 
   useEffect(() => {
     async function scheduleAnalysisForNodes() {
@@ -426,7 +398,9 @@ function ChessReplayImpl({
 
       if (!nodeId) {
         setStatusText("Analysis complete");
+        return;
       }
+
       const task = {
         nodeId,
         fen: tree[nodeId].fen,
@@ -522,7 +496,7 @@ function ChessReplayImpl({
     }
   }
 
-  useEffect(() => console.log("Tree changed", tree), [tree]);
+  useEffect(() => console.log(activeLineNodeIds), [activeLineNodeIds]);
 
   async function applyEngineMove(line: DisplayEngineLine): Promise<void> {
     const suggestedMoveUci = line.suggestedMoveUci;
@@ -552,6 +526,13 @@ function ChessReplayImpl({
     setOriginalPgn("");
   }
 
+  const activeLineMovesAnalyzed = useMemo(
+    () => activeLineNodeIds.filter((id) => !!positionAnalysisMap[tree[id].fen]?.isFinal).length,
+    [activeLineNodeIds, positionAnalysisMap, tree],
+  );
+
+  const analysisFinishedRatio = activeLineMovesAnalyzed / activeLineNodeIds.length;
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
       <div className="flex-1 flex flex-col items-center gap-2">
@@ -571,7 +552,7 @@ function ChessReplayImpl({
           <div className="flex-1 min-w-0 shadow-2xl overflow-hidden">
             <ExtendedChessBoard
               id="AnalysisBoard"
-              position={currentNodeId ? tree[currentNodeId].fen : START_FEN}
+              position={currentFen}
               boardOrientation={boardOrientation}
               animationDuration={300}
               customArrows={planView.arrows}
@@ -630,33 +611,47 @@ function ChessReplayImpl({
           runDeepAnalysis={() => runDeepAnalysis()}
           applyLine={(line) => applyEngineMove(line)}
         />
-        <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
-          <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
-            <span className="flex items-center gap-2 min-w-0">
-              <span className="shrink-0">Move Tree</span>
-              {lastBookOpeningName && (
-                <span className="text-xs font-medium text-sky-700 truncate" title={lastBookOpeningName}>
-                  {lastBookOpeningName}
-                </span>
-              )}
-            </span>
-            <button
-              onClick={clearTree}
-              className="inline-flex items-center gap-1.5 text-[10px] text-red-500 hover:underline"
-            >
-              <RenderIcon iconType={FaTrashCan} className="text-[9px]" />
-              <span>Clear Tree</span>
-            </button>
-          </h3>
-          <MoveList
-            visiblePath={visiblePath}
-            tree={tree}
-            currentNodeId={currentNodeId}
-            positionAnalysisMap={positionAnalysisMap}
-            moveMarksMap={moveMarksMap}
-            setCurrentNodeId={setCurrentNodeId}
-          />
-        </div>
+
+        {activeLineNodeIds.length > 1 && (
+          <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
+            <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="shrink-0">Move Tree</span>
+                {lastBookOpeningName && (
+                  <span className="text-xs font-medium text-sky-700 truncate" title={lastBookOpeningName}>
+                    {lastBookOpeningName}
+                  </span>
+                )}
+              </span>
+              <button
+                onClick={clearTree}
+                className="inline-flex items-center gap-1.5 text-[10px] text-red-500 hover:underline"
+              >
+                <RenderIcon iconType={FaTrashCan} className="text-[9px]" />
+                <span>Clear Tree</span>
+              </button>
+            </h3>
+
+            {analysisFinishedRatio < 1 && activeLineNodeIds.length > 1 && (
+              <div className="w-full h-2  rounded-full mb-4">
+                <div
+                  style={{
+                    width: `${analysisFinishedRatio * 100}%`,
+                  }}
+                  className="h-full bg-green-500 rounded-full"
+                ></div>
+              </div>
+            )}
+            <MoveList
+              visiblePath={activeLineNodes.slice(1)}
+              tree={tree}
+              currentNodeId={currentNodeId}
+              positionAnalysisMap={positionAnalysisMap}
+              moveMarksMap={moveMarksMap}
+              setCurrentNodeId={setCurrentNodeId}
+            />
+          </div>
+        )}
         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold text-gray-800">PGN</h3>
@@ -771,14 +766,8 @@ function getNextNodeId(currentNodeId: string, tree: Record<string, MoveNode>): s
   return tree[currentNodeId]?.children?.[0] ?? null;
 }
 
-function getDeepestLeaf(nodeId: string, tree: Record<string, MoveNode>): string {
-  const node = tree[nodeId];
-  if (!node || node.children.length === 0) return nodeId;
-  return getDeepestLeaf(node.children[0], tree);
-}
-
 function getLineNodeIds(currentNodeId: string, tree: Record<string, MoveNode>): string[] {
-  if (!tree[currentNodeId]) return [START_FEN];
+  if (!tree[currentNodeId]) return [ROOT_ANALYSIS_NODE_ID];
 
   while (tree[currentNodeId].children.length > 0) {
     currentNodeId = tree[currentNodeId].children[0];
