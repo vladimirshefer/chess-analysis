@@ -55,11 +55,17 @@ function GameAnalysisOverview({
     return result;
   }, [activeLine, moveMarks, positionEvaluations]);
 
-  const evaluationValues = useMemo(() => {
-    return activeLine.flatMap(function getEvaluation(node) {
+  const histogramValues = useMemo(() => {
+    return activeLine.reduce(
+      function collectValues(result, node) {
         const analysis = positionEvaluations[node.fen];
-        return analysis?.isFinal ? [analysis.evaluation] : [];
-      });
+        if (!analysis?.isFinal) return result;
+        result.evaluationValues.push(analysis.evaluation);
+        result.materialValues.push(analysis.settledMaterialBalance ?? analysis.evaluation);
+        return result;
+      },
+      { evaluationValues: [] as number[], materialValues: [] as number[] },
+    );
   }, [activeLine, positionEvaluations]);
 
   if (activeLine.length === 0) return null;
@@ -79,7 +85,9 @@ function GameAnalysisOverview({
             {summary.analyzedMoves}/{activeLine.length} moves analyzed
           </p>
         </div>
-        {progress > 0 && progress < 1 && <div className="text-xs font-medium text-gray-500">{Math.round(progress * 100)}%</div>}
+        {progress > 0 && progress < 1 && (
+          <div className="text-xs font-medium text-gray-500">{Math.round(progress * 100)}%</div>
+        )}
       </div>
 
       {progress > 0 && progress < 1 && (
@@ -91,10 +99,13 @@ function GameAnalysisOverview({
         </div>
       )}
 
-      {evaluationValues.length > 0 && (
+      {histogramValues.evaluationValues.length > 0 && (
         <div className="space-y-1">
           <div className="rounded-md overflow-hidden border border-gray-200 bg-white">
-            <ValuesHistogram values={evaluationValues} />
+            <ValuesHistogram
+              values={histogramValues.evaluationValues}
+              secondaryValues={histogramValues.materialValues}
+            />
           </div>
         </div>
       )}
