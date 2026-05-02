@@ -75,6 +75,7 @@ export interface DisplayEngineLine {
 export interface NodeAnalysis {
   fen: string;
   evaluation: AbsoluteNumericEvaluation;
+  settledMaterialBalance: number | null;
   depth: number;
   lines: DisplayEngineLine[];
   isFinal: boolean;
@@ -806,9 +807,62 @@ function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngin
 }
 
 function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal: boolean): NodeAnalysis {
+  let settledMaterialBalance: number | null = null;
+
+  if (isFinal) {
+    const topLine = evaluation.lines[0];
+    const tempGame = new Chess(baseFen);
+    const pieceValueByType = {
+      p: 100,
+      n: 300,
+      b: 300,
+      r: 500,
+      q: 900,
+      k: 0,
+    } as const;
+
+    function hasLegalCapture(): boolean {
+      return tempGame.moves({ verbose: true }).some(function isCapture(move) {
+        return typeof move.captured === "string";
+      });
+    }
+
+    function getMaterialBalance(): number {
+      let materialBalance = 0;
+
+      tempGame.board().forEach(function scanRank(rank) {
+        rank.forEach(function scanSquare(piece) {
+          if (!piece) return;
+          const value = pieceValueByType[piece.type];
+          materialBalance += piece.color === "w" ? value : -value;
+        });
+      });
+
+      return materialBalance;
+    }
+
+    if (!hasLegalCapture()) {
+      settledMaterialBalance = getMaterialBalance();
+    } else if (topLine) {
+      for (const uciMove of topLine.pv) {
+        const move = tempGame.move({
+          from: uciMove.substring(0, 2),
+          to: uciMove.substring(2, 4),
+          promotion: uciMove[4] || "q",
+        });
+        if (!move) break;
+        if (!hasLegalCapture()) {
+          settledMaterialBalance = getMaterialBalance();
+          break;
+        }
+      }
+    }
+  }
+
   return {
     fen: evaluation.fen,
     evaluation: absoluteNumericEvaluationOfEngineEvaluation(evaluation.evaluation),
+    settledMaterialBalance,
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
@@ -835,6 +889,7 @@ function buildSeededNodeAnalysis(
     evaluation: line.evaluation,
     depth: line.depth - 1,
     lines: childLines,
+    settledMaterialBalance: null,
     isFinal: false,
   };
 }
@@ -971,6 +1026,7 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
   return (
     left.fen === right.fen &&
     left.evaluation === right.evaluation &&
+    left.settledMaterialBalance === right.settledMaterialBalance &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
     left.openingLookupDone === right.openingLookupDone &&
