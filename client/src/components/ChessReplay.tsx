@@ -539,6 +539,7 @@ function ChessReplayImpl({
                 ? absoluteNumericEvaluationToEngineEvaluation(currentAnalysis.evaluation)
                 : null
             }
+            settledMaterialBalance={currentAnalysis?.settledMaterialBalance}
             orientation={boardOrientation}
             className="w-6 self-stretch"
           />

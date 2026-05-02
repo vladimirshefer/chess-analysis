@@ -16,14 +16,27 @@ interface ThermometerSegments {
  */
 function EvaluationThermometer({
   evaluation,
+  settledMaterialBalance,
   orientation,
   className = "",
 }: {
   evaluation: EngineEvaluation | null;
+  settledMaterialBalance?: number | null;
   orientation: "white" | "black";
   className?: string;
 }) {
   const segments = getThermometerSegments(evaluation, orientation);
+  const evaluationBoundary = getThermometerBoundaryPercent(evaluation, orientation);
+  const materialBoundary =
+    settledMaterialBalance === null || settledMaterialBalance === undefined
+      ? null
+      : getThermometerBoundaryPercent({ kind: "cp", pawns: settledMaterialBalance / 100 }, orientation);
+  const sideBelowMaterialLine =
+    materialBoundary === null
+      ? null
+      : materialBoundary < evaluationBoundary
+        ? segments.topSide
+        : segments.bottomSide;
   const label = evaluation === null ? "--" : formatEvaluation(evaluation);
   const labelWhite = evaluation === null ? "--" : formatEvaluationForWhite(evaluation);
   const labelBlack = evaluation === null ? "--" : formatEvaluationForBlack(evaluation);
@@ -45,6 +58,15 @@ function EvaluationThermometer({
       >
         {labelBlack}
       </div>
+      {materialBoundary !== null ? (
+        <div
+          className={`absolute left-0 right-0 z-10 h-0.5 -translate-y-1/2 ${
+            sideBelowMaterialLine === "white" ? "bg-[#fbb]" : "bg-[#611]"
+          }`}
+          style={{ top: `${materialBoundary}%` }}
+        />
+      ) : null}
+      <div className="absolute left-0 right-0 top-1/2 z-10 h-px -translate-y-1/2 bg-gray-400" />
       <div className="flex h-full flex-col">
         <div
           className={segments.topSide === "white" ? "bg-gray-50" : "bg-gray-900"}
@@ -62,6 +84,14 @@ function EvaluationThermometer({
 function getThermometerValue(evaluation: EngineEvaluation | null): number {
   if (evaluation === null) return 0;
   return Math.max(-1, Math.min(1, evalToNum(evaluation) / 100 / 6));
+}
+
+function getThermometerBoundaryPercent(
+  evaluation: EngineEvaluation | null,
+  orientation: "white" | "black",
+): number {
+  const whiteShare = (getThermometerValue(evaluation) + 1) / 2;
+  return (orientation === "black" ? whiteShare : 1 - whiteShare) * 100;
 }
 
 function getThermometerSegments(
