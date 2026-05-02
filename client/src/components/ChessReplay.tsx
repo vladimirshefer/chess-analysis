@@ -706,32 +706,6 @@ function PlayerCard({ info }: { info: { side: "white" | "black"; player: PlayerI
   );
 }
 
-function generatePgnString(
-  nodeId: string,
-  moveNum: number,
-  isWhite: boolean,
-  isFirstInVariation: boolean,
-  tree: Record<string, MoveNode>,
-): string {
-  const node = tree[nodeId];
-  if (!node) return "";
-
-  let pgn = isWhite ? `${moveNum}. ` : isFirstInVariation ? `${moveNum}... ` : "";
-  pgn += `${node.san} `;
-
-  if (node.children.length > 1) {
-    for (let index = 1; index < node.children.length; index += 1) {
-      pgn += `(${generatePgnString(node.children[index], moveNum, isWhite, true, tree).trim()}) `;
-    }
-  }
-
-  if (node.children.length > 0) {
-    pgn += generatePgnString(node.children[0], isWhite ? moveNum : moveNum + 1, !isWhite, false, tree);
-  }
-
-  return pgn;
-}
-
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
 
