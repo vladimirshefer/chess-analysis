@@ -15,22 +15,6 @@ export interface ImportedGameInfo {
   source: "pgn" | "chesscom";
 }
 
-export function mergePlayersInfo(
-  base: GamePlayersInfo | null,
-  override: GamePlayersInfo | null,
-): GamePlayersInfo | null {
-  return {
-    white: {
-      ...base?.white,
-      ...override?.white,
-    },
-    black: {
-      ...base?.black,
-      ...override?.black,
-    },
-  };
-}
-
 export function toImportedGameInfoFromChessComGame(game: ChessComClient.Dto.ChessComGameSummary): ImportedGameInfo {
   return {
     source: "chesscom",

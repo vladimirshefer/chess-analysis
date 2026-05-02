@@ -14,7 +14,7 @@ import {
   getChessEngine,
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
-import { type GamePlayersInfo, type ImportedGameInfo, mergePlayersInfo, type PlayerInfo } from "../lib/gameInfo";
+import { type GamePlayersInfo, type ImportedGameInfo, type PlayerInfo } from "../lib/gameInfo";
 import {
   type AbsoluteNumericEvaluation,
   absoluteNumericEvaluationToEngineEvaluation,
@@ -189,7 +189,7 @@ function ChessReplayImpl({
       return rating ? parseInt(rating + "", 10) : undefined;
     }
 
-    const parsedPlayersInfo = {
+    const mergedPlayersInfo = {
       white: {
         name: headers.White,
         rating: toInt(headers.WhiteElo),
@@ -199,8 +199,6 @@ function ChessReplayImpl({
         rating: toInt(headers.BlackElo),
       },
     };
-
-    const mergedPlayersInfo = mergePlayersInfo(parsedPlayersInfo, null);
     const moves = tempGame.history();
     let lastNodeId: string | null = null;
     const nextTree: Record<string, MoveNode> = { ...TREE_SEED };
