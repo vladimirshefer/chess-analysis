@@ -569,6 +569,7 @@ function ChessReplayImpl({
             activeLine={activeLineNodes.slice(1)}
             positionEvaluations={positionAnalysisMap}
             moveMarks={moveMarksMap}
+            currentNodeId={currentNodeId}
             selectNode={(id) => setCurrentNodeId(id)}
           />
         )}

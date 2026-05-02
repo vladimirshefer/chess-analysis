@@ -1,11 +1,13 @@
 function ValuesHistogram({
   values,
   secondaryValues,
+  currentIndex,
   onValueClick,
   className = "",
 }: {
   values: number[];
   secondaryValues?: number[];
+  currentIndex?: number;
   onValueClick?: (index: number) => void;
   className?: string;
 }) {
@@ -109,6 +111,9 @@ function ValuesHistogram({
         );
       })}
       <line x1="0" y1={baseline} x2={width} y2={baseline} stroke="#9ca3af" strokeWidth="1" />
+      {currentIndex != null && currentIndex >= 0 && currentIndex < pointsCount && (
+        <circle cx={currentIndex * barWidth + barWidth / 2} cy={baseline} r="2" fill="#6b7280" pointerEvents="none" />
+      )}
     </svg>
   );
 }

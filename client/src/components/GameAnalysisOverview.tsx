@@ -30,11 +30,13 @@ function GameAnalysisOverview({
   positionEvaluations,
   moveMarks,
   selectNode,
+  currentNodeId,
 }: {
   activeLine: MoveNode[];
   positionEvaluations: Record<string, NodeAnalysis>;
   moveMarks: Record<string, MoveMarkResult>;
   selectNode: (nodeId: string) => void;
+  currentNodeId: string;
 }) {
   const summary = useMemo(() => {
     const result = {
@@ -82,10 +84,15 @@ function GameAnalysisOverview({
   if (activeLine.length === 0) return null;
 
   const progress = activeLine.length > 0 ? summary.analyzedMoves / activeLine.length : 0;
+  const currentHistogramIndex = histogramValues.nodeIds.indexOf(currentNodeId);
   const whiteAccuracy =
-    summary.white.movesWithMark > 0 ? (1 - summary.white.lossSum / summary.white.movesWithMark / EVAL_LOSS_CLAMP) * 100 : null;
+    summary.white.movesWithMark > 0
+      ? (1 - summary.white.lossSum / summary.white.movesWithMark / EVAL_LOSS_CLAMP) * 100
+      : null;
   const blackAccuracy =
-    summary.black.movesWithMark > 0 ? (1 - summary.black.lossSum / summary.black.movesWithMark / EVAL_LOSS_CLAMP) * 100 : null;
+    summary.black.movesWithMark > 0
+      ? (1 - summary.black.lossSum / summary.black.movesWithMark / EVAL_LOSS_CLAMP) * 100
+      : null;
 
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
@@ -116,6 +123,7 @@ function GameAnalysisOverview({
             <ValuesHistogram
               values={histogramValues.evaluationValues}
               secondaryValues={histogramValues.materialValues}
+              currentIndex={currentHistogramIndex >= 0 ? currentHistogramIndex : undefined}
               onValueClick={(index) => {
                 const nodeId = histogramValues.nodeIds[index];
                 if (!nodeId) return;
