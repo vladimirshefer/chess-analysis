@@ -1,6 +1,7 @@
 import { Fragment, useMemo } from "react";
 import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksIconPath, MoveMarksName } from "../lib/moveMarks.ts";
 import { type MoveNode, type NodeAnalysis } from "./ChessReplay.tsx";
+import ValuesHistogram from "./ValuesHistogram.tsx";
 
 namespace GameAnalysisOverviewView {
   export const moveMarksOrder: MoveMark[] = [
@@ -54,6 +55,13 @@ function GameAnalysisOverview({
     return result;
   }, [activeLine, moveMarks, positionEvaluations]);
 
+  const evaluationValues = useMemo(() => {
+    return activeLine.flatMap(function getEvaluation(node) {
+        const analysis = positionEvaluations[node.fen];
+        return analysis?.isFinal ? [analysis.evaluation] : [];
+      });
+  }, [activeLine, positionEvaluations]);
+
   if (activeLine.length === 0) return null;
 
   const progress = activeLine.length > 0 ? summary.analyzedMoves / activeLine.length : 0;
@@ -80,6 +88,14 @@ function GameAnalysisOverview({
             className="h-full rounded-full bg-green-500 transition-all"
             style={{ width: `${Math.max(0, Math.min(100, progress * 100))}%` }}
           />
+        </div>
+      )}
+
+      {evaluationValues.length > 0 && (
+        <div className="space-y-1">
+          <div className="rounded-md overflow-hidden border border-gray-200 bg-white">
+            <ValuesHistogram values={evaluationValues} />
+          </div>
         </div>
       )}
 
