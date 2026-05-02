@@ -28,6 +28,7 @@ import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
 import RenderIcon from "./RenderIcon";
 import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx";
+import GameAnalysisOverview from "./GameAnalysisOverview.tsx";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
@@ -524,13 +525,6 @@ function ChessReplayImpl({
     setOriginalPgn("");
   }
 
-  const activeLineMovesAnalyzed = useMemo(
-    () => activeLineNodeIds.filter((id) => !!positionAnalysisMap[tree[id].fen]?.isFinal).length,
-    [activeLineNodeIds, positionAnalysisMap, tree],
-  );
-
-  const analysisFinishedRatio = activeLineMovesAnalyzed / activeLineNodeIds.length;
-
   return (
     <div className="flex flex-col lg:flex-row gap-4 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
       <div className="flex-1 flex flex-col items-center gap-2">
@@ -567,7 +561,15 @@ function ChessReplayImpl({
       </div>
 
       <div className="w-full lg:w-md flex flex-col gap-4 shrink-0 lg:overflow-y-auto ">
-        {!hasExistingAnalysis && <ChessComLastGameSuggestionPane />}
+        {!hasExistingAnalysis ? (
+          <ChessComLastGameSuggestionPane />
+        ) : (
+          <GameAnalysisOverview
+            activeLine={activeLineNodes.slice(1)}
+            positionEvaluations={positionAnalysisMap}
+            moveMarks={moveMarksMap}
+          />
+        )}
         <div className="flex items-center gap-4 flex-wrap justify-center">
           <button
             onClick={goStart}
@@ -629,17 +631,6 @@ function ChessReplayImpl({
                 <span>Clear Tree</span>
               </button>
             </h3>
-
-            {analysisFinishedRatio < 1 && activeLineNodeIds.length > 1 && (
-              <div className="w-full h-2  rounded-full mb-4">
-                <div
-                  style={{
-                    width: `${analysisFinishedRatio * 100}%`,
-                  }}
-                  className="h-full bg-green-500 rounded-full"
-                ></div>
-              </div>
-            )}
             <MoveList
               visiblePath={activeLineNodes.slice(1)}
               tree={tree}

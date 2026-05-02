@@ -42,6 +42,18 @@ export const MoveMarksName = {
   BRILLIANT: "Brilliant",
 };
 
+export const MoveMarksIconPath = {
+  BOOK: "/movemarks/book.svg",
+  BEST: "/movemarks/best.svg",
+  OK: "/movemarks/good.svg",
+  INACCURACY: "/movemarks/inaccuracy.svg",
+  MISTAKE: "/movemarks/mistake.svg",
+  MISS: "/movemarks/miss.svg",
+  BLUNDER: "/movemarks/blunder.svg",
+  ONLY_MOVE: "/movemarks/great.svg",
+  BRILLIANT: "/movemarks/brilliant.svg",
+};
+
 export type MoveMark = (typeof MoveMarks)[keyof typeof MoveMarks];
 
 export interface MoveMarkResult {
