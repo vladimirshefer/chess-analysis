@@ -24,7 +24,7 @@ function ValuesHistogram({
 
   const BLACK_COLOR = "#000000";
   const WHITE_COLOR = "#ffffff";
-  const WHITE_COMPENSATION_COLOR = "#e99";
+  const WHITE_COMPENSATION_COLOR = "#fbb";
   const BLACK_COMPENSATION_COLOR = "#611";
   return (
     <svg
