@@ -20,8 +20,8 @@ function ValuesHistogram({
 
   const BLACK_COLOR = "#000000";
   const WHITE_COLOR = "#ffffff";
-  const WHITE_COMPENSATION_COLOR = "#9ee";
-  const BLACK_COMPENSATION_COLOR = "#116";
+  const WHITE_COMPENSATION_COLOR = "#e99";
+  const BLACK_COMPENSATION_COLOR = "#611";
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}

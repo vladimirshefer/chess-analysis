@@ -821,12 +821,6 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
       k: 0,
     } as const;
 
-    function hasLegalCapture(): boolean {
-      return tempGame.moves({ verbose: true }).some(function isCapture(move) {
-        return typeof move.captured === "string";
-      });
-    }
-
     function getMaterialBalance(): number {
       let materialBalance = 0;
 
@@ -841,9 +835,7 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
       return materialBalance;
     }
 
-    if (!hasLegalCapture()) {
-      settledMaterialBalance = getMaterialBalance();
-    } else if (topLine) {
+    if (topLine) {
       for (const uciMove of topLine.pv) {
         const move = tempGame.move({
           from: uciMove.substring(0, 2),
@@ -851,7 +843,7 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
           promotion: uciMove[4] || "q",
         });
         if (!move) break;
-        if (!hasLegalCapture()) {
+        if (typeof move.captured !== "string") {
           settledMaterialBalance = getMaterialBalance();
           break;
         }
