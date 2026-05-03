@@ -31,12 +31,14 @@ function GameAnalysisOverview({
   moveMarks,
   selectNode,
   currentNodeId,
+  reviewAsWhite = true,
 }: {
   activeLine: MoveNode[];
   positionEvaluations: Record<string, NodeAnalysis>;
   moveMarks: Record<string, MoveMarkResult>;
   selectNode: (nodeId: string) => void;
   currentNodeId: string;
+  reviewAsWhite?: boolean;
 }) {
   const summary = useMemo(() => {
     const result = {
@@ -109,6 +111,7 @@ function GameAnalysisOverview({
         <div className="space-y-1">
           <div className="rounded-md overflow-hidden border border-gray-200 bg-white">
             <ValuesHistogram
+              className={`${reviewAsWhite ? "" : "scale-y-[-1]"}`}
               values={histogramValues.evaluationValues}
               secondaryValues={histogramValues.materialValues}
               currentIndex={currentHistogramIndex >= 0 ? currentHistogramIndex : undefined}

@@ -604,6 +604,7 @@ function ChessReplayImpl({
             moveMarks={moveMarksMap}
             currentNodeId={currentNodeId}
             selectNode={(id) => setCurrentNodeId(id)}
+            reviewAsWhite={boardOrientation === "white"}
           />
         )}
 
