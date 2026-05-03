@@ -141,7 +141,7 @@ function GameAnalysisOverview({
           <div className={"text-[8px]"}>{"Accuracy"}</div>
         </div>
 
-        <div className={"flex gap-3 items-center justify-center"}>
+        <div className={"flex gap-3 flex-wrap items-center justify-center"}>
           {GameAnalysisOverviewView.moveMarksOrder
             .filter((mark) => (summary.white.marks[mark] ?? 0) > 0)
             .map((mark) => (
@@ -153,7 +153,7 @@ function GameAnalysisOverview({
               </div>
             ))}
         </div>
-        <div className={"flex gap-3 items-center justify-center"}>
+        <div className={"flex gap-3 flex-wrap items-center justify-center"}>
           {GameAnalysisOverviewView.moveMarksOrder
             .filter((mark) => (summary.black.marks[mark] ?? 0) > 0)
             .map((mark) => (
