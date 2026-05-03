@@ -1,11 +1,14 @@
 ## General rules
+- Think before writing code.
 - Less code with the same functionality is good and desired goal. Reduce code complexity if possible.
 
 ## Code style
  
 - Every page should be under src/pages/PageName/index.tsx.
+- Shared components should be placed in src/components/ComponentName.tsx.
+- Shared business-logic should be wrapped in a namespace and placed in src/lib/NamespaceName.ts
 - Never extract the component props type as a separate interface.
-- Never use arrow functions for named functions like React components. Use arrow functions as function arguments (e.g. useEffect, sort).
+- Never use syntax like `const name = () => /*some code*/}` - use named functions instead.
 - We're actively using typescript `namespace`-s to group the code.
 
 ### Persistence
