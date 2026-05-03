@@ -19,7 +19,7 @@ function ValuesHistogram({
   const width = pointsCount * barWidth;
   const baseline = height / 2;
   const maxBarHeight = height / 2;
-  const limit = 300;
+  const limit = 400;
   const pixelsPerUnit = maxBarHeight / limit;
 
   const BLACK_COLOR = "#000000";
@@ -30,7 +30,7 @@ function ValuesHistogram({
     <svg
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
-      className={`w-full h-8 ${onValueClick ? "cursor-pointer" : ""} ${className}`.trim()}
+      className={`w-full h-12 ${onValueClick ? "cursor-pointer" : ""} ${className}`.trim()}
       aria-label="Values histogram"
       role="img"
       shapeRendering="crispEdges"
@@ -104,15 +104,20 @@ function ValuesHistogram({
                 fill={normalizedValue > 0 ? WHITE_COMPENSATION_COLOR : BLACK_COMPENSATION_COLOR}
               />
             )}
-            {onValueClick && (
-              <rect x={index * barWidth} y={0} width={barWidth} height={height} fill="transparent" />
-            )}
+            {onValueClick && <rect x={index * barWidth} y={0} width={barWidth} height={height} fill="transparent" />}
           </g>
         );
       })}
       <line x1="0" y1={baseline} x2={width} y2={baseline} stroke="#9ca3af" strokeWidth="1" />
       {currentIndex != null && currentIndex >= 0 && currentIndex < pointsCount && (
-        <circle cx={currentIndex * barWidth + barWidth / 2} cy={baseline} r="2" fill="#6b7280" pointerEvents="none" />
+        <ellipse
+          cx={currentIndex * barWidth + barWidth / 2}
+          cy={baseline}
+          rx="1"
+          ry="2"
+          fill="#6b7280"
+          pointerEvents="none"
+        />
       )}
     </svg>
   );

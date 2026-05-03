@@ -563,17 +563,6 @@ function ChessReplayImpl({
       </div>
 
       <div className="w-full lg:w-md flex flex-col gap-4 shrink-0 lg:overflow-y-auto ">
-        {!hasExistingAnalysis ? (
-          <ChessComLastGameSuggestionPane />
-        ) : (
-          <GameAnalysisOverview
-            activeLine={activeLineNodes.slice(1)}
-            positionEvaluations={positionAnalysisMap}
-            moveMarks={moveMarksMap}
-            currentNodeId={currentNodeId}
-            selectNode={(id) => setCurrentNodeId(id)}
-          />
-        )}
         <div className="flex items-center gap-4 flex-wrap justify-center">
           <button
             onClick={goStart}
@@ -605,6 +594,19 @@ function ChessReplayImpl({
             <RenderIcon iconType={FaRotate} className="text-base" />
           </button>
         </div>
+
+        {!hasExistingAnalysis ? (
+          <ChessComLastGameSuggestionPane />
+        ) : (
+          <GameAnalysisOverview
+            activeLine={activeLineNodes.slice(1)}
+            positionEvaluations={positionAnalysisMap}
+            moveMarks={moveMarksMap}
+            currentNodeId={currentNodeId}
+            selectNode={(id) => setCurrentNodeId(id)}
+          />
+        )}
+
         <EnginePane
           currentAnalysis={currentAnalysis}
           showPlans={showPlans}

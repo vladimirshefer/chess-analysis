@@ -32,11 +32,7 @@ function EvaluationThermometer({
       ? null
       : getThermometerBoundaryPercent({ kind: "cp", pawns: settledMaterialBalance / 100 }, orientation);
   const sideBelowMaterialLine =
-    materialBoundary === null
-      ? null
-      : materialBoundary < evaluationBoundary
-        ? segments.topSide
-        : segments.bottomSide;
+    materialBoundary === null ? null : materialBoundary < evaluationBoundary ? segments.topSide : segments.bottomSide;
   const label = evaluation === null ? "--" : formatEvaluation(evaluation);
   const labelWhite = evaluation === null ? "--" : formatEvaluationForWhite(evaluation);
   const labelBlack = evaluation === null ? "--" : formatEvaluationForBlack(evaluation);
@@ -86,10 +82,7 @@ function getThermometerValue(evaluation: EngineEvaluation | null): number {
   return Math.max(-1, Math.min(1, evalToNum(evaluation) / 100 / 6));
 }
 
-function getThermometerBoundaryPercent(
-  evaluation: EngineEvaluation | null,
-  orientation: "white" | "black",
-): number {
+function getThermometerBoundaryPercent(evaluation: EngineEvaluation | null, orientation: "white" | "black"): number {
   const whiteShare = (getThermometerValue(evaluation) + 1) / 2;
   return (orientation === "black" ? whiteShare : 1 - whiteShare) * 100;
 }

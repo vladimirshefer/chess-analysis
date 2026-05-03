@@ -95,19 +95,7 @@ function GameAnalysisOverview({
       : null;
 
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h3 className="font-bold text-gray-800">Game Analysis Overview</h3>
-          <p className="text-xs text-gray-500">
-            {summary.analyzedMoves}/{activeLine.length} moves analyzed
-          </p>
-        </div>
-        {progress > 0 && progress < 1 && (
-          <div className="text-xs font-medium text-gray-500">{Math.round(progress * 100)}%</div>
-        )}
-      </div>
-
+    <div className="">
       {progress > 0 && progress < 1 && (
         <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
           <div
@@ -134,35 +122,46 @@ function GameAnalysisOverview({
         </div>
       )}
 
-      <div className="grid grid-cols-[minmax(0,1fr)_64px_64px] gap-x-3 gap-y-2 text-sm items-center">
-        <div />
-        <div className="text-right text-xs font-semibold uppercase tracking-wide text-gray-500">White</div>
-        <div className="text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Black</div>
-
-        <div className="text-gray-700">Accuracy</div>
-        <div className="text-right font-semibold text-gray-900">
-          {whiteAccuracy == null ? "-" : Math.round(whiteAccuracy)}
+      <div className="grid grid-cols-2 p-4 gap-4 items-center">
+        <div className={"flex flex-col items-center"}>
+          <div className="font-semibold text-sm tracking-wide text-gray-500">White</div>
+          <div className="font-semibold text-lg text-gray-900">
+            {whiteAccuracy == null ? "-" : Math.round(whiteAccuracy)}
+          </div>
+          <div className={"text-[8px]"}>{"Accuracy"}</div>
         </div>
-        <div className="text-right font-semibold text-gray-900">
-          {blackAccuracy == null ? "-" : Math.round(blackAccuracy)}
+        <div className={"flex flex-col items-center"}>
+          <div className="font-semibold text-sm tracking-wide text-gray-500">Black</div>
+          <div className="font-semibold text-lg text-gray-900">
+            {blackAccuracy == null ? "-" : Math.round(blackAccuracy)}
+          </div>
+          <div className={"text-[8px]"}>{"Accuracy"}</div>
         </div>
 
-        {GameAnalysisOverviewView.moveMarksOrder
-          .filter(function keepUsedMark(mark) {
-            return (summary.white.marks[mark] ?? 0) > 0 || (summary.black.marks[mark] ?? 0) > 0;
-          })
-          .map(function renderRow(mark) {
-            return (
-              <Fragment key={mark}>
-                <div className="flex items-center gap-2 text-gray-700">
-                  <img src={MoveMarksIconPath[mark]} alt={MoveMarksName[mark]} className="w-4 h-4 shrink-0" />
-                  <span>{MoveMarksName[mark]}</span>
+        <div className={"flex gap-3 items-center justify-center"}>
+          {GameAnalysisOverviewView.moveMarksOrder
+            .filter((mark) => (summary.white.marks[mark] ?? 0) > 0)
+            .map((mark) => (
+              <div className={"flex gap-1"} key={mark}>
+                <div className="flex items-center">
+                  <img src={MoveMarksIconPath[mark]} alt={MoveMarksName[mark]} className="w-[1em] h-[1em] shrink-0" />
                 </div>
-                <div className="text-right font-medium text-gray-900">{summary.white.marks[mark] ?? 0}</div>
+                <div className="text-right font-semibold text-gray-900">{summary.white.marks[mark] ?? 0}</div>
+              </div>
+            ))}
+        </div>
+        <div className={"flex gap-3 items-center justify-center"}>
+          {GameAnalysisOverviewView.moveMarksOrder
+            .filter((mark) => (summary.black.marks[mark] ?? 0) > 0)
+            .map((mark) => (
+              <div className={"flex gap-1"} key={mark}>
+                <div className="flex items-center">
+                  <img src={MoveMarksIconPath[mark]} alt={MoveMarksName[mark]} className="w-[1em] h-[1em] shrink-0" />
+                </div>
                 <div className="text-right font-medium text-gray-900">{summary.black.marks[mark] ?? 0}</div>
-              </Fragment>
-            );
-          })}
+              </div>
+            ))}
+        </div>
       </div>
     </div>
   );
