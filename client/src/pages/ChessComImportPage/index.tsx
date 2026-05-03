@@ -95,6 +95,8 @@ function ChessComImportPage() {
               setUsername(event.target.value);
             }}
             placeholder="Chess.com username"
+            name={"chesscom-username"}
+            autoComplete={"chesscom-username"}
             className="flex-1 px-4 py-3 rounded-lg border border-gray-300 bg-white outline-none focus:border-indigo-500"
           />
           <button
