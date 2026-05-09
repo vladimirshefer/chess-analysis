@@ -1,6 +1,6 @@
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
+import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaLink, FaRotate, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Link, useLocation } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
@@ -34,6 +34,7 @@ import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumeric
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
 import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
 import { useQuery } from "@tanstack/react-query";
+import { SharedAnalysis } from "../lib/SharedAnalysis.ts";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export interface MoveNode {
@@ -117,31 +118,89 @@ const ENGINE_DEPTH_STORAGE_KEY = "analyzer-engine-selected-depth";
 const NODE_ID_DELIMITER = `|`;
 
 function ChessReplay() {
-  const [originalPgn, setOriginalPgn] = useState("");
   const location = useLocation();
+  const [originalPgn, setOriginalPgnState] = useState("");
+  const [importedGameInfo, setImportedGameInfo] = useState<ImportedGameInfo | null>(null);
+  const [initialBoardOrientation, setInitialBoardOrientation] = useState<"white" | "black" | null>(null);
+  const [sharedAnalysis, setSharedAnalysis] = useState<SharedAnalysis.Snapshot | null>(null);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
+  const sharedAnalysisPayload = useMemo(
+    function readSharedAnalysisPayload() {
+      return SharedAnalysis.readPayload(location.search);
+    },
+    [location.search],
+  );
 
-  useEffect(() => {
+  useEffect(function loadSharedAnalysisFromUrl() {
+    if (!sharedAnalysisPayload) {
+      setSharedAnalysis(null);
+      return;
+    }
+
+    let isCancelled = false;
+    void SharedAnalysis.parseSnapshot(sharedAnalysisPayload)
+      .then(function applySharedAnalysis(snapshot) {
+        if (isCancelled) return;
+        setSharedAnalysis(snapshot);
+        setImportedGameInfo(null);
+        setInitialBoardOrientation(null);
+      })
+      .catch(function handleSharedAnalysisError(error) {
+        if (isCancelled) return;
+        console.error("Invalid shared analysis payload", error);
+        setSharedAnalysis(null);
+      });
+
+    return function cleanup() {
+      isCancelled = true;
+    };
+  }, [sharedAnalysisPayload]);
+
+  useEffect(function loadImportedPgnFromRoute() {
+    if (sharedAnalysisPayload || sharedAnalysis) return;
+
     const locationState = location.state as AnalyzerLocationState | null;
     const importedPgn = locationState?.importedPgn?.trim();
     if (!importedPgn) return;
     if (lastImportedRouteKeyRef.current === location.key) return;
 
     lastImportedRouteKeyRef.current = location.key;
-    history.pushState(null, "", location.pathname);
-    // eslint-disable-next-line
-    setOriginalPgn(importedPgn);
-  }, [location, location.key, location.pathname, location.state]);
+    history.pushState(null, "", `${location.pathname}${location.search}${location.hash}`);
+    setImportedGameInfo(locationState?.importedGameInfo ?? null);
+    setInitialBoardOrientation(locationState?.initialBoardOrientation ?? null);
+    setOriginalPgnState(importedPgn);
+  }, [location, location.key, location.pathname, location.search, location.state, sharedAnalysis, sharedAnalysisPayload]);
 
-  return <ChessReplayImpl originalPgn={originalPgn} setOriginalPgn={(pgn) => setOriginalPgn(pgn)} />;
+  function setOriginalPgn(pgn: string) {
+    setSharedAnalysis(null);
+    setImportedGameInfo(null);
+    setInitialBoardOrientation(null);
+    setOriginalPgnState(pgn);
+  }
+
+  return (
+    <ChessReplayImpl
+      originalPgn={sharedAnalysis?.originalPgn ?? originalPgn}
+      setOriginalPgn={setOriginalPgn}
+      importedGameInfo={importedGameInfo}
+      initialBoardOrientation={initialBoardOrientation}
+      sharedAnalysis={sharedAnalysis}
+    />
+  );
 }
 
 function ChessReplayImpl({
   originalPgn,
   setOriginalPgn,
+  importedGameInfo,
+  initialBoardOrientation,
+  sharedAnalysis,
 }: {
   originalPgn: string;
   setOriginalPgn: (pgn: string) => void;
+  importedGameInfo: ImportedGameInfo | null;
+  initialBoardOrientation: "white" | "black" | null;
+  sharedAnalysis: SharedAnalysis.Snapshot | null;
 }) {
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
   const [tree, setTree] = useState<Record<string, MoveNode>>({ ...TREE_SEED });
@@ -175,14 +234,38 @@ function ChessReplayImpl({
 
   const openingsReady = useMemo(() => !!openingsBookQuery.data, [openingsBookQuery.data]);
 
-  useEffect(() => {
+  useEffect(
+    function syncPgnEditorText() {
+      setPgnInputText(originalPgn);
+    },
+    [originalPgn],
+  );
+
+  useEffect(
+    function applySharedAnalysisSnapshot() {
+      if (!sharedAnalysis) return;
+      setTree(sharedAnalysis.tree);
+      setCurrentNodeId(sharedAnalysis.currentNodeId);
+      setActiveLineId(sharedAnalysis.activeLineId);
+      setPositionAnalysisMap(sharedAnalysis.positionAnalysisMap);
+      setPlayersInfo(sharedAnalysis.playersInfo);
+      setBoardOrientation(sharedAnalysis.boardOrientation);
+      setStatusText("Shared analysis loaded");
+    },
+    [sharedAnalysis],
+  );
+
+  useEffect(function loadPgnIntoTree() {
+    if (sharedAnalysis) return;
+
     const tempGame = new Chess();
+    let isInvalidPgn = false;
 
     try {
       tempGame.loadPgn(originalPgn);
     } catch {
       console.error("Invalid PGN", originalPgn);
-      setStatusText("Invalid PGN");
+      isInvalidPgn = true;
     }
 
     const headers = tempGame.getHeaders();
@@ -191,16 +274,19 @@ function ChessReplayImpl({
       return rating ? parseInt(rating + "", 10) : undefined;
     }
 
-    const mergedPlayersInfo = {
-      white: {
-        name: headers.White,
-        rating: toInt(headers.WhiteElo),
+    const mergedPlayersInfo = mergePlayersInfo(
+      {
+        white: {
+          name: headers.White,
+          rating: toInt(headers.WhiteElo),
+        },
+        black: {
+          name: headers.Black,
+          rating: toInt(headers.BlackElo),
+        },
       },
-      black: {
-        name: headers.Black,
-        rating: toInt(headers.BlackElo),
-      },
-    };
+      importedGameInfo?.players ?? null,
+    );
     const moves = tempGame.history();
     let lastNodeId: string | null = null;
     const nextTree: Record<string, MoveNode> = { ...TREE_SEED };
@@ -231,9 +317,13 @@ function ChessReplayImpl({
     });
 
     setTree(nextTree);
-    setCurrentNodeId(lastNodeId);
+    setPositionAnalysisMap({});
+    setCurrentNodeId(lastNodeId ?? ROOT_ANALYSIS_NODE_ID);
+    setActiveLineId(lastNodeId ?? ROOT_ANALYSIS_NODE_ID);
     setPlayersInfo(mergedPlayersInfo);
-  }, [originalPgn]);
+    setBoardOrientation(initialBoardOrientation ?? "white");
+    setStatusText(isInvalidPgn ? "Invalid PGN" : originalPgn ? "Game loaded" : "Welcome");
+  }, [importedGameInfo, initialBoardOrientation, originalPgn, sharedAnalysis]);
 
   function goStart() {
     setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
@@ -375,6 +465,12 @@ function ChessReplayImpl({
   const canGoForward = useMemo(() => tree[currentNodeId]?.children?.[0] ?? false, [currentNodeId, tree]);
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
+  const sharedAnalysisFens = useMemo(
+    function collectSharedAnalysisFens() {
+      return new Set(Object.keys(sharedAnalysis?.positionAnalysisMap ?? {}));
+    },
+    [sharedAnalysis],
+  );
 
   useEffect(
     function calculateActiveLineId() {
@@ -390,7 +486,9 @@ function ChessReplayImpl({
     async function scheduleAnalysisForNodes() {
       if (!engine) return;
       const nodeId = activeLineNodeIds.find((it) => {
-        const positionAnalysisMapElement = positionAnalysisMap[tree[it].fen];
+        const fen = tree[it].fen;
+        const positionAnalysisMapElement = positionAnalysisMap[fen];
+        if (sharedAnalysisFens.has(fen) && positionAnalysisMapElement) return false;
         return (
           (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
         );
@@ -416,7 +514,43 @@ function ChessReplayImpl({
       syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
     }
     void scheduleAnalysisForNodes();
-  }, [tree, activeLineNodeIds, engine, selectedDepth, positionAnalysisMap]);
+  }, [tree, activeLineNodeIds, engine, selectedDepth, positionAnalysisMap, sharedAnalysisFens]);
+
+  useEffect(
+    function loadOpeningForVisibleAnalysis() {
+      if (!openingsReady) return;
+
+      const fenToLookup = activeLineNodeIds.find(function findPendingOpening(nodeId) {
+        const analysis = positionAnalysisMap[tree[nodeId].fen];
+        return !!analysis && !analysis.openingLookupDone;
+      });
+      if (!fenToLookup) return;
+
+      const fen = tree[fenToLookup].fen;
+      let isCancelled = false;
+
+      void OpeningsBook.getOpeningByFen(fen).then(function applyOpening(opening) {
+        if (isCancelled) return;
+        syncSingleNodeAnalysis(fen, {
+          ...(positionAnalysisMap[fen] ?? {
+            fen,
+            evaluation: 0,
+            settledMaterialBalance: null,
+            depth: 0,
+            lines: [],
+            isFinal: false,
+          }),
+          opening: opening ?? null,
+          openingLookupDone: true,
+        });
+      });
+
+      return function cleanup() {
+        isCancelled = true;
+      };
+    },
+    [activeLineNodeIds, openingsReady, positionAnalysisMap, tree],
+  );
 
   function syncSingleNodeAnalysis(fen: string, analysis: NodeAnalysis) {
     setPositionAnalysisMap((previous: Record<string, NodeAnalysis>): Record<string, NodeAnalysis> => {
@@ -526,6 +660,35 @@ function ChessReplayImpl({
     setOriginalPgn("");
   }
 
+  async function shareAnalysis() {
+    try {
+      const shareUrl = await SharedAnalysis.buildUrl(
+        {
+          originalPgn,
+          tree,
+          currentNodeId,
+          activeLineId,
+          positionAnalysisMap: filterAnalysesForTree(tree, positionAnalysisMap),
+          playersInfo,
+          boardOrientation,
+        },
+        window.location.href,
+      );
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setStatusText("Share link copied");
+        return;
+      }
+
+      window.prompt("Copy share link", shareUrl);
+      setStatusText("Share link ready");
+    } catch (error) {
+      console.error("Failed to create share link", error);
+      setStatusText("Share failed");
+    }
+  }
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
       <div className="flex-1 flex flex-col items-center gap-2">
@@ -592,6 +755,16 @@ function ChessReplayImpl({
             className="inline-flex items-center justify-center p-4 bg-gray-800 hover:bg-black text-white rounded font-bold"
           >
             <RenderIcon iconType={FaRotate} className="text-base" />
+          </button>
+          <button
+            disabled={!hasExistingAnalysis}
+            onClick={function handleShareClick() {
+              void shareAnalysis();
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-4 bg-sky-700 hover:bg-sky-800 text-white rounded font-bold disabled:opacity-30"
+          >
+            <RenderIcon iconType={FaLink} className="text-sm" />
+            <span>Share</span>
           </button>
         </div>
 
@@ -700,6 +873,42 @@ function PlayerCard({ info }: { info: { side: "white" | "black"; player: PlayerI
       </div>
     </div>
   );
+}
+
+function mergePlayersInfo(parsedPlayersInfo: GamePlayersInfo, importedPlayersInfo: GamePlayersInfo | null): GamePlayersInfo {
+  return {
+    white: mergePlayerInfo(parsedPlayersInfo.white, importedPlayersInfo?.white ?? null),
+    black: mergePlayerInfo(parsedPlayersInfo.black, importedPlayersInfo?.black ?? null),
+  };
+}
+
+function mergePlayerInfo(primary: PlayerInfo | null, fallback: PlayerInfo | null): PlayerInfo | null {
+  const name = primary?.name || fallback?.name;
+  const rating = typeof primary?.rating === "number" ? primary.rating : fallback?.rating;
+  if (!name && typeof rating !== "number") return null;
+  return {
+    name,
+    rating,
+  };
+}
+
+function filterAnalysesForTree(
+  tree: Record<string, MoveNode>,
+  positionAnalysisMap: Record<string, NodeAnalysis>,
+): Record<string, NodeAnalysis> {
+  const relevantFens = new Set(
+    Object.values(tree).map(function pickFen(node) {
+      return node.fen;
+    }),
+  );
+  const result: Record<string, NodeAnalysis> = {};
+
+  Object.entries(positionAnalysisMap).forEach(function addAnalysis([fen, analysis]) {
+    if (!relevantFens.has(fen)) return;
+    result[fen] = analysis;
+  });
+
+  return result;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
