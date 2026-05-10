@@ -10,23 +10,15 @@ export interface GamePlayersInfo {
   black: PlayerInfo | null;
 }
 
-export interface ImportedGameInfo {
-  players: GamePlayersInfo;
-  source: "pgn" | "chesscom";
-}
-
-export function toImportedGameInfoFromChessComGame(game: ChessComClient.Dto.ChessComGameSummary): ImportedGameInfo {
+export function toGamePlayersInfoFromChessComGame(game: ChessComClient.Dto.ChessComGameSummary): GamePlayersInfo {
   return {
-    source: "chesscom",
-    players: {
-      white: {
-        name: game.white.username,
-        rating: game.white.rating,
-      },
-      black: {
-        name: game.black.username,
-        rating: game.black.rating,
-      },
+    white: {
+      name: game.white.username,
+      rating: game.white.rating,
+    },
+    black: {
+      name: game.black.username,
+      rating: game.black.rating,
     },
   };
 }

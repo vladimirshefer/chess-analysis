@@ -14,7 +14,7 @@ import {
   getChessEngine,
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
-import { type GamePlayersInfo, type ImportedGameInfo, type PlayerInfo } from "../lib/gameInfo";
+import { type GamePlayersInfo, type PlayerInfo } from "../lib/gameInfo";
 import {
   type AbsoluteNumericEvaluation,
   absoluteNumericEvaluationToEngineEvaluation,
@@ -35,54 +35,12 @@ import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
 import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { SharedAnalysis } from "../lib/SharedAnalysis.ts";
+import { AnalysisGame } from "../lib/AnalysisGame.ts";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
-export interface MoveNode {
-  id: string;
-  san: string;
-  fen: string;
-  parentId: string | null;
-  children: string[];
-}
-
-export interface DisplayEngineLine {
-  /**
-   * Suggested next move.
-   * Example: "Bc2"
-   */
-  suggestedMove: string;
-  /**
-   * Suggested next move.
-   * UCI = Universal Chess Interface notation
-   * Example: "b3c2"
-   */
-  suggestedMoveUci: string;
-  /**
-   * Engine line.
-   * example: ["b3c2","h7h6","c1e3"]
-   */
-  engineLineUci: string[];
-  /**
-   * Engine line.
-   * like "Bc2 h6 Be3"
-   */
-  engineLine: string;
-  evaluation: AbsoluteNumericEvaluation;
-  depth: number;
-  /** rank of the line. 1 = suggestion*/
-  lineRank: number;
-}
-
-export interface NodeAnalysis {
-  fen: string;
-  evaluation: AbsoluteNumericEvaluation;
-  settledMaterialBalance: number | null;
-  depth: number;
-  lines: DisplayEngineLine[];
-  isFinal: boolean;
-  opening?: OpeningsBook.Opening | null;
-  openingLookupDone?: boolean;
-}
+type MoveNode = AnalysisGame.MoveNode;
+type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
+type NodeAnalysis = AnalysisGame.NodeAnalysis;
 
 interface ScheduledTask {
   nodeId: string;
@@ -94,35 +52,21 @@ interface ScheduledTask {
 
 interface AnalyzerLocationState {
   importedPgn?: string;
-  importedGameInfo?: ImportedGameInfo;
   initialBoardOrientation?: "white" | "black";
 }
 
-export const ROOT_ANALYSIS_NODE_ID = "__root__";
+export const ROOT_ANALYSIS_NODE_ID = AnalysisGame.ROOT_NODE_ID;
 const PLAN_CAPTURE_SQUARE_STYLE = {
   backgroundColor: "rgba(220, 38, 38, 0.45)",
   boxShadow: "inset 0 0 0 3px rgba(185, 28, 28, 0.85)",
 };
 
-const TREE_SEED: Record<string, MoveNode> = {
-  [ROOT_ANALYSIS_NODE_ID]: {
-    id: ROOT_ANALYSIS_NODE_ID,
-    san: "",
-    fen: START_FEN,
-    parentId: null,
-    children: [],
-  },
-};
-
 const ENGINE_DEPTH_STORAGE_KEY = "analyzer-engine-selected-depth";
-const NODE_ID_DELIMITER = `|`;
 
 function ChessReplay() {
   const location = useLocation();
   const [originalPgn, setOriginalPgnState] = useState("");
-  const [importedGameInfo, setImportedGameInfo] = useState<ImportedGameInfo | null>(null);
   const [initialBoardOrientation, setInitialBoardOrientation] = useState<"white" | "black" | null>(null);
-  const [sharedAnalysis, setSharedAnalysis] = useState<SharedAnalysis.Snapshot | null>(null);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
   const sharedAnalysisPayload = useMemo(
     function readSharedAnalysisPayload() {
@@ -132,32 +76,18 @@ function ChessReplay() {
   );
 
   useEffect(function loadSharedAnalysisFromUrl() {
-    if (!sharedAnalysisPayload) {
-      setSharedAnalysis(null);
-      return;
+    if (!sharedAnalysisPayload) return;
+
+    try {
+      setInitialBoardOrientation(null);
+      setOriginalPgnState(SharedAnalysis.toPgn(sharedAnalysisPayload));
+    } catch (error) {
+      console.error("Invalid shared analysis payload", error);
     }
-
-    let isCancelled = false;
-    void SharedAnalysis.parseSnapshot(sharedAnalysisPayload)
-      .then(function applySharedAnalysis(snapshot) {
-        if (isCancelled) return;
-        setSharedAnalysis(snapshot);
-        setImportedGameInfo(null);
-        setInitialBoardOrientation(null);
-      })
-      .catch(function handleSharedAnalysisError(error) {
-        if (isCancelled) return;
-        console.error("Invalid shared analysis payload", error);
-        setSharedAnalysis(null);
-      });
-
-    return function cleanup() {
-      isCancelled = true;
-    };
   }, [sharedAnalysisPayload]);
 
   useEffect(function loadImportedPgnFromRoute() {
-    if (sharedAnalysisPayload || sharedAnalysis) return;
+    if (sharedAnalysisPayload) return;
 
     const locationState = location.state as AnalyzerLocationState | null;
     const importedPgn = locationState?.importedPgn?.trim();
@@ -166,25 +96,21 @@ function ChessReplay() {
 
     lastImportedRouteKeyRef.current = location.key;
     history.pushState(null, "", `${location.pathname}${location.search}${location.hash}`);
-    setImportedGameInfo(locationState?.importedGameInfo ?? null);
     setInitialBoardOrientation(locationState?.initialBoardOrientation ?? null);
     setOriginalPgnState(importedPgn);
-  }, [location, location.key, location.pathname, location.search, location.state, sharedAnalysis, sharedAnalysisPayload]);
+  }, [location, location.key, location.pathname, location.search, location.state, sharedAnalysisPayload]);
 
   function setOriginalPgn(pgn: string) {
-    setSharedAnalysis(null);
-    setImportedGameInfo(null);
     setInitialBoardOrientation(null);
     setOriginalPgnState(pgn);
   }
 
   return (
     <ChessReplayImpl
-      originalPgn={sharedAnalysis?.originalPgn ?? originalPgn}
+      originalPgn={originalPgn}
       setOriginalPgn={setOriginalPgn}
-      importedGameInfo={importedGameInfo}
       initialBoardOrientation={initialBoardOrientation}
-      sharedAnalysis={sharedAnalysis}
+      isSharedLink={Boolean(sharedAnalysisPayload)}
     />
   );
 }
@@ -192,18 +118,16 @@ function ChessReplay() {
 function ChessReplayImpl({
   originalPgn,
   setOriginalPgn,
-  importedGameInfo,
   initialBoardOrientation,
-  sharedAnalysis,
+  isSharedLink,
 }: {
   originalPgn: string;
   setOriginalPgn: (pgn: string) => void;
-  importedGameInfo: ImportedGameInfo | null;
   initialBoardOrientation: "white" | "black" | null;
-  sharedAnalysis: SharedAnalysis.Snapshot | null;
+  isSharedLink: boolean;
 }) {
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
-  const [tree, setTree] = useState<Record<string, MoveNode>>({ ...TREE_SEED });
+  const [tree, setTree] = useState<Record<string, MoveNode>>({ ...AnalysisGame.TREE_SEED });
 
   const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
   const [activeLineId, setActiveLineId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
@@ -241,89 +165,20 @@ function ChessReplayImpl({
     [originalPgn],
   );
 
-  useEffect(
-    function applySharedAnalysisSnapshot() {
-      if (!sharedAnalysis) return;
-      setTree(sharedAnalysis.tree);
-      setCurrentNodeId(sharedAnalysis.currentNodeId);
-      setActiveLineId(sharedAnalysis.activeLineId);
-      setPositionAnalysisMap(sharedAnalysis.positionAnalysisMap);
-      setPlayersInfo(sharedAnalysis.playersInfo);
-      setBoardOrientation(sharedAnalysis.boardOrientation);
-      setStatusText("Shared analysis loaded");
-    },
-    [sharedAnalysis],
-  );
-
   useEffect(function loadPgnIntoTree() {
-    if (sharedAnalysis) return;
-
-    const tempGame = new Chess();
-    let isInvalidPgn = false;
-
-    try {
-      tempGame.loadPgn(originalPgn);
-    } catch {
+    const loadedGame = AnalysisGame.loadPgn(originalPgn);
+    if (loadedGame.isInvalidPgn) {
       console.error("Invalid PGN", originalPgn);
-      isInvalidPgn = true;
     }
 
-    const headers = tempGame.getHeaders();
-
-    function toInt(rating: string | number | undefined) {
-      return rating ? parseInt(rating + "", 10) : undefined;
-    }
-
-    const mergedPlayersInfo = mergePlayersInfo(
-      {
-        white: {
-          name: headers.White,
-          rating: toInt(headers.WhiteElo),
-        },
-        black: {
-          name: headers.Black,
-          rating: toInt(headers.BlackElo),
-        },
-      },
-      importedGameInfo?.players ?? null,
-    );
-    const moves = tempGame.history();
-    let lastNodeId: string | null = null;
-    const nextTree: Record<string, MoveNode> = { ...TREE_SEED };
-    const walker = new Chess();
-
-    moves.forEach(function addMove(moveSan) {
-      const result = walker.move(moveSan);
-      const nodeId = lastNodeId ? `${lastNodeId}${NODE_ID_DELIMITER}${result.san}` : result.san;
-      const parent = lastNodeId || ROOT_ANALYSIS_NODE_ID;
-
-      if (!nextTree[nodeId]) {
-        nextTree[nodeId] = {
-          id: nodeId,
-          san: result.san,
-          fen: walker.fen(),
-          parentId: parent,
-          children: [],
-        };
-        if (parent) {
-          nextTree[parent] = {
-            ...nextTree[parent],
-            children: [...nextTree[parent].children, nodeId],
-          };
-        }
-      }
-
-      lastNodeId = nodeId;
-    });
-
-    setTree(nextTree);
-    setPositionAnalysisMap({});
-    setCurrentNodeId(lastNodeId ?? ROOT_ANALYSIS_NODE_ID);
-    setActiveLineId(lastNodeId ?? ROOT_ANALYSIS_NODE_ID);
-    setPlayersInfo(mergedPlayersInfo);
+    setTree(loadedGame.tree);
+    setPositionAnalysisMap(loadedGame.positionAnalysisMap);
+    setCurrentNodeId(loadedGame.currentNodeId);
+    setActiveLineId(loadedGame.activeLineId);
+    setPlayersInfo(loadedGame.playersInfo);
     setBoardOrientation(initialBoardOrientation ?? "white");
-    setStatusText(isInvalidPgn ? "Invalid PGN" : originalPgn ? "Game loaded" : "Welcome");
-  }, [importedGameInfo, initialBoardOrientation, originalPgn, sharedAnalysis]);
+    setStatusText(loadedGame.isInvalidPgn ? "Invalid PGN" : isSharedLink ? "Shared analysis loaded" : originalPgn ? "Game loaded" : "Welcome");
+  }, [initialBoardOrientation, isSharedLink, originalPgn]);
 
   function goStart() {
     setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);
@@ -334,7 +189,7 @@ function ChessReplayImpl({
   }, [tree]);
 
   const goForward = useCallback(() => {
-    setCurrentNodeId((previous) => getNextNodeId(previous, tree) ?? previous);
+    setCurrentNodeId((previous) => AnalysisGame.getNextNodeId(previous, tree) ?? previous);
   }, [tree]);
 
   useEffect(() => {
@@ -363,7 +218,7 @@ function ChessReplayImpl({
     };
   }, [goForward]);
 
-  const activeLineNodeIds = useMemo(() => getLineNodeIds(activeLineId, tree), [activeLineId, tree]);
+  const activeLineNodeIds = useMemo(() => AnalysisGame.getLineNodeIds(activeLineId, tree), [activeLineId, tree]);
 
   const activeLineNodes: MoveNode[] = useMemo(() => {
     return activeLineNodeIds.map((id) => tree[id]);
@@ -462,21 +317,15 @@ function ChessReplayImpl({
     [planView.captureSquares],
   );
 
-  const canGoForward = useMemo(() => tree[currentNodeId]?.children?.[0] ?? false, [currentNodeId, tree]);
+  const canGoForward = useMemo(() => Boolean(tree[currentNodeId]?.children?.[0]), [currentNodeId, tree]);
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
-  const sharedAnalysisFens = useMemo(
-    function collectSharedAnalysisFens() {
-      return new Set(Object.keys(sharedAnalysis?.positionAnalysisMap ?? {}));
-    },
-    [sharedAnalysis],
-  );
 
   useEffect(
     function calculateActiveLineId() {
-      const previousActiveLineIds = getLineNodeIds(activeLineId, tree);
+      const previousActiveLineIds = AnalysisGame.getLineNodeIds(activeLineId, tree);
       if (previousActiveLineIds.includes(currentNodeId)) return;
-      const newActiveLineIds = getLineNodeIds(currentNodeId, tree);
+      const newActiveLineIds = AnalysisGame.getLineNodeIds(currentNodeId, tree);
       setActiveLineId(newActiveLineIds[newActiveLineIds.length - 1]);
     },
     [currentNodeId, tree, activeLineId],
@@ -488,7 +337,7 @@ function ChessReplayImpl({
       const nodeId = activeLineNodeIds.find((it) => {
         const fen = tree[it].fen;
         const positionAnalysisMapElement = positionAnalysisMap[fen];
-        if (sharedAnalysisFens.has(fen) && positionAnalysisMapElement) return false;
+        if (positionAnalysisMapElement?.source === "pgn" && positionAnalysisMapElement.isFinal) return false;
         return (
           (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
         );
@@ -514,7 +363,7 @@ function ChessReplayImpl({
       syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
     }
     void scheduleAnalysisForNodes();
-  }, [tree, activeLineNodeIds, engine, selectedDepth, positionAnalysisMap, sharedAnalysisFens]);
+  }, [tree, activeLineNodeIds, engine, selectedDepth, positionAnalysisMap]);
 
   useEffect(
     function loadOpeningForVisibleAnalysis() {
@@ -539,6 +388,7 @@ function ChessReplayImpl({
             depth: 0,
             lines: [],
             isFinal: false,
+            source: "engine",
           }),
           opening: opening ?? null,
           openingLookupDone: true,
@@ -598,8 +448,7 @@ function ChessReplayImpl({
       }
 
       const nextFen = tempGame.fen();
-      const nextNodeId =
-        currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}${NODE_ID_DELIMITER}${result.san}` : result.san;
+      const nextNodeId = currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}|${result.san}` : result.san;
 
       Analytics.trackEvent("move", {
         source,
@@ -609,7 +458,7 @@ function ChessReplayImpl({
 
       if (!tree[nextNodeId]) {
         setTree((previous) =>
-          addNode(previous, currentNodeId, {
+          AnalysisGame.addNode(previous, currentNodeId, {
             id: nextNodeId,
             san: result.san,
             fen: nextFen,
@@ -629,8 +478,6 @@ function ChessReplayImpl({
       return null;
     }
   }
-
-  useEffect(() => console.log(activeLineNodeIds), [activeLineNodeIds]);
 
   async function applyEngineMove(line: DisplayEngineLine): Promise<void> {
     const suggestedMoveUci = line.suggestedMoveUci;
@@ -662,15 +509,12 @@ function ChessReplayImpl({
 
   async function shareAnalysis() {
     try {
-      const shareUrl = await SharedAnalysis.buildUrl(
+      const shareUrl = SharedAnalysis.buildUrl(
         {
-          originalPgn,
           tree,
-          currentNodeId,
           activeLineId,
-          positionAnalysisMap: filterAnalysesForTree(tree, positionAnalysisMap),
+          positionAnalysisMap: AnalysisGame.filterAnalysesForTree(tree, positionAnalysisMap),
           playersInfo,
-          boardOrientation,
         },
         window.location.href,
       );
@@ -875,42 +719,6 @@ function PlayerCard({ info }: { info: { side: "white" | "black"; player: PlayerI
   );
 }
 
-function mergePlayersInfo(parsedPlayersInfo: GamePlayersInfo, importedPlayersInfo: GamePlayersInfo | null): GamePlayersInfo {
-  return {
-    white: mergePlayerInfo(parsedPlayersInfo.white, importedPlayersInfo?.white ?? null),
-    black: mergePlayerInfo(parsedPlayersInfo.black, importedPlayersInfo?.black ?? null),
-  };
-}
-
-function mergePlayerInfo(primary: PlayerInfo | null, fallback: PlayerInfo | null): PlayerInfo | null {
-  const name = primary?.name || fallback?.name;
-  const rating = typeof primary?.rating === "number" ? primary.rating : fallback?.rating;
-  if (!name && typeof rating !== "number") return null;
-  return {
-    name,
-    rating,
-  };
-}
-
-function filterAnalysesForTree(
-  tree: Record<string, MoveNode>,
-  positionAnalysisMap: Record<string, NodeAnalysis>,
-): Record<string, NodeAnalysis> {
-  const relevantFens = new Set(
-    Object.values(tree).map(function pickFen(node) {
-      return node.fen;
-    }),
-  );
-  const result: Record<string, NodeAnalysis> = {};
-
-  Object.entries(positionAnalysisMap).forEach(function addAnalysis([fen, analysis]) {
-    if (!relevantFens.has(fen)) return;
-    result[fen] = analysis;
-  });
-
-  return result;
-}
-
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
 
@@ -939,25 +747,6 @@ function getDisplayedPlayersInfo(
     top: { side: "black", player: playersInfo?.black ?? null },
     bottom: { side: "white", player: playersInfo?.white ?? null },
   };
-}
-
-function getNextNodeId(currentNodeId: string, tree: Record<string, MoveNode>): string | null {
-  return tree[currentNodeId]?.children?.[0] ?? null;
-}
-
-function getLineNodeIds(currentNodeId: string, tree: Record<string, MoveNode>): string[] {
-  if (!tree[currentNodeId]) return [ROOT_ANALYSIS_NODE_ID];
-
-  while (tree[currentNodeId].children.length > 0) {
-    currentNodeId = tree[currentNodeId].children[0];
-  }
-
-  const result: string[] = [];
-  for (let id = currentNodeId; id && tree[id]; id = tree[id].parentId) {
-    result.push(id);
-  }
-
-  return result.reverse();
 }
 
 function getSelectedAnalysisTarget(
@@ -1073,6 +862,7 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),
     isFinal,
+    source: "engine",
   };
 }
 
@@ -1098,6 +888,7 @@ function buildSeededNodeAnalysis(
     lines: childLines,
     settledMaterialBalance: null,
     isFinal: false,
+    source: "engine",
   };
 }
 
@@ -1236,6 +1027,7 @@ function areNodeAnalysesEqual(left?: NodeAnalysis, right?: NodeAnalysis): boolea
     left.settledMaterialBalance === right.settledMaterialBalance &&
     left.depth === right.depth &&
     left.isFinal === right.isFinal &&
+    left.source === right.source &&
     left.openingLookupDone === right.openingLookupDone &&
     areOpeningsEqual(left.opening, right.opening) &&
     areDisplayLinesEqual(left.lines, right.lines)
@@ -1317,26 +1109,6 @@ function mergeNodeAnalysisLines(currentAnalysis: NodeAnalysis | undefined, nextA
       return left.lineRank - right.lineRank;
     }),
   };
-}
-
-function addNode(
-  tree: Record<string, MoveNode>,
-  parentId: string | null,
-  newChild: MoveNode,
-): Record<string, MoveNode> {
-  const nextTree: Record<string, MoveNode> = {
-    ...tree,
-    [newChild.id]: newChild,
-  };
-
-  if (parentId) {
-    nextTree[parentId] = {
-      ...tree[parentId],
-      children: [...tree[parentId].children, newChild.id],
-    };
-  }
-
-  return nextTree;
 }
 
 export default ChessReplay;

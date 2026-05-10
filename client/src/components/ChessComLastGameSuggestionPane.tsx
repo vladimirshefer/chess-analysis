@@ -5,7 +5,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChessComClient } from "../lib/ChessComClient.ts";
 import { ChessComGamesStorage } from "../lib/ChessComGamesStorage.ts";
 import { ChessComUser } from "../lib/ChessComUser.ts";
-import { toImportedGameInfoFromChessComGame } from "../lib/gameInfo.ts";
+import { AnalysisGame } from "../lib/AnalysisGame.ts";
+import { toGamePlayersInfoFromChessComGame } from "../lib/gameInfo.ts";
 import RenderIcon from "./RenderIcon.tsx";
 
 function ChessComLastGameSuggestionPane() {
@@ -64,8 +65,10 @@ function ChessComLastGameSuggestionPane() {
               onClick={() => {
                 navigate("/", {
                   state: {
-                    importedPgn: suggestedChessComGame.pgn,
-                    importedGameInfo: toImportedGameInfoFromChessComGame(suggestedChessComGame),
+                    importedPgn: AnalysisGame.withPlayers(
+                      suggestedChessComGame.pgn,
+                      toGamePlayersInfoFromChessComGame(suggestedChessComGame),
+                    ),
                     initialBoardOrientation: ChessComUser.getInitialBoardOrientation(
                       suggestedChessComGame,
                       storedChessComUsername,

@@ -3,7 +3,8 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ChessComClient } from "../../lib/ChessComClient.ts";
 import { ChessComGamesStorage } from "../../lib/ChessComGamesStorage.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
-import { toImportedGameInfoFromChessComGame } from "../../lib/gameInfo.ts";
+import { AnalysisGame } from "../../lib/AnalysisGame.ts";
+import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
 import RenderIcon from "../../components/RenderIcon.tsx";
 import { FaArrowRight, FaMagnifyingGlass } from "react-icons/fa6";
 
@@ -68,8 +69,7 @@ function ChessComImportPage() {
 
     navigate("/", {
       state: {
-        importedPgn: game.pgn,
-        importedGameInfo: toImportedGameInfoFromChessComGame(game),
+        importedPgn: AnalysisGame.withPlayers(game.pgn, toGamePlayersInfoFromChessComGame(game)),
         initialBoardOrientation,
       },
     });

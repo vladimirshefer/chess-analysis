@@ -1,6 +1,6 @@
 import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksName, MoveMarksShort } from "../../lib/moveMarks.ts";
 import { Evaluations } from "../../lib/evaluation.ts";
-import { type MoveNode, type NodeAnalysis, ROOT_ANALYSIS_NODE_ID } from "../../components/ChessReplay.tsx";
+import { AnalysisGame } from "../../lib/AnalysisGame.ts";
 
 namespace MoveListView {
   export type MoveTree = Record<string, MoveNode>;
@@ -49,6 +49,10 @@ namespace MoveListView {
       });
   }
 }
+
+type MoveNode = AnalysisGame.MoveNode;
+type NodeAnalysis = AnalysisGame.NodeAnalysis;
+const ROOT_ANALYSIS_NODE_ID = AnalysisGame.ROOT_NODE_ID;
 
 export function MoveList({
   currentNodeId,
