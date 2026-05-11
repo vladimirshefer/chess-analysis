@@ -5,7 +5,10 @@ import RenderIcon from "../../components/RenderIcon.tsx";
 import { GiStrikingArrows } from "react-icons/gi";
 import { FaMagnifyingGlassPlus } from "react-icons/fa6";
 import { EngineLine } from "./EngineLine.tsx";
-import type { DisplayEngineLine, NodeAnalysis } from "../../components/ChessReplay.tsx";
+import { AnalysisGame } from "../../lib/AnalysisGame.ts";
+
+type NodeAnalysis = AnalysisGame.NodeAnalysis;
+type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
 
 export function EnginePane({
   currentAnalysis,

@@ -1,5 +1,7 @@
 import { Evaluations } from "../../lib/evaluation.ts";
-import type { DisplayEngineLine } from "../../components/ChessReplay.tsx";
+import { AnalysisGame } from "../../lib/AnalysisGame.ts";
+
+type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
 
 export function EngineLine({ line, apply }: { line: DisplayEngineLine; apply: () => void }) {
   const scoreValue = line.evaluation;

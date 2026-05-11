@@ -1,6 +1,14 @@
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaLink, FaRotate, FaTrashCan } from "react-icons/fa6";
+import {
+  FaAnglesLeft,
+  FaChevronLeft,
+  FaChevronRight,
+  FaFileImport,
+  FaLink,
+  FaRotate,
+  FaTrashCan,
+} from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Link, useLocation } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
@@ -39,7 +47,7 @@ import { AnalysisGame } from "../lib/AnalysisGame.ts";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 type MoveNode = AnalysisGame.MoveNode;
-type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
+export type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
 type NodeAnalysis = AnalysisGame.NodeAnalysis;
 
 interface ScheduledTask {
@@ -55,7 +63,7 @@ interface AnalyzerLocationState {
   initialBoardOrientation?: "white" | "black";
 }
 
-export const ROOT_ANALYSIS_NODE_ID = AnalysisGame.ROOT_NODE_ID;
+const ROOT_ANALYSIS_NODE_ID = AnalysisGame.ROOT_NODE_ID;
 const PLAN_CAPTURE_SQUARE_STYLE = {
   backgroundColor: "rgba(220, 38, 38, 0.45)",
   boxShadow: "inset 0 0 0 3px rgba(185, 28, 28, 0.85)",
@@ -75,30 +83,38 @@ function ChessReplay() {
     [location.search],
   );
 
-  useEffect(function loadSharedAnalysisFromUrl() {
-    if (!sharedAnalysisPayload) return;
+  useEffect(
+    function loadSharedAnalysisFromUrl() {
+      if (!sharedAnalysisPayload) return;
 
-    try {
-      setInitialBoardOrientation(null);
-      setOriginalPgnState(SharedAnalysis.toPgn(sharedAnalysisPayload));
-    } catch (error) {
-      console.error("Invalid shared analysis payload", error);
-    }
-  }, [sharedAnalysisPayload]);
+      try {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setInitialBoardOrientation(null);
+        setOriginalPgnState(SharedAnalysis.toPgn(sharedAnalysisPayload));
+      } catch (error) {
+        console.error("Invalid shared analysis payload", error);
+      }
+    },
+    [sharedAnalysisPayload],
+  );
 
-  useEffect(function loadImportedPgnFromRoute() {
-    if (sharedAnalysisPayload) return;
+  useEffect(
+    function loadImportedPgnFromRoute() {
+      if (sharedAnalysisPayload) return;
 
-    const locationState = location.state as AnalyzerLocationState | null;
-    const importedPgn = locationState?.importedPgn?.trim();
-    if (!importedPgn) return;
-    if (lastImportedRouteKeyRef.current === location.key) return;
+      const locationState = location.state as AnalyzerLocationState | null;
+      const importedPgn = locationState?.importedPgn?.trim();
+      if (!importedPgn) return;
+      if (lastImportedRouteKeyRef.current === location.key) return;
 
-    lastImportedRouteKeyRef.current = location.key;
-    history.pushState(null, "", `${location.pathname}${location.search}${location.hash}`);
-    setInitialBoardOrientation(locationState?.initialBoardOrientation ?? null);
-    setOriginalPgnState(importedPgn);
-  }, [location, location.key, location.pathname, location.search, location.state, sharedAnalysisPayload]);
+      lastImportedRouteKeyRef.current = location.key;
+      history.pushState(null, "", `${location.pathname}${location.search}${location.hash}`);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInitialBoardOrientation(locationState?.initialBoardOrientation ?? null);
+      setOriginalPgnState(importedPgn);
+    },
+    [location, location.key, location.pathname, location.search, location.state, sharedAnalysisPayload],
+  );
 
   function setOriginalPgn(pgn: string) {
     setInitialBoardOrientation(null);
@@ -165,20 +181,31 @@ function ChessReplayImpl({
     [originalPgn],
   );
 
-  useEffect(function loadPgnIntoTree() {
-    const loadedGame = AnalysisGame.loadPgn(originalPgn);
-    if (loadedGame.isInvalidPgn) {
-      console.error("Invalid PGN", originalPgn);
-    }
+  useEffect(
+    function loadPgnIntoTree() {
+      const loadedGame = AnalysisGame.loadPgn(originalPgn);
+      if (loadedGame.isInvalidPgn) {
+        console.error("Invalid PGN", originalPgn);
+      }
 
-    setTree(loadedGame.tree);
-    setPositionAnalysisMap(loadedGame.positionAnalysisMap);
-    setCurrentNodeId(loadedGame.currentNodeId);
-    setActiveLineId(loadedGame.activeLineId);
-    setPlayersInfo(loadedGame.playersInfo);
-    setBoardOrientation(initialBoardOrientation ?? "white");
-    setStatusText(loadedGame.isInvalidPgn ? "Invalid PGN" : isSharedLink ? "Shared analysis loaded" : originalPgn ? "Game loaded" : "Welcome");
-  }, [initialBoardOrientation, isSharedLink, originalPgn]);
+      setTree(loadedGame.tree);
+      setPositionAnalysisMap(loadedGame.positionAnalysisMap);
+      setCurrentNodeId(loadedGame.currentNodeId);
+      setActiveLineId(loadedGame.activeLineId);
+      setPlayersInfo(loadedGame.playersInfo);
+      setBoardOrientation(initialBoardOrientation ?? "white");
+      setStatusText(
+        loadedGame.isInvalidPgn
+          ? "Invalid PGN"
+          : isSharedLink
+            ? "Shared analysis loaded"
+            : originalPgn
+              ? "Game loaded"
+              : "Welcome",
+      );
+    },
+    [initialBoardOrientation, isSharedLink, originalPgn],
+  );
 
   function goStart() {
     setCurrentNodeId(ROOT_ANALYSIS_NODE_ID);

@@ -1,7 +1,10 @@
-import { Fragment, useMemo } from "react";
+import { useMemo } from "react";
 import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksIconPath, MoveMarksName } from "../lib/moveMarks.ts";
-import { type MoveNode, type NodeAnalysis } from "./ChessReplay.tsx";
 import ValuesHistogram from "./ValuesHistogram.tsx";
+import { AnalysisGame } from "../lib/AnalysisGame.ts";
+
+type MoveNode = AnalysisGame.MoveNode;
+type NodeAnalysis = AnalysisGame.NodeAnalysis;
 
 namespace GameAnalysisOverviewView {
   export const moveMarksOrder: MoveMark[] = [

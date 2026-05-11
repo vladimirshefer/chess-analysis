@@ -83,18 +83,20 @@ export namespace SharedAnalysis {
   export function toPgn(search: string): string {
     const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
     return AnalysisGame.buildPgn(
-      (params.get(QUERY_PARAM_LINE)?.trim() ? params.get(QUERY_PARAM_LINE)!.trim().split(/\s+/) : []).map(function toMove(entry) {
-        const [san = "", bestMoveSan = "", evaluationToken = ""] = entry.split(VALUE_DELIMITER);
-        const evaluation = evaluationToken ? Number(evaluationToken) : null;
-        if (!san || (evaluationToken && !Number.isFinite(evaluation))) {
-          throw new Error("Invalid shared analysis entry");
-        }
-        return {
-          san,
-          bestMoveSan: bestMoveSan || undefined,
-          evaluation,
-        };
-      }),
+      (params.get(QUERY_PARAM_LINE)?.trim() ? params.get(QUERY_PARAM_LINE)!.trim().split(/\s+/) : []).map(
+        function toMove(entry) {
+          const [san = "", bestMoveSan = "", evaluationToken = ""] = entry.split(VALUE_DELIMITER);
+          const evaluation = evaluationToken ? Number(evaluationToken) : null;
+          if (!san || (evaluationToken && !Number.isFinite(evaluation))) {
+            throw new Error("Invalid shared analysis entry");
+          }
+          return {
+            san,
+            bestMoveSan: bestMoveSan || undefined,
+            evaluation,
+          };
+        },
+      ),
       {
         white: readPlayer(params.get(QUERY_PARAM_WHITE)),
         black: readPlayer(params.get(QUERY_PARAM_BLACK)),
