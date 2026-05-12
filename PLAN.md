@@ -6,12 +6,9 @@ Add Total Game Overview panel
 - show this value to Total Game Estimate
 
 ### Game Complexity
-- Estimate game complexity by avg (number of available captures / numebr of available moves)
+- Estimate game complexity by avg (number of available captures / number of available moves)
 - Separate for each player side.
 - show this value to Total Game Estimate
-
-### [x] ~~Fix brilliant move marking to mean "Sacrifice"~~
-- That means giving up the material, with (almost) no loss in evaluation.
 
 ### First implementation of a "Plan"
 - When the move is on the board, get the engine evaluation and lines.
@@ -26,9 +23,6 @@ Add Total Game Overview panel
 - If a low-depth estimate is better than a high-depth estimate, that means the move is a trap.
 - If a high-depth estimate is better than a low-depth estimate, that means that move is a hard-to-find (maybe brilliant?) move.
 - Potentially come up with the idea on how to explain it in human-understandable text.
-
-### Multiple parallel engine workers
-- We could analyze multiple positions at once with spawning more stockfish workers.
 
 ### Live PGN Editor
 - Should be updated when unknown moves made (expand the tree)
@@ -50,13 +44,6 @@ Summary: Add a compact horizontal main-line move strip with index-based navigati
 4. Keep the line compact and horizontally scrollable with drag scrolling and no visible scrollbar.
 5. Pull request: https://github.com/vladimirshefer/chess-analysis/pull/1
    TL;DR: Main-line move strip with PGN-native marks is implemented and tracked in PR #1.
-
-### EngineEvaluation -> AbsoluteNumericEvaluation (Research Plan)
-1. Replace `EngineEvaluation` in core engine contracts (`ChessEngineLine`, `FullMoveEvaluation`, cache interface) with `AbsoluteNumericEvaluation`.
-2. Update `NativeChessEngine`/`CachedChessEngine`/`PersistentChessEngine` flow to produce, pass, persist, and hydrate only numeric evaluations (drop object<->number conversion bridges).
-3. Refactor `EvaluationThermometer` and `ChessReplay` call sites to use numeric formatting/parsing helpers from `Evaluations` only.
-4. Simplify `evaluation.ts`: remove `EngineEvaluation`, `parseEngineEvaluation`, `getTerminalEvaluation`, `evalToNum`, and `absoluteNumericEvaluationToEngineEvaluation`; keep numeric-first helpers.
-   TL;DR: migrate to one canonical eval type end-to-end (number), then clean old adapters/tests to eliminate dual-representation drift.
 
 ### Imported PGN Analysis Priority
 Summary: imported PGN first analyzes the whole imported line into separate state; current-position evaluation is `BACKGROUND`, so it runs only after imported nodes are done.
