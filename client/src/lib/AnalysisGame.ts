@@ -3,7 +3,7 @@ import { ForsythEdwardsNotation } from "./ForsythEdwardsNotation.ts";
 import { type AbsoluteNumericEvaluation, Evaluations, START_FEN } from "./evaluation.ts";
 import type { GamePlayersInfo, PlayerInfo } from "./gameInfo.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
-import type { GameTree, MoveNode } from "./GameTree.ts";
+import type { GameTree } from "./GameTree.ts";
 
 export namespace AnalysisGame {
   export interface DisplayEngineLine {
@@ -211,10 +211,6 @@ export namespace AnalysisGame {
     }
   }
 
-  export function getNextNodeId(currentNodeId: string, tree: GameTree): string | null {
-    return tree[currentNodeId]?.children?.[0] ?? null;
-  }
-
   export function getLineNodeIds(currentNodeId: string, tree: GameTree): string[] {
     if (!tree[currentNodeId]) return [ROOT_NODE_ID];
 
@@ -228,20 +224,6 @@ export namespace AnalysisGame {
     }
 
     return result.reverse();
-  }
-
-  export function filterAnalysesForTree(
-    tree: GameTree,
-    positionAnalysisMap: Record<string, NodeAnalysis>,
-  ): Record<string, NodeAnalysis> {
-    const relevantFens = new Set(Object.values(tree).map((node) => node.fen));
-    const result: Record<string, NodeAnalysis> = {};
-
-    Object.entries(positionAnalysisMap).forEach(function addAnalysis([fen, analysis]) {
-      if (relevantFens.has(fen)) result[fen] = analysis;
-    });
-
-    return result;
   }
 
   function collectCommentMetadata(pgn: string): { evaluationToken?: string; bestMoveSan?: string }[] {

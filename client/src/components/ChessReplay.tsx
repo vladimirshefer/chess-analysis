@@ -216,7 +216,7 @@ function ChessReplayImpl({
   }, [tree]);
 
   const goForward = useCallback(() => {
-    setCurrentNodeId((previous) => AnalysisGame.getNextNodeId(previous, tree) ?? previous);
+    setCurrentNodeId((previous) => tree[previous]?.children?.[0] ?? previous);
   }, [tree]);
 
   useEffect(() => {
@@ -347,6 +347,19 @@ function ChessReplayImpl({
   const canGoForward = useMemo(() => Boolean(tree[currentNodeId]?.children?.[0]), [currentNodeId, tree]);
 
   const displayedPlayersInfo = getDisplayedPlayersInfo(playersInfo, boardOrientation);
+  const nextNodeIdToAnalyze = useMemo(
+    function getNextNodeIdToAnalyze() {
+      return (
+        activeLineNodeIds.find((nodeId) => {
+          const fen = tree[nodeId].fen;
+          const positionAnalysis = positionAnalysisMap[fen];
+          if (positionAnalysis?.source === "pgn" && positionAnalysis.isFinal) return false;
+          return (positionAnalysis?.depth ?? -1) < selectedDepth || !(positionAnalysis?.isFinal ?? false);
+        }) ?? null
+      );
+    },
+    [activeLineNodeIds, positionAnalysisMap, selectedDepth, tree],
+  );
 
   useEffect(
     function calculateActiveLineId() {
@@ -358,27 +371,20 @@ function ChessReplayImpl({
     [currentNodeId, tree, activeLineId],
   );
 
-  useEffect(() => {
-    async function scheduleAnalysisForNodes() {
-      if (!engine) return;
-      const nodeId = activeLineNodeIds.find((it) => {
-        const fen = tree[it].fen;
-        const positionAnalysisMapElement = positionAnalysisMap[fen];
-        if (positionAnalysisMapElement?.source === "pgn" && positionAnalysisMapElement.isFinal) return false;
-        return (
-          (positionAnalysisMapElement?.depth ?? -1) < selectedDepth || !(positionAnalysisMapElement?.isFinal ?? false)
-        );
-      });
+  const nextNodeToAnalyze = useMemo(() => tree[nextNodeIdToAnalyze], [tree, nextNodeIdToAnalyze]);
 
-      if (!nodeId) {
+  useEffect(() => {
+    async function scheduleAnalysts() {
+      if (!engine) return;
+      if (!nextNodeToAnalyze) {
         setStatusText("Analysis complete");
         return;
       }
 
       const task = {
-        nodeId,
-        fen: tree[nodeId].fen,
-        label: tree[nodeId].san,
+        nodeId: nextNodeToAnalyze.id,
+        fen: nextNodeToAnalyze.fen,
+        label: nextNodeToAnalyze.san,
         request: { minDepth: selectedDepth, linesAmount: 1 },
         priority: EngineEvaluationPriorities.BACKGROUND,
       };
@@ -389,8 +395,8 @@ function ChessReplayImpl({
       });
       syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
     }
-    void scheduleAnalysisForNodes();
-  }, [tree, activeLineNodeIds, engine, selectedDepth, positionAnalysisMap]);
+    void scheduleAnalysts();
+  }, [engine, nextNodeToAnalyze, selectedDepth]);
 
   useEffect(
     function loadOpeningForVisibleAnalysis() {
@@ -546,7 +552,7 @@ function ChessReplayImpl({
         {
           tree,
           activeLineId,
-          positionAnalysisMap: AnalysisGame.filterAnalysesForTree(tree, positionAnalysisMap),
+          positionAnalysisMap,
           playersInfo,
         },
         window.location.href,
