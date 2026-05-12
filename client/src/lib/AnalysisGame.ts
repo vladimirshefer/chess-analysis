@@ -3,16 +3,9 @@ import { ForsythEdwardsNotation } from "./ForsythEdwardsNotation.ts";
 import { type AbsoluteNumericEvaluation, Evaluations, START_FEN } from "./evaluation.ts";
 import type { GamePlayersInfo, PlayerInfo } from "./gameInfo.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
+import type { GameTree, MoveNode } from "./GameTree.ts";
 
 export namespace AnalysisGame {
-  export interface MoveNode {
-    id: string;
-    san: string;
-    fen: string;
-    parentId: string | null;
-    children: string[];
-  }
-
   export interface DisplayEngineLine {
     suggestedMove: string;
     suggestedMoveUci: string;
@@ -36,7 +29,7 @@ export namespace AnalysisGame {
   }
 
   export interface LoadedPgn {
-    tree: Record<string, MoveNode>;
+    tree: GameTree;
     currentNodeId: string;
     activeLineId: string;
     positionAnalysisMap: Record<string, NodeAnalysis>;
@@ -53,7 +46,7 @@ export namespace AnalysisGame {
   export const ROOT_NODE_ID = "__root__";
   const NODE_ID_DELIMITER = "|";
 
-  export const TREE_SEED: Record<string, MoveNode> = {
+  export const TREE_SEED: GameTree = {
     [ROOT_NODE_ID]: {
       id: ROOT_NODE_ID,
       san: "",
@@ -74,7 +67,7 @@ export namespace AnalysisGame {
     }
 
     const comments = collectCommentMetadata(originalPgn);
-    const tree: Record<string, MoveNode> = { ...TREE_SEED };
+    const tree: GameTree = { ...TREE_SEED };
     const positionAnalysisMap: Record<string, NodeAnalysis> = {};
     const walker = new Chess();
     let lastNodeId = ROOT_NODE_ID;
@@ -218,11 +211,11 @@ export namespace AnalysisGame {
     }
   }
 
-  export function getNextNodeId(currentNodeId: string, tree: Record<string, MoveNode>): string | null {
+  export function getNextNodeId(currentNodeId: string, tree: GameTree): string | null {
     return tree[currentNodeId]?.children?.[0] ?? null;
   }
 
-  export function getLineNodeIds(currentNodeId: string, tree: Record<string, MoveNode>): string[] {
+  export function getLineNodeIds(currentNodeId: string, tree: GameTree): string[] {
     if (!tree[currentNodeId]) return [ROOT_NODE_ID];
 
     while (tree[currentNodeId].children.length > 0) {
@@ -238,7 +231,7 @@ export namespace AnalysisGame {
   }
 
   export function filterAnalysesForTree(
-    tree: Record<string, MoveNode>,
+    tree: GameTree,
     positionAnalysisMap: Record<string, NodeAnalysis>,
   ): Record<string, NodeAnalysis> {
     const relevantFens = new Set(Object.values(tree).map((node) => node.fen));
@@ -249,26 +242,6 @@ export namespace AnalysisGame {
     });
 
     return result;
-  }
-
-  export function addNode(
-    tree: Record<string, MoveNode>,
-    parentId: string | null,
-    newChild: MoveNode,
-  ): Record<string, MoveNode> {
-    const nextTree: Record<string, MoveNode> = {
-      ...tree,
-      [newChild.id]: newChild,
-    };
-
-    if (parentId) {
-      nextTree[parentId] = {
-        ...tree[parentId],
-        children: [...tree[parentId].children, newChild.id],
-      };
-    }
-
-    return nextTree;
   }
 
   function collectCommentMetadata(pgn: string): { evaluationToken?: string; bestMoveSan?: string }[] {

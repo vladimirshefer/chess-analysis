@@ -44,9 +44,9 @@ import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { SharedAnalysis } from "../lib/SharedAnalysis.ts";
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
+import { type GameTree, GameTreeUtils, type MoveNode } from "../lib/GameTree.ts";
 import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
-type MoveNode = AnalysisGame.MoveNode;
 export type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
 type NodeAnalysis = AnalysisGame.NodeAnalysis;
 
@@ -143,7 +143,7 @@ function ChessReplayImpl({
   isSharedLink: boolean;
 }) {
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
-  const [tree, setTree] = useState<Record<string, MoveNode>>({ ...AnalysisGame.TREE_SEED });
+  const [tree, setTree] = useState<GameTree>({ ...AnalysisGame.TREE_SEED });
 
   const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
   const [activeLineId, setActiveLineId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
@@ -167,7 +167,7 @@ function ChessReplayImpl({
   const openingsBookQuery = useQuery({
     queryKey: ["openingsBook"],
     queryFn: async () => {
-      await OpeningsBook.getKnownPositionEpds();
+      await OpeningsBook.load();
       return true;
     },
   });
@@ -396,16 +396,22 @@ function ChessReplayImpl({
     function loadOpeningForVisibleAnalysis() {
       if (!openingsReady) return;
 
-      const fenToLookup = activeLineNodeIds.find(function findPendingOpening(nodeId) {
-        const analysis = positionAnalysisMap[tree[nodeId].fen];
-        return !!analysis && !analysis.openingLookupDone;
+      const nodeId = activeLineNodeIds.find((nodeId) => {
+        const node = tree[nodeId];
+        if (!node?.parentId) return false;
+        const movePathKey = GameTreeUtils.getPgnToPosition(nodeId, tree);
+        if (!movePathKey) return false;
+        return !positionAnalysisMap[node.fen]?.openingLookupDone;
       });
-      if (!fenToLookup) return;
+      if (!nodeId) return;
 
-      const fen = tree[fenToLookup].fen;
+      const movePathKey = GameTreeUtils.getPgnToPosition(nodeId, tree);
+      if (!movePathKey) return;
+
+      const fen = tree[nodeId].fen;
       let isCancelled = false;
 
-      void OpeningsBook.getOpeningByFen(fen).then(function applyOpening(opening) {
+      void OpeningsBook.getOpeningBySanMoves(movePathKey.split(" ")).then(function applyOpening(opening) {
         if (isCancelled) return;
         syncSingleNodeAnalysis(fen, {
           ...(positionAnalysisMap[fen] ?? {
@@ -485,7 +491,7 @@ function ChessReplayImpl({
 
       if (!tree[nextNodeId]) {
         setTree((previous) =>
-          AnalysisGame.addNode(previous, currentNodeId, {
+          GameTreeUtils.addNode(previous, currentNodeId, {
             id: nextNodeId,
             san: result.san,
             fen: nextFen,
@@ -777,7 +783,7 @@ function getDisplayedPlayersInfo(
 }
 
 function getSelectedAnalysisTarget(
-  tree: Record<string, MoveNode>,
+  tree: GameTree,
   currentNodeId: string | null,
   deepAnalysisDepth: number,
 ): ScheduledTask | null {
@@ -940,19 +946,14 @@ function toSeededDisplayLines(
   ];
 }
 
-function buildMoveMarks(
-  tree: Record<string, MoveNode>,
-  analysesByFen: Record<string, NodeAnalysis>,
-): Record<string, MoveMarkResult> {
+function buildMoveMarks(tree: GameTree, analysesByFen: Record<string, NodeAnalysis>): Record<string, MoveMarkResult> {
   const marksByNodeId: Record<string, MoveMarkResult> = {};
-  const pathKeyByNodeId = new Map<string, string | null>();
 
   Object.values(tree).forEach(function classifyNode(node) {
-    const movePathKey = getPgnToPosition(node.id, tree, pathKeyByNodeId);
-    const isKnownByFen = OpeningsBook.isKnownPositionByFen(node.fen);
-    const isKnownByMovePath = movePathKey ? OpeningsBook.isKnownMovePathKey(movePathKey) : false;
+    const movePathKey = GameTreeUtils.getPgnToPosition(node.id, tree);
+    const isKnownByMovePath = movePathKey ? OpeningsBook.isKnownMovePath(movePathKey.split(" ")) : false;
 
-    if (isKnownByFen || isKnownByMovePath) {
+    if (isKnownByMovePath) {
       marksByNodeId[node.id] = {
         mark: MoveMarks.BOOK,
         evalLoss: 0,
@@ -984,38 +985,6 @@ function buildMoveMarks(
   return marksByNodeId;
 }
 
-function getPgnToPosition(
-  nodeId: string,
-  tree: Record<string, MoveNode>,
-  cache: Map<string, string | null>,
-): string | null {
-  if (cache.has(nodeId)) {
-    return cache.get(nodeId) ?? null;
-  }
-
-  const node = tree[nodeId];
-  if (!node) {
-    cache.set(nodeId, null);
-    return null;
-  }
-
-  if (!node.parentId) {
-    const rootPathKey = OpeningsBook.toMovePathKey([node.san]);
-    cache.set(nodeId, rootPathKey);
-    return rootPathKey;
-  }
-
-  const parentPathKey = getPgnToPosition(node.parentId, tree, cache);
-  if (!parentPathKey) {
-    const fallbackPathKey = OpeningsBook.toMovePathKey([node.san]);
-    cache.set(nodeId, fallbackPathKey);
-    return fallbackPathKey;
-  }
-
-  const nodePathKey = `${parentPathKey} ${node.san}`;
-  cache.set(nodeId, nodePathKey);
-  return nodePathKey;
-}
 function getMoveSquares(baseFen: string, san: string): { from: string; to: string } | null {
   const tempGame = new Chess(baseFen === START ? undefined : baseFen);
 
@@ -1030,7 +999,7 @@ function getMoveSquares(baseFen: string, san: string): { from: string; to: strin
 
 function findClosestOpeningName(
   startNodeId: string,
-  tree: Record<string, MoveNode>,
+  tree: GameTree,
   analysisByFen: Record<string, NodeAnalysis>,
 ): string | null {
   let nodeId: string | null = startNodeId;
@@ -1065,9 +1034,7 @@ function areOpeningsEqual(left?: OpeningsBook.Opening | null, right?: OpeningsBo
   if (left === right) return true;
   if (!left || !right) return !left && !right;
 
-  return (
-    left.name === right.name && left.epd === right.epd && left.pgn === right.pgn && left.plyCount === right.plyCount
-  );
+  return left.name === right.name && left.pgn === right.pgn && left.plyCount === right.plyCount;
 }
 
 function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLine[]): boolean {

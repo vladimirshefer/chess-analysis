@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksIconPath, MoveMarksName } from "../lib/moveMarks.ts";
 import ValuesHistogram from "./ValuesHistogram.tsx";
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
+import type { MoveNode } from "../lib/GameTree.ts";
 
-type MoveNode = AnalysisGame.MoveNode;
 type NodeAnalysis = AnalysisGame.NodeAnalysis;
 
 namespace GameAnalysisOverviewView {

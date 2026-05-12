@@ -1,5 +1,6 @@
 import { AnalysisGame } from "./AnalysisGame.ts";
 import type { GamePlayersInfo } from "./gameInfo.ts";
+import type { MoveNode } from "./GameTree.ts";
 
 export namespace SharedAnalysis {
   const QUERY_PARAM_LINE = "line";
@@ -10,7 +11,7 @@ export namespace SharedAnalysis {
 
   export function buildUrl(
     analysis: {
-      tree: Record<string, AnalysisGame.MoveNode>;
+      tree: Record<string, MoveNode>;
       activeLineId: string;
       positionAnalysisMap: Record<string, AnalysisGame.NodeAnalysis>;
       playersInfo: GamePlayersInfo | null;

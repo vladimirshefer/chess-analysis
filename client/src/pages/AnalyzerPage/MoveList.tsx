@@ -1,6 +1,7 @@
 import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksName, MoveMarksShort } from "../../lib/moveMarks.ts";
 import { Evaluations } from "../../lib/evaluation.ts";
 import { AnalysisGame } from "../../lib/AnalysisGame.ts";
+import type { MoveNode } from "../../lib/GameTree.ts";
 
 namespace MoveListView {
   export type MoveTree = Record<string, MoveNode>;
@@ -50,7 +51,6 @@ namespace MoveListView {
   }
 }
 
-type MoveNode = AnalysisGame.MoveNode;
 type NodeAnalysis = AnalysisGame.NodeAnalysis;
 const ROOT_ANALYSIS_NODE_ID = AnalysisGame.ROOT_NODE_ID;
 

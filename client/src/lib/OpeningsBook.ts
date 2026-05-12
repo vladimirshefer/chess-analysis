@@ -3,22 +3,18 @@ import { Chess } from "chess.js";
 export namespace OpeningsBook {
   interface OpeningEntry {
     name?: string;
-    epd?: string;
     pgn?: string;
   }
 
   export interface Opening {
     name: string;
-    epd: string | null;
     pgn: string;
     plyCount: number;
   }
 
   interface KnownOpeningsData {
-    knownEpds: Set<string>;
     knownMovePathPrefixes: Set<string>;
     openingByMovePathPrefix: Map<string, Opening>;
-    openingByEpd: Map<string, Opening>;
   }
 
   const OPENINGS_FILE_PATHS = [
@@ -34,57 +30,26 @@ export namespace OpeningsBook {
   let knownOpeningsDataPromise: Promise<KnownOpeningsData> | null = null;
   let knownOpeningsData: KnownOpeningsData | null = null;
 
-  export function isReady(): boolean {
-    void getKnownOpeningsData();
-    return !!knownOpeningsDataPromise;
-  }
-
-  export function toEpd(fen: string): string {
-    return fen.trim().split(/\s+/).slice(0, 4).join(" ");
-  }
-
   export function toMovePathKey(sanMoves: readonly string[]): string {
     return sanMoves.join(" ");
   }
 
-  export async function getKnownPositionEpds(): Promise<ReadonlySet<string>> {
-    const knownData = await getKnownOpeningsData();
-    return knownData.knownEpds;
+  export async function load(): Promise<void> {
+    await getKnownOpeningsData();
   }
 
-  export function isKnownMovePathKey(movePathKey: string): boolean {
+  export function isKnownMovePath(sanMoves: readonly string[]): boolean {
+    const movePathKey = toMovePathKey(sanMoves);
     return knownOpeningsData?.knownMovePathPrefixes.has(movePathKey) ?? false;
   }
 
-  export async function isKnownPosition(fen: string): Promise<boolean> {
-    const knownEpds = await getKnownPositionEpds();
-    return knownEpds.has(toEpd(fen));
-  }
-
-  export function isKnownPositionByFen(fen: string): boolean {
-    return knownOpeningsData?.knownEpds.has(toEpd(fen)) ?? false;
-  }
-
-  export async function getOpeningByFen(fen: string): Promise<Opening | null> {
-    const knownData = await getKnownOpeningsData();
-    return cloneOpening(knownData.openingByEpd.get(toEpd(fen)) ?? null);
-  }
-
-  export async function getOpeningByPgn(pgn: string): Promise<Opening | null> {
-    const sanMoves = toMainlineMoves(pgn);
+  export async function getOpeningBySanMoves(sanMoves: readonly string[]): Promise<Opening | null> {
     if (sanMoves.length === 0) return null;
 
     const knownData = await getKnownOpeningsData();
     for (let index = sanMoves.length; index >= 1; index -= 1) {
       const movePathKey = toMovePathKey(sanMoves.slice(0, index));
       const opening = knownData.openingByMovePathPrefix.get(movePathKey);
-      if (opening) return cloneOpening(opening);
-    }
-
-    // Keep transpositions: fallback to the closest known opening by position along this mainline.
-    const lineEpds = toMainlineEpds(sanMoves);
-    for (let index = lineEpds.length - 1; index >= 0; index -= 1) {
-      const opening = knownData.openingByEpd.get(lineEpds[index]);
       if (opening) return cloneOpening(opening);
     }
 
@@ -110,17 +75,10 @@ export namespace OpeningsBook {
     try {
       const openingLists = await Promise.all(OPENINGS_FILE_PATHS.map(loadOpeningEntries));
       const allOpenings = openingLists.flat();
-      const knownEpds = new Set<string>();
       const knownMovePathPrefixes = new Set<string>();
       const openingByMovePathPrefix = new Map<string, Opening>();
-      const openingByEpd = new Map<string, Opening>();
 
       for (const openingEntry of allOpenings) {
-        const epd = openingEntry.epd?.trim() ?? "";
-        if (epd) {
-          knownEpds.add(epd);
-        }
-
         const sanMoves = toMainlineMoves(openingEntry.pgn ?? "");
         for (let index = 0; index < sanMoves.length; index += 1) {
           const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
@@ -134,25 +92,17 @@ export namespace OpeningsBook {
           const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
           upsertOpening(openingByMovePathPrefix, movePathPrefix, opening);
         }
-
-        if (opening.epd) {
-          upsertOpening(openingByEpd, opening.epd, opening);
-        }
       }
 
       return {
-        knownEpds,
         knownMovePathPrefixes,
         openingByMovePathPrefix,
-        openingByEpd,
       };
     } catch (error) {
       console.error("Failed to load openings book", error);
       return {
-        knownEpds: new Set<string>(),
         knownMovePathPrefixes: new Set<string>(),
         openingByMovePathPrefix: new Map<string, Opening>(),
-        openingByEpd: new Map<string, Opening>(),
       };
     }
   }
@@ -225,23 +175,6 @@ export namespace OpeningsBook {
     }
   }
 
-  function toMainlineEpds(sanMoves: readonly string[]): string[] {
-    const chess = new Chess();
-    const epds: string[] = [];
-
-    for (const sanMove of sanMoves) {
-      try {
-        const move = chess.move(sanMove);
-        if (!move) break;
-        epds.push(toEpd(chess.fen()));
-      } catch {
-        break;
-      }
-    }
-
-    return epds;
-  }
-
   function tokenizeSanMoves(pgn: string): string[] {
     return pgn
       .replace(/\{[^}]*\}/g, " ")
@@ -262,7 +195,6 @@ export namespace OpeningsBook {
 
     return {
       name: openingName,
-      epd: openingEntry.epd?.trim() || null,
       pgn: openingEntry.pgn?.trim() ?? "",
       plyCount: sanMoves.length,
     };
@@ -291,7 +223,6 @@ export namespace OpeningsBook {
 
     return {
       name: opening.name,
-      epd: opening.epd,
       pgn: opening.pgn,
       plyCount: opening.plyCount,
     };
