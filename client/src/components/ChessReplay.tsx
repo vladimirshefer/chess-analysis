@@ -363,12 +363,11 @@ function ChessReplayImpl({
 
   useEffect(
     function calculateActiveLineId() {
-      const previousActiveLineIds = AnalysisGame.getLineNodeIds(activeLineId, tree);
-      if (previousActiveLineIds.includes(currentNodeId)) return;
+      if (activeLineNodeIds.includes(currentNodeId)) return;
       const newActiveLineIds = AnalysisGame.getLineNodeIds(currentNodeId, tree);
       setActiveLineId(newActiveLineIds[newActiveLineIds.length - 1]);
     },
-    [currentNodeId, tree, activeLineId],
+    [currentNodeId, tree, activeLineId, activeLineNodeIds],
   );
 
   const nextNodeToAnalyze = useMemo(() => tree[nextNodeIdToAnalyze], [tree, nextNodeIdToAnalyze]);
