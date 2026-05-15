@@ -1,4 +1,4 @@
-import { type EngineEvaluation, evalToNum, formatEvaluation, GameResult } from "../lib/evaluation";
+import { type AbsoluteNumericEvaluation, Evaluations } from "../lib/evaluation";
 
 interface ThermometerSegments {
   topShare: number;
@@ -20,7 +20,7 @@ function EvaluationThermometer({
   orientation,
   className = "",
 }: {
-  evaluation: EngineEvaluation | null;
+  evaluation: AbsoluteNumericEvaluation | null;
   settledMaterialBalance?: number | null;
   orientation: "white" | "black";
   className?: string;
@@ -30,12 +30,15 @@ function EvaluationThermometer({
   const materialBoundary =
     settledMaterialBalance === null || settledMaterialBalance === undefined
       ? null
-      : getThermometerBoundaryPercent({ kind: "cp", pawns: settledMaterialBalance / 100 }, orientation);
+      : getThermometerBoundaryPercent(settledMaterialBalance, orientation);
   const sideBelowMaterialLine =
     materialBoundary === null ? null : materialBoundary < evaluationBoundary ? segments.topSide : segments.bottomSide;
-  const label = evaluation === null ? "--" : formatEvaluation(evaluation);
-  const labelWhite = evaluation === null ? "--" : formatEvaluationForWhite(evaluation);
-  const labelBlack = evaluation === null ? "--" : formatEvaluationForBlack(evaluation);
+  const label = evaluation === null ? "--" : Evaluations.toString(evaluation);
+  function dropSign(s: string) : string {
+    return s.startsWith("-") || s.startsWith("+") ? s.substring(1) : s;
+  }
+  const labelWhite = evaluation >= 0 ? dropSign(label) : "";
+  const labelBlack = evaluation <= 0 ?  dropSign(label) : "";
 
   return (
     <div className={`relative shadow-inner group ${className}`.trim()}>
@@ -77,18 +80,21 @@ function EvaluationThermometer({
   );
 }
 
-function getThermometerValue(evaluation: EngineEvaluation | null): number {
+function getThermometerValue(evaluation: AbsoluteNumericEvaluation | null): number {
   if (evaluation === null) return 0;
-  return Math.max(-1, Math.min(1, evalToNum(evaluation) / 100 / 6));
+  return Math.max(-1, Math.min(1, evaluation / 600));
 }
 
-function getThermometerBoundaryPercent(evaluation: EngineEvaluation | null, orientation: "white" | "black"): number {
+function getThermometerBoundaryPercent(
+  evaluation: AbsoluteNumericEvaluation | null,
+  orientation: "white" | "black",
+): number {
   const whiteShare = (getThermometerValue(evaluation) + 1) / 2;
   return (orientation === "black" ? whiteShare : 1 - whiteShare) * 100;
 }
 
 function getThermometerSegments(
-  evaluation: EngineEvaluation | null,
+  evaluation: AbsoluteNumericEvaluation | null,
   orientation: "white" | "black",
 ): ThermometerSegments {
   const whiteShare = (getThermometerValue(evaluation) + 1) / 2;
@@ -108,36 +114,6 @@ function getThermometerSegments(
     topSide: "black",
     bottomSide: "white",
   };
-}
-
-function formatEvaluationForWhite(evaluation: EngineEvaluation): string {
-  switch (evaluation.kind) {
-    case "cp":
-      return evaluation.pawns >= 10
-        ? `${evaluation.pawns.toFixed(0)}`
-        : evaluation.pawns >= 0
-          ? `${evaluation.pawns.toFixed(1)}`
-          : "";
-    case "mate":
-      return evaluation.moves >= 0 ? `M${evaluation.moves}` : "";
-    case "result":
-      return evaluation.result == GameResult.BLACK_WIN ? "" : evaluation.result;
-  }
-}
-
-function formatEvaluationForBlack(evaluation: EngineEvaluation): string {
-  switch (evaluation.kind) {
-    case "cp":
-      return evaluation.pawns <= -10
-        ? `${(-evaluation.pawns).toFixed(0)}`
-        : evaluation.pawns <= 0
-          ? `${(-evaluation.pawns).toFixed(1)}`
-          : "";
-    case "mate":
-      return evaluation.moves >= 0 ? `` : `M${Math.abs(evaluation.moves)}`;
-    case "result":
-      return evaluation.result == GameResult.BLACK_WIN ? evaluation.result : "";
-  }
 }
 
 export default EvaluationThermometer;

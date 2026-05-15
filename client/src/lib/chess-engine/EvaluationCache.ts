@@ -1,9 +1,9 @@
-import type { EngineEvaluation } from "../evaluation.ts";
+import type { AbsoluteNumericEvaluation } from "../evaluation.ts";
 import type { ChessEngineLine, FullMoveEvaluation } from "../ChessEngine.ts";
 
 export interface EvaluationCache {
   getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;
-  addEvaluation(fen: string, depth: number, evaluation: EngineEvaluation, lines: ChessEngineLine[]): void;
+  addEvaluation(fen: string, depth: number, evaluation: AbsoluteNumericEvaluation, lines: ChessEngineLine[]): void;
 }
 
 class FinalEvaluationCache implements EvaluationCache {
@@ -14,7 +14,7 @@ class FinalEvaluationCache implements EvaluationCache {
     return snapshots.find((snapshot) => snapshot.depth >= minDepth) ?? null;
   }
 
-  addEvaluation(fen: string, depth: number, evaluation: EngineEvaluation, lines: ChessEngineLine[]): void {
+  addEvaluation(fen: string, depth: number, evaluation: AbsoluteNumericEvaluation, lines: ChessEngineLine[]): void {
     const nextSnapshot: FullMoveEvaluation = {
       fen,
       depth,

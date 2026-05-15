@@ -7,7 +7,7 @@ import {
   type EvaluationUpdate,
   type FullMoveEvaluation,
 } from "../ChessEngine.ts";
-import { getTerminalEvaluation } from "../evaluation.ts";
+import { getAbsoluteTerminalEvaluation } from "../evaluation.ts";
 
 export class CachedChessEngine implements ChessEngine {
   private readonly delegate: ChessEngine;
@@ -24,7 +24,7 @@ export class CachedChessEngine implements ChessEngine {
     priority: EngineEvaluationPriority,
     onUpdate?: (update: EvaluationUpdate) => void,
   ): Promise<FullMoveEvaluation> {
-    const terminalEvaluation = getTerminalEvaluation(fen);
+    const terminalEvaluation = getAbsoluteTerminalEvaluation(fen);
     if (terminalEvaluation) {
       const terminalResult: EvaluationUpdate = {
         fen,

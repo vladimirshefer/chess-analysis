@@ -6,7 +6,7 @@ import {
   type EvaluationUpdate,
   type FullMoveEvaluation,
 } from "../ChessEngine.ts";
-import { parseEngineEvaluation, getTerminalEvaluation } from "../evaluation.ts";
+import { getAbsoluteTerminalEvaluation, parseAbsoluteEvaluation } from "../evaluation.ts";
 import { UniversalChessInterface } from "../UniversalChessInterface.ts";
 
 interface RunningEvaluation {
@@ -217,7 +217,7 @@ function toChessEngineLine(fen: string, infoLine: UniversalChessInterface.InfoLi
   return {
     uci: pv[0],
     pv,
-    evaluation: parseEngineEvaluation(fen, cpScore, mateScore),
+    evaluation: parseAbsoluteEvaluation(fen, cpScore, mateScore),
     depth,
     multipv: infoLine.multiPrincipalVariation ?? 1,
   };
@@ -266,7 +266,7 @@ function buildFinalEvaluation(activeEvaluation: RunningEvaluation): FullMoveEval
 }
 
 function buildTerminalEvaluation(fen: string): FullMoveEvaluation | null {
-  const evaluation = getTerminalEvaluation(fen);
+  const evaluation = getAbsoluteTerminalEvaluation(fen);
   if (!evaluation) return null;
 
   return {

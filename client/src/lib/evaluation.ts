@@ -9,64 +9,8 @@ export const GameResult = {
 
 export type GameResult = (typeof GameResult)[keyof typeof GameResult];
 
-export type EngineEvaluation =
-  | { kind: "cp"; pawns: number }
-  | { kind: "mate"; moves: number }
-  | { kind: "result"; result: GameResult };
-
-export function formatEvaluation(evaluation: EngineEvaluation): string {
-  switch (evaluation.kind) {
-    case "cp":
-      return evaluation.pawns >= 0 ? `+${evaluation.pawns.toFixed(1)}` : evaluation.pawns.toFixed(1);
-    case "mate":
-      return evaluation.moves >= 0 ? `M${evaluation.moves}` : `-M${Math.abs(evaluation.moves)}`;
-    case "result":
-      return evaluation.result;
-  }
-}
-
 export const START = "start";
 export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
-export function parseEngineEvaluation(fen: string, cpScore?: number, mateScore?: number): EngineEvaluation {
-  const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
-  const perspective = sideToMove === "b" ? -1 : 1;
-
-  if (typeof cpScore === "number") {
-    return {
-      kind: "cp",
-      pawns: (cpScore * perspective) / 100,
-    };
-  }
-
-  if (typeof mateScore === "number") {
-    return {
-      kind: "mate",
-      moves: mateScore * perspective,
-    };
-  }
-
-  return { kind: "cp", pawns: 0 };
-}
-
-export function getTerminalEvaluation(fen: string): EngineEvaluation | null {
-  const chess = new Chess(fen);
-  if (!chess.isGameOver()) return null;
-
-  if (chess.isCheckmate()) {
-    const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
-    return {
-      kind: "result",
-      result: sideToMove === "w" ? GameResult.BLACK_WIN : GameResult.WHITE_WIN,
-    };
-  }
-
-  if (chess.isDraw()) {
-    return { kind: "result", result: GameResult.DRAW };
-  }
-
-  return null;
-}
 
 export function getAbsoluteTerminalEvaluation(fen: string): AbsoluteNumericEvaluation | null {
   const chess = new Chess(fen);
@@ -86,34 +30,49 @@ export function getAbsoluteTerminalEvaluation(fen: string): AbsoluteNumericEvalu
   return null;
 }
 
-const MAX_CENTIPAWN = 500_000;
-const MATE_BASE = 1_000_000;
-const MATE_MAX_DISTANCE = 999_999;
-const TERMINAL_RESULT_SCORE = 2_000_000;
+export const MAX_CENTIPAWN = 500_000;
+export const MATE_BASE = 1_000_000;
+export const MATE_MAX_DISTANCE = 999_999;
+export const TERMINAL_RESULT_SCORE = 2_000_000;
 
 /**
  * Canonical numeric score used for storage and ranking position evaluations.
  *
  * Encoding:
- * - `abs(value) < 1_000_000` => centipawn score (clamped to `[-500_000, 500_000]`)
- * - `abs(value)` in `[1_000_000, 1_999_998]` => mate score
- * - `value = 2_000_000` => terminal win for side to move (`kind: "result"`)
- * - `value = -2_000_000` => terminal loss for side to move (`kind: "result"`)
- * - positive means better for side to move, negative means worse for side to move
- * - for mates, faster winning mate is larger; for losing mate, later mate is larger
+ * - `abs(value) < MATE_BASE` => centipawn score (clamped to `[-MAX_CENTIPAWN, MAX_CENTIPAWN]`)
+ * - `abs(value)` in `[MATE_BASE, 1_999_998]` => mate score
+ * - `value = TERMINAL_RESULT_SCORE` => terminal White win (`kind: "result"`)
+ * - `value = -TERMINAL_RESULT_SCORE` => terminal Black win (`kind: "result"`)
+ * - positive means better for White, negative means better for Black
+ * - for mates, faster White mate is larger; faster Black mate is smaller
  *
  * Examples:
  * - `35` => +35 cp
  * - `-120` => -120 cp
- * - `1_999_994` => mate in +5
- * - `-1_999_994` => mate in -5
- * - `2_000_000` => game already won for side to move
- * - `-2_000_000` => game already lost for side to move
+ * - `TERMINAL_RESULT_SCORE-6` => mate in +5
+ * - `-(TERMINAL_RESULT_SCORE-6)` => mate in -5
+ * - `TERMINAL_RESULT_SCORE` => game already won for White
+ * - `-TERMINAL_RESULT_SCORE` => game already won for Black
  */
 export type AbsoluteNumericEvaluation = number;
 
-export function evalToNum(evaluation: EngineEvaluation): AbsoluteNumericEvaluation {
-  return Evaluations.absoluteNumericEvaluationOfEngineEvaluation(evaluation);
+export function parseAbsoluteEvaluation(
+  fen: string,
+  cpScore?: number,
+  mateScore?: number,
+): AbsoluteNumericEvaluation {
+  const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
+  const perspective = sideToMove === "w" ? 1 : -1;
+
+  if (typeof cpScore === "number") {
+    return Evaluations.absoluteNumericEvaluationOfCentipawns(cpScore * perspective);
+  }
+
+  if (typeof mateScore === "number") {
+    return Evaluations.absoluteNumericEvaluationOfMate(mateScore * perspective);
+  }
+
+  return 0;
 }
 
 export namespace Evaluations {
@@ -135,22 +94,6 @@ export namespace Evaluations {
     return TERMINAL_RESULT_SCORE;
   }
 
-  export function absoluteNumericEvaluationOfEngineEvaluation(evaluation: EngineEvaluation): AbsoluteNumericEvaluation {
-    if (evaluation.kind === "mate") {
-      return Evaluations.absoluteNumericEvaluationOfMate(evaluation.moves);
-    }
-    if (evaluation.kind === "cp") {
-      return Evaluations.absoluteNumericEvaluationOfCentipawns(evaluation.pawns * 100);
-    }
-    if (evaluation.kind === "result") {
-      return evaluation.result === "0-1"
-        ? -TERMINAL_RESULT_SCORE
-        : evaluation.result === "1-0"
-          ? TERMINAL_RESULT_SCORE
-          : 0;
-    }
-  }
-
   export function toString(evaluation: AbsoluteNumericEvaluation): string {
     if (evaluation === TERMINAL_RESULT_SCORE) {
       return GameResult.WHITE_WIN;
@@ -170,30 +113,16 @@ export namespace Evaluations {
       return (centipawns < 0 ? "-" : centipawns > 0 ? "+" : "") + Math.abs(pawns).toFixed(1);
     }
   }
-}
 
-export function absoluteNumericEvaluationToEngineEvaluation(score: AbsoluteNumericEvaluation): EngineEvaluation {
-  if (Math.abs(score) === TERMINAL_RESULT_SCORE) {
-    return {
-      kind: "result",
-      result: score > 0 ? GameResult.WHITE_WIN : GameResult.BLACK_WIN,
-    };
-  }
-  const absoluteScore = Math.abs(score);
+  export function toExpectedScore(evaluation: AbsoluteNumericEvaluation, player: "w" | "b" = "w"): number {
+    if (evaluation === TERMINAL_RESULT_SCORE) return player === "w" ? 1 : 0;
+    if (evaluation === -TERMINAL_RESULT_SCORE) return player === "w" ? 0 : 1;
+    if (Math.abs(evaluation) >= MATE_BASE) return evaluation > 0 ? (player === "w" ? 1 : 0) : player === "w" ? 0 : 1;
 
-  if (absoluteScore >= MATE_BASE) {
-    const encodedDistance = absoluteScore - MATE_BASE;
-    const distance = clampInteger(MATE_MAX_DISTANCE - encodedDistance, 1, MATE_MAX_DISTANCE);
-    return {
-      kind: "mate",
-      moves: score > 0 ? distance : -distance,
-    };
-  } else {
-    return {
-      kind: "cp",
-      pawns: clampInteger(score, -MAX_CENTIPAWN, MAX_CENTIPAWN) / 100,
-    };
+    const whiteExpectedScore = 1 / (1 + Math.exp((-0.00368208 * clampInteger(evaluation, -MAX_CENTIPAWN, MAX_CENTIPAWN))));
+    return player === "w" ? whiteExpectedScore : 1 - whiteExpectedScore;
   }
+
 }
 
 function clampInteger(value: number, min: number, max: number): number {

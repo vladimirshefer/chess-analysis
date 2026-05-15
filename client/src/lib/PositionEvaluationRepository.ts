@@ -1,4 +1,5 @@
-import type { AbsoluteNumericEvaluation } from "./evaluation.ts";
+import { ForsythEdwardsNotation } from "./ForsythEdwardsNotation.ts";
+import { type AbsoluteNumericEvaluation } from "./evaluation.ts";
 
 export namespace PositionEvaluations {
   export interface Repository {
@@ -29,14 +30,10 @@ export namespace PositionEvaluations {
     evaluation: AbsoluteNumericEvaluation;
   }
 
-  /** Best-first comparator. */
-  export function compareVariationLines(left: VariationLine, right: VariationLine): number {
-    return right.evaluation - left.evaluation;
-  }
-
   const DATABASE_NAME = "chess-analysis";
-  const DATABASE_VERSION = 1;
-  const STORE_NAME = "position_evaluations";
+  const DATABASE_VERSION = 2;
+  const LEGACY_STORE_NAME = "position_evaluations";
+  const STORE_NAME = "position_evaluations_v2";
   const INDEX_BY_POSITION_FEN = "by_position_fen";
 
   interface StoredPositionEvaluationRecord extends PositionEvaluationRecord {
@@ -119,6 +116,9 @@ export namespace PositionEvaluations {
 
       request.onupgradeneeded = () => {
         const database = request.result;
+        if (database.objectStoreNames.contains(LEGACY_STORE_NAME)) {
+          database.deleteObjectStore(LEGACY_STORE_NAME);
+        }
         if (database.objectStoreNames.contains(STORE_NAME)) return;
 
         const store = database.createObjectStore(STORE_NAME, { keyPath: "id" });
@@ -150,7 +150,10 @@ export namespace PositionEvaluations {
   }
 
   function compareBestRecordFirst(left: PositionEvaluationRecord, right: PositionEvaluationRecord): number {
-    if (left.evaluation !== right.evaluation) return right.evaluation - left.evaluation;
+    const sideToMove = ForsythEdwardsNotation.getSideToMove(left.positionFen);
+    const evaluationOrder =
+      sideToMove === "w" ? right.evaluation - left.evaluation : left.evaluation - right.evaluation;
+    if (evaluationOrder !== 0) return evaluationOrder;
 
     if (left.searchDepth !== right.searchDepth) {
       return right.searchDepth - left.searchDepth;

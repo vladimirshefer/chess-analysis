@@ -3,14 +3,14 @@ import { CachedChessEngine } from "./chess-engine/CachedChessEngine.ts";
 import { NativeChessEngine, StockfishRuntime } from "./chess-engine/NativeChessEngine.ts";
 import { PersistentChessEngine } from "./chess-engine/PersistentChessEngine.ts";
 import { QueuedChessEngine } from "./chess-engine/QueuedChessEngine.ts";
-import type { EngineEvaluation } from "./evaluation";
+import type { AbsoluteNumericEvaluation } from "./evaluation";
 
 export interface ChessEngineLine {
   /** UCI = Universal Chess Interface */
   uci: string;
   /** Principal variation. Example: ["e2e4", "e7e5"]*/
   pv: string[];
-  evaluation: EngineEvaluation;
+  evaluation: AbsoluteNumericEvaluation;
   depth: number;
   multipv: number;
 }
@@ -18,7 +18,7 @@ export interface ChessEngineLine {
 export interface FullMoveEvaluation {
   /** Chess position in FEN notation */
   fen: string;
-  evaluation: EngineEvaluation;
+  evaluation: AbsoluteNumericEvaluation;
   /** Depth of the evaluation in half-moves */
   depth: number;
   lines: ChessEngineLine[];

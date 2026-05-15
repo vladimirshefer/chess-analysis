@@ -7,7 +7,6 @@ import {
   type FullMoveEvaluation,
 } from "../ChessEngine.ts";
 import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
-import { absoluteNumericEvaluationToEngineEvaluation, evalToNum } from "../evaluation.ts";
 
 export const DEFAULT_ENGINE_ID = "stockfish.js-16.1-lite";
 
@@ -70,11 +69,11 @@ export class PersistentChessEngine implements ChessEngine {
       positionFen: result.fen,
       engineId: this.engineId,
       searchDepth: result.depth,
-      evaluation: evalToNum(result.evaluation),
+      evaluation: result.evaluation,
       variationLines: result.lines.map(function toVariationLine(line) {
         return {
           principalVariationMoves: [...line.pv],
-          evaluation: evalToNum(line.evaluation),
+          evaluation: line.evaluation,
         };
       }),
     };
@@ -93,7 +92,7 @@ function toFullMoveEvaluation(fen: string, record: PositionEvaluations.PositionE
     return {
       uci: pv[0] ?? "",
       pv,
-      evaluation: absoluteNumericEvaluationToEngineEvaluation(line.evaluation),
+      evaluation: line.evaluation,
       depth: record.searchDepth,
       multipv: index + 1,
     };
@@ -101,7 +100,7 @@ function toFullMoveEvaluation(fen: string, record: PositionEvaluations.PositionE
 
   return {
     fen,
-    evaluation: absoluteNumericEvaluationToEngineEvaluation(record.evaluation),
+    evaluation: record.evaluation,
     depth: record.searchDepth,
     lines,
   };

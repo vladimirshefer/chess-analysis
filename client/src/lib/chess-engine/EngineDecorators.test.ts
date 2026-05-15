@@ -3,14 +3,15 @@ import { createEvaluationCache } from "./EvaluationCache.ts";
 import {
   type ChessEngine,
   type ChessEngineLine,
-  type EngineEvaluationPriority,
   EngineEvaluationPriorities,
+  type EngineEvaluationPriority,
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
 } from "../ChessEngine.ts";
+import { ForsythEdwardsNotation } from "../ForsythEdwardsNotation.ts";
 import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
-import { GameResult } from "../evaluation.ts";
+import { TERMINAL_RESULT_SCORE } from "../evaluation.ts";
 import { CachedChessEngine } from "./CachedChessEngine.ts";
 import { DEFAULT_ENGINE_ID, PersistentChessEngine } from "./PersistentChessEngine.ts";
 import { QueuedChessEngine } from "./QueuedChessEngine.ts";
@@ -135,11 +136,11 @@ describe("PersistentChessEngine", function suite() {
         positionFen: whiteToMoveFen,
         engineId: DEFAULT_ENGINE_ID,
         searchDepth: 0,
-        evaluation: 2_000_000,
+        evaluation: TERMINAL_RESULT_SCORE,
         variationLines: [
           {
             principalVariationMoves: ["g7h8q"],
-            evaluation: 2_000_000,
+            evaluation: TERMINAL_RESULT_SCORE,
           },
         ],
       },
@@ -147,11 +148,11 @@ describe("PersistentChessEngine", function suite() {
         positionFen: blackToMoveFen,
         engineId: DEFAULT_ENGINE_ID,
         searchDepth: 0,
-        evaluation: -2_000_000,
+        evaluation: -TERMINAL_RESULT_SCORE,
         variationLines: [
           {
             principalVariationMoves: ["g8h8"],
-            evaluation: -2_000_000,
+            evaluation: -TERMINAL_RESULT_SCORE,
           },
         ],
       },
@@ -161,14 +162,8 @@ describe("PersistentChessEngine", function suite() {
     const whiteResult = await engine.getEvaluation(whiteToMoveFen, 0);
     const blackResult = await engine.getEvaluation(blackToMoveFen, 0);
 
-    expect(whiteResult?.evaluation).toEqual({
-      kind: "result",
-      result: GameResult.WHITE_WIN,
-    });
-    expect(blackResult?.evaluation).toEqual({
-      kind: "result",
-      result: GameResult.BLACK_WIN,
-    });
+    expect(whiteResult?.evaluation).toBe(TERMINAL_RESULT_SCORE);
+    expect(blackResult?.evaluation).toBe(-TERMINAL_RESULT_SCORE);
   });
 });
 
@@ -254,13 +249,13 @@ function createEvaluation(fen: string, depth: number, linesAmount: number): Full
   return {
     fen,
     depth,
-    evaluation: { kind: "cp", pawns: 0.4 },
+    evaluation: 40,
     lines: Array.from({ length: linesAmount }, function buildLine(_, index) {
       const lineRank = index + 1;
       return {
         uci: "e2e4",
         pv: ["e2e4", "e7e5"],
-        evaluation: { kind: "cp", pawns: 0.4 - index * 0.1 },
+        evaluation: 40 - index * 10,
         depth,
         multipv: lineRank,
       };
@@ -405,7 +400,10 @@ namespace TestDoubles {
       if (candidates.length === 0) return Promise.resolve(null);
 
       candidates.sort(function byBest(left, right) {
-        if (left.evaluation !== right.evaluation) return right.evaluation - left.evaluation;
+        const sideToMove = ForsythEdwardsNotation.getSideToMove(left.positionFen);
+        const evaluationOrder =
+          sideToMove === "w" ? right.evaluation - left.evaluation : left.evaluation - right.evaluation;
+        if (evaluationOrder !== 0) return evaluationOrder;
         return right.searchDepth - left.searchDepth;
       });
       return Promise.resolve(cloneRecord(candidates[0]));

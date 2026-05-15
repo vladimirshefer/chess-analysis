@@ -1,6 +1,5 @@
 import { Chess } from "chess.js";
-import { ForsythEdwardsNotation } from "./ForsythEdwardsNotation.ts";
-import { type AbsoluteNumericEvaluation, Evaluations, START_FEN } from "./evaluation.ts";
+import { type AbsoluteNumericEvaluation, Evaluations, MATE_BASE, MATE_MAX_DISTANCE, START_FEN } from "./evaluation.ts";
 import type { GamePlayersInfo, PlayerInfo } from "./gameInfo.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
 import type { GameTree } from "./GameTree.ts";
@@ -89,7 +88,7 @@ export namespace AnalysisGame {
       };
 
       const comment = comments[index];
-      const evaluation = parseCommentEvaluation(comment?.evaluationToken, walker.fen());
+      const evaluation = parseCommentEvaluation(comment?.evaluationToken);
       if (evaluation !== null || comment?.bestMoveSan) {
         positionAnalysisMap[walker.fen()] = {
           fen: walker.fen(),
@@ -149,7 +148,7 @@ export namespace AnalysisGame {
       if (move.evaluation !== null || move.bestMoveSan) {
         const commentTokens: string[] = [];
         if (move.evaluation !== null && move.evaluation !== undefined) {
-          commentTokens.push(`[%eval ${toCommentEvaluation(move.evaluation, chess.fen())}]`);
+          commentTokens.push(`[%eval ${toCommentEvaluation(move.evaluation)}]`);
         }
         if (move.bestMoveSan) {
           commentTokens.push(`[%best ${stripSuffix(move.bestMoveSan)}]`);
@@ -301,42 +300,41 @@ export namespace AnalysisGame {
     return result;
   }
 
-  function parseCommentEvaluation(value: string | undefined, fen: string): AbsoluteNumericEvaluation | null {
+  function parseCommentEvaluation(value: string | undefined): AbsoluteNumericEvaluation | null {
     if (!value) return null;
 
     const normalized = value.trim();
     if (/^[+-]?\d+(\.\d+)?$/.test(normalized)) {
-      return fromWhitePerspective(Math.round(Number(normalized) * 100), fen);
+      return Math.round(Number(normalized) * 100);
     }
     if (/^[+-]?M\d+$/i.test(normalized)) {
-      return fromWhitePerspective(toMateScore(normalized.replace(/m/i, "")), fen);
+      return toMateScore(normalized.replace(/m/i, ""));
     }
     if (/^#-?\d+$/.test(normalized)) {
-      return fromWhitePerspective(toMateScore(normalized.slice(1)), fen);
+      return toMateScore(normalized.slice(1));
     }
     if (/^-#\d+$/.test(normalized)) {
-      return fromWhitePerspective(toMateScore(`-${normalized.slice(2)}`), fen);
+      return toMateScore(`-${normalized.slice(2)}`);
     }
-    if (normalized === "1-0") return fromWhitePerspective(Evaluations.absoluteNumericEvaluationOfWhiteWin(), fen);
-    if (normalized === "0-1") return fromWhitePerspective(-Evaluations.absoluteNumericEvaluationOfWhiteWin(), fen);
+    if (normalized === "1-0") return Evaluations.absoluteNumericEvaluationOfWhiteWin();
+    if (normalized === "0-1") return -Evaluations.absoluteNumericEvaluationOfWhiteWin();
     if (normalized === "1/2-1/2") return 0;
     return null;
   }
 
-  function toCommentEvaluation(evaluation: AbsoluteNumericEvaluation, fen: string): string {
-    const whitePerspective = toWhitePerspective(evaluation, fen);
-    if (whitePerspective === Evaluations.absoluteNumericEvaluationOfWhiteWin()) return "1-0";
-    if (whitePerspective === -Evaluations.absoluteNumericEvaluationOfWhiteWin()) return "0-1";
+  function toCommentEvaluation(evaluation: AbsoluteNumericEvaluation): string {
+    if (evaluation === Evaluations.absoluteNumericEvaluationOfWhiteWin()) return "1-0";
+    if (evaluation === -Evaluations.absoluteNumericEvaluationOfWhiteWin()) return "0-1";
 
-    const absoluteValue = Math.abs(whitePerspective);
-    if (absoluteValue >= 1_000_000) {
-      const encodedDistance = absoluteValue - 1_000_000;
-      const distance = Math.max(1, 999_999 - encodedDistance);
-      return `#${whitePerspective < 0 ? "-" : ""}${distance}`;
+    const absoluteValue = Math.abs(evaluation);
+    if (absoluteValue >= MATE_BASE) {
+      const encodedDistance = absoluteValue - MATE_BASE;
+      const distance = Math.max(1, MATE_MAX_DISTANCE - encodedDistance);
+      return `#${evaluation < 0 ? "-" : ""}${distance}`;
     }
 
-    const sign = whitePerspective > 0 ? "+" : whitePerspective < 0 ? "-" : "";
-    return `${sign}${(Math.abs(whitePerspective) / 100).toFixed(1)}`;
+    const sign = evaluation > 0 ? "+" : evaluation < 0 ? "-" : "";
+    return `${sign}${(Math.abs(evaluation) / 100).toFixed(1)}`;
   }
 
   function toCommentLine(
@@ -380,14 +378,6 @@ export namespace AnalysisGame {
   function toMateScore(value: string): AbsoluteNumericEvaluation {
     const distance = Math.trunc(Number(value));
     return Evaluations.absoluteNumericEvaluationOfMate(distance < 0 ? Math.min(distance, -1) : Math.max(distance, 1));
-  }
-
-  function toWhitePerspective(value: AbsoluteNumericEvaluation, fen: string): AbsoluteNumericEvaluation {
-    return ForsythEdwardsNotation.getSideToMove(fen) === "w" ? value : -value;
-  }
-
-  function fromWhitePerspective(value: AbsoluteNumericEvaluation, fen: string): AbsoluteNumericEvaluation {
-    return ForsythEdwardsNotation.getSideToMove(fen) === "w" ? value : -value;
   }
 
   function escapeHeaderValue(value: string): string {

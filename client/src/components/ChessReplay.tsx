@@ -25,9 +25,6 @@ import { Analytics } from "../lib/Analytics.ts";
 import { type GamePlayersInfo, type PlayerInfo } from "../lib/gameInfo";
 import {
   type AbsoluteNumericEvaluation,
-  absoluteNumericEvaluationToEngineEvaluation,
-  evalToNum,
-  Evaluations,
   START,
   START_FEN,
 } from "../lib/evaluation";
@@ -45,7 +42,6 @@ import { useQuery } from "@tanstack/react-query";
 import { SharedAnalysis } from "../lib/SharedAnalysis.ts";
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
 import { type GameTree, GameTreeUtils, type MoveNode } from "../lib/GameTree.ts";
-import absoluteNumericEvaluationOfEngineEvaluation = Evaluations.absoluteNumericEvaluationOfEngineEvaluation;
 
 export type DisplayEngineLine = AnalysisGame.DisplayEngineLine;
 type NodeAnalysis = AnalysisGame.NodeAnalysis;
@@ -579,11 +575,7 @@ function ChessReplayImpl({
         </div>
         <div className="w-full max-w-180 flex rounded-md items-stretch border-8 border-gray-800 bg-gray-800">
           <EvaluationThermometer
-            evaluation={
-              currentAnalysis?.evaluation != null
-                ? absoluteNumericEvaluationToEngineEvaluation(currentAnalysis.evaluation)
-                : null
-            }
+            evaluation={currentAnalysis?.evaluation ?? null}
             settledMaterialBalance={currentAnalysis?.settledMaterialBalance}
             orientation={boardOrientation}
             className="w-6 self-stretch"
@@ -838,7 +830,7 @@ function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngin
         suggestedMoveUci: line.uci,
         engineLineUci: line.pv,
         engineLine: sanMoves.join(" "),
-        evaluation: evalToNum(line.evaluation),
+        evaluation: line.evaluation,
         depth: line.depth,
         lineRank: line.multipv,
       };
@@ -895,7 +887,7 @@ function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal
 
   return {
     fen: evaluation.fen,
-    evaluation: absoluteNumericEvaluationOfEngineEvaluation(evaluation.evaluation),
+    evaluation: evaluation.evaluation,
     settledMaterialBalance,
     depth: evaluation.depth,
     lines: toDisplayLines(baseFen, evaluation.lines),

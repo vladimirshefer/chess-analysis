@@ -1,5 +1,10 @@
 import { Chess, type Move, type PieceSymbol } from "chess.js";
-import { START } from "./evaluation";
+import { Evaluations, START } from "./evaluation";
+
+const INACCURACY_LOSS = 0.07;
+const MISTAKE_LOSS = 0.15;
+const BLUNDER_LOSS = 0.25;
+const ONLY_MOVE_LOSS = 0.15;
 
 interface MoveMarkLine {
   uci: string;
@@ -76,9 +81,10 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
   const bestMoveUci = bestLine.uci;
   const mover = getSideToMove(input.parentFen);
   const bestEvaluation = bestLine.evaluation;
-  const evalLoss = Math.max(0, normalizeEvalLoss(mover, bestEvaluation, input.playedEvaluation));
+  const playedExpectedScore = Evaluations.toExpectedScore(input.playedEvaluation, mover);
+  const evalLoss = Math.max(0, Evaluations.toExpectedScore(bestEvaluation, mover) - playedExpectedScore);
   const playedBestMove = lineMatchesSan(input.playedMoveSan, input.parentFen, bestLine);
-  const baseMark = classifyBaseMark(input, playedBestMove, mover, evalLoss);
+  const baseMark = classifyBaseMark(input, playedBestMove, playedExpectedScore, evalLoss);
   const mark =
     isBrilliantEligibleMark(baseMark) &&
     isMaterialSacrificeWithoutImmediateRecapture(input.parentFen, input.playedMoveSan)
@@ -91,7 +97,7 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
 function classifyBaseMark(
   input: ClassifyMoveMarkInput,
   playedBestMove: boolean,
-  mover: "w" | "b",
+  playedExpectedScore: number,
   evalLoss: number,
 ): MoveMark {
   if (playedBestMove) {
@@ -99,18 +105,14 @@ function classifyBaseMark(
     return MoveMarks.BEST;
   }
 
-  if (evalLoss >= 300) {
-    if (
-      // is still not losing
-      (mover === "w" && input.playedEvaluation >= 0) ||
-      (mover === "b" && input.playedEvaluation <= 0)
-    ) {
+  if (evalLoss >= BLUNDER_LOSS) {
+    if (playedExpectedScore >= 0.5) {
       return MoveMarks.MISS;
     }
     return MoveMarks.BLUNDER;
   }
-  if (evalLoss >= 170) return MoveMarks.MISTAKE;
-  if (evalLoss >= 80) return MoveMarks.INACCURACY;
+  if (evalLoss >= MISTAKE_LOSS) return MoveMarks.MISTAKE;
+  if (evalLoss >= INACCURACY_LOSS) return MoveMarks.INACCURACY;
   return MoveMarks.OK;
 }
 
@@ -118,16 +120,14 @@ function getSideToMove(fen: string): "w" | "b" {
   return fen.split(" ")[1] === "b" ? "b" : "w";
 }
 
-function normalizeEvalLoss(mover: "w" | "b", bestEvaluation: number, playedEvaluation: number): number {
-  return mover === "w" ? bestEvaluation - playedEvaluation : playedEvaluation - bestEvaluation;
-}
-
 function isOnlyMove(parentFen: string, parentLines: MoveMarkLine[]): boolean {
   if (parentLines.length < 2) return false;
   const mover = getSideToMove(parentFen);
-  const bestEvaluation = parentLines[0].evaluation;
-  const secondEvaluation = parentLines[1].evaluation;
-  return normalizeEvalLoss(mover, bestEvaluation, secondEvaluation) >= 150;
+  return (
+    Evaluations.toExpectedScore(parentLines[0].evaluation, mover) -
+      Evaluations.toExpectedScore(parentLines[1].evaluation, mover) >=
+    ONLY_MOVE_LOSS
+  );
 }
 
 function isBrilliantEligibleMark(mark: MoveMark): boolean {
