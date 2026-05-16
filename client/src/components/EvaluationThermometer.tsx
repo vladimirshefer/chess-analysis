@@ -34,11 +34,11 @@ function EvaluationThermometer({
   const sideBelowMaterialLine =
     materialBoundary === null ? null : materialBoundary < evaluationBoundary ? segments.topSide : segments.bottomSide;
   const label = evaluation === null ? "--" : Evaluations.toString(evaluation);
-  function dropSign(s: string) : string {
+  function dropSign(s: string): string {
     return s.startsWith("-") || s.startsWith("+") ? s.substring(1) : s;
   }
   const labelWhite = evaluation >= 0 ? dropSign(label) : "";
-  const labelBlack = evaluation <= 0 ?  dropSign(label) : "";
+  const labelBlack = evaluation <= 0 ? dropSign(label) : "";
 
   return (
     <div className={`relative shadow-inner group ${className}`.trim()}>

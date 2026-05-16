@@ -23,11 +23,7 @@ import {
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
 import { type GamePlayersInfo, type PlayerInfo } from "../lib/gameInfo";
-import {
-  type AbsoluteNumericEvaluation,
-  START,
-  START_FEN,
-} from "../lib/evaluation";
+import { type AbsoluteNumericEvaluation, START, START_FEN } from "../lib/evaluation";
 import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from "../lib/moveMarks";
 import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";

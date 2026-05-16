@@ -56,11 +56,7 @@ export const TERMINAL_RESULT_SCORE = 2_000_000;
  */
 export type AbsoluteNumericEvaluation = number;
 
-export function parseAbsoluteEvaluation(
-  fen: string,
-  cpScore?: number,
-  mateScore?: number,
-): AbsoluteNumericEvaluation {
+export function parseAbsoluteEvaluation(fen: string, cpScore?: number, mateScore?: number): AbsoluteNumericEvaluation {
   const sideToMove = ForsythEdwardsNotation.getSideToMove(fen);
   const perspective = sideToMove === "w" ? 1 : -1;
 
@@ -119,10 +115,10 @@ export namespace Evaluations {
     if (evaluation === -TERMINAL_RESULT_SCORE) return player === "w" ? 0 : 1;
     if (Math.abs(evaluation) >= MATE_BASE) return evaluation > 0 ? (player === "w" ? 1 : 0) : player === "w" ? 0 : 1;
 
-    const whiteExpectedScore = 1 / (1 + Math.exp((-0.00368208 * clampInteger(evaluation, -MAX_CENTIPAWN, MAX_CENTIPAWN))));
+    const whiteExpectedScore =
+      1 / (1 + Math.exp(-0.00368208 * clampInteger(evaluation, -MAX_CENTIPAWN, MAX_CENTIPAWN)));
     return player === "w" ? whiteExpectedScore : 1 - whiteExpectedScore;
   }
-
 }
 
 function clampInteger(value: number, min: number, max: number): number {
