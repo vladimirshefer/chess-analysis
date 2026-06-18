@@ -82,9 +82,10 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
   const mover = getSideToMove(input.parentFen);
   const bestEvaluation = bestLine.evaluation;
   const playedExpectedScore = Evaluations.toExpectedScore(input.playedEvaluation, mover);
-  const evalLoss = Math.max(0, Evaluations.toExpectedScore(bestEvaluation, mover) - playedExpectedScore);
+  const expectedScoreLoss = Math.max(0, Evaluations.toExpectedScore(bestEvaluation, mover) - playedExpectedScore);
+  const evalLoss = Math.max(0, normalizeEvalLoss(mover, bestEvaluation, input.playedEvaluation));
   const playedBestMove = lineMatchesSan(input.playedMoveSan, input.parentFen, bestLine);
-  const baseMark = classifyBaseMark(input, playedBestMove, playedExpectedScore, evalLoss);
+  const baseMark = classifyBaseMark(input, playedBestMove, playedExpectedScore, expectedScoreLoss);
   const mark =
     isBrilliantEligibleMark(baseMark) &&
     isMaterialSacrificeWithoutImmediateRecapture(input.parentFen, input.playedMoveSan)
@@ -118,6 +119,10 @@ function classifyBaseMark(
 
 function getSideToMove(fen: string): "w" | "b" {
   return fen.split(" ")[1] === "b" ? "b" : "w";
+}
+
+function normalizeEvalLoss(mover: "w" | "b", bestEvaluation: number, playedEvaluation: number): number {
+  return mover === "w" ? bestEvaluation - playedEvaluation : playedEvaluation - bestEvaluation;
 }
 
 function isOnlyMove(parentFen: string, parentLines: MoveMarkLine[]): boolean {

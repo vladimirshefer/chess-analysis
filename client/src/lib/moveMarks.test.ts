@@ -101,6 +101,20 @@ describe("classifyMoveMark", function suite() {
 
     expect(result.mark).toBe(MoveMarks.BRILLIANT);
   });
+
+  it("returns evalLoss in centipawns", function testCase() {
+    const result = classifyOrThrow({
+      parentFen: START,
+      playedMoveSan: "e4",
+      playedEvaluation: 40,
+      parentLines: [
+        { uci: "e2e4", evaluation: 120 },
+        { uci: "d2d4", evaluation: 80 },
+      ],
+    });
+
+    expect(result.evalLoss).toBe(80);
+  });
 });
 
 function classifyOrThrow(input: Parameters<typeof classifyMoveMark>[0]): MoveMarkResult {
