@@ -65,7 +65,7 @@ function GameAnalysisOverview({
       const moveMark = moveMarks[node.id];
       if (!moveMark) return;
       side.movesWithMark += 1;
-      side.lossSum += Math.max(0, Math.min(EVAL_LOSS_CLAMP, moveMark.evalLoss));
+      side.lossSum += Math.max(0, Math.min(EVAL_LOSS_CLAMP, Math.abs(moveMark.evalLoss)));
       side.marks[moveMark.mark] = (side.marks[moveMark.mark] ?? 0) + 1;
     });
 
