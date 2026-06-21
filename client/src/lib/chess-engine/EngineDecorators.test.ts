@@ -243,6 +243,35 @@ describe("QueuedChessEngine", function suite() {
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
+
+  it("continues with next queued job after current job rejects", async function testCase() {
+    const delegate = new TestDoubles.ControlledEngine();
+    const engine = new QueuedChessEngine(delegate);
+
+    const firstPromise = engine.evaluate(
+      "fen-a",
+      { minDepth: 12, linesAmount: 1 },
+      EngineEvaluationPriorities.BACKGROUND,
+    );
+    const secondPromise = engine.evaluate(
+      "fen-b",
+      { minDepth: 12, linesAmount: 1 },
+      EngineEvaluationPriorities.IMMEDIATE,
+    );
+
+    expect(delegate.calls).toHaveLength(1);
+    expect(delegate.calls[0].fen).toBe("fen-a");
+
+    delegate.rejectCall(0, new Error("Engine stalled"));
+    await expect(firstPromise).rejects.toThrow("Engine stalled");
+    await flushMicrotasks();
+
+    expect(delegate.calls).toHaveLength(2);
+    expect(delegate.calls[1].fen).toBe("fen-b");
+
+    delegate.resolveCall(1, createEvaluation("fen-b", 12, 1));
+    await expect(secondPromise).resolves.toMatchObject({ fen: "fen-b", depth: 12 });
+  });
 });
 
 function createEvaluation(fen: string, depth: number, linesAmount: number): FullMoveEvaluation {
@@ -355,6 +384,10 @@ namespace TestDoubles {
 
     resolveCall(callIndex: number, result: FullMoveEvaluation): void {
       this.calls[callIndex]?.resolve(result);
+    }
+
+    rejectCall(callIndex: number, error: unknown): void {
+      this.calls[callIndex]?.reject(error);
     }
 
     getEvaluation(_fen: string, _minDepth: number = 0): Promise<FullMoveEvaluation | null> {

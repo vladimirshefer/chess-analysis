@@ -19,6 +19,10 @@ interface RunningEvaluation {
   collectedByMultiPv: Map<number, ChessEngineLine>;
 }
 
+interface NativeChessEngineOptions {
+  stallTimeoutMs?: number;
+}
+
 export namespace StockfishRuntime {
   export type Mode = "lite-mt" | "lite-single";
 
@@ -91,19 +95,22 @@ export namespace StockfishRuntime {
 }
 
 export class NativeChessEngine implements ChessEngine {
-  private readonly worker: Worker;
+  private worker: Worker;
   private readonly runtime: StockfishRuntime.Config;
+  private readonly workerFactory: (workerUrl: string) => Worker;
+  private readonly stallTimeoutMs: number;
   private currentEvaluation: RunningEvaluation | null = null;
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     runtime: StockfishRuntime.Config = StockfishRuntime.resolve(),
     workerFactory: (workerUrl: string) => Worker = createStockfishWorker,
+    options: NativeChessEngineOptions = {},
   ) {
     this.runtime = runtime;
-    this.worker = workerFactory(this.runtime.workerUrl);
-    this.worker.onmessage = this.handleMessage.bind(this);
-    this.worker.onerror = this.handleError.bind(this);
-    this.worker.postMessage("uci");
+    this.workerFactory = workerFactory;
+    this.stallTimeoutMs = Math.max(1_000, Math.trunc(options.stallTimeoutMs ?? 30_000));
+    this.worker = this.createWorker();
   }
 
   evaluate(
@@ -129,6 +136,7 @@ export class NativeChessEngine implements ChessEngine {
         collectedByMultiPv: new Map<number, ChessEngineLine>(),
       };
 
+      this.scheduleStallWatchdog();
       if (this.runtime.mode === "lite-mt") {
         this.worker.postMessage(`setoption name Threads value ${this.runtime.threads}`);
       }
@@ -149,6 +157,7 @@ export class NativeChessEngine implements ChessEngine {
   private handleMessage(event: MessageEvent<string>): void {
     const activeEvaluation = this.currentEvaluation;
     if (!activeEvaluation) return;
+    this.scheduleStallWatchdog();
 
     const parsedLine = UniversalChessInterface.parseEngineLine(event.data);
     if (!parsedLine) return;
@@ -177,6 +186,7 @@ export class NativeChessEngine implements ChessEngine {
     const finalResult = buildFinalEvaluation(activeEvaluation) ?? buildTerminalEvaluation(activeEvaluation.fen);
     if (!finalResult) {
       activeEvaluation.reject(new Error("Engine finished without a valid evaluation"));
+      this.clearStallWatchdog();
       this.currentEvaluation = null;
       return;
     }
@@ -185,14 +195,63 @@ export class NativeChessEngine implements ChessEngine {
       notifyUpdateSafely(activeEvaluation.onUpdate, { ...finalResult, isFinal: true });
     }
     activeEvaluation.resolve(finalResult);
+    this.clearStallWatchdog();
     this.currentEvaluation = null;
   }
 
   private handleError(error: ErrorEvent): void {
-    if (!this.currentEvaluation) return;
+    const activeEvaluation = this.currentEvaluation;
+    if (!activeEvaluation) {
+      this.restartWorker();
+      return;
+    }
 
-    this.currentEvaluation.reject(error);
+    activeEvaluation.reject(error);
+    this.clearStallWatchdog();
     this.currentEvaluation = null;
+    this.restartWorker();
+  }
+
+  private scheduleStallWatchdog(): void {
+    this.clearStallWatchdog();
+    this.stallTimer = setTimeout(() => {
+      const activeEvaluation = this.currentEvaluation;
+      if (!activeEvaluation) return;
+
+      activeEvaluation.reject(
+        new Error(
+          `Engine stalled while analyzing depth ${activeEvaluation.minDepth} for position ${activeEvaluation.fen}`,
+        ),
+      );
+      this.currentEvaluation = null;
+      this.restartWorker();
+    }, this.stallTimeoutMs);
+  }
+
+  private clearStallWatchdog(): void {
+    if (!this.stallTimer) return;
+    clearTimeout(this.stallTimer);
+    this.stallTimer = null;
+  }
+
+  private restartWorker(): void {
+    this.clearStallWatchdog();
+    this.destroyWorker(this.worker);
+    this.worker = this.createWorker();
+  }
+
+  private createWorker(): Worker {
+    const worker = this.workerFactory(this.runtime.workerUrl);
+    worker.onmessage = this.handleMessage.bind(this);
+    worker.onerror = this.handleError.bind(this);
+    worker.postMessage("uci");
+    return worker;
+  }
+
+  private destroyWorker(worker: Worker): void {
+    worker.onmessage = null;
+    worker.onerror = null;
+    worker.terminate();
   }
 }
 

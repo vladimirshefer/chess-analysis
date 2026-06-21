@@ -2,17 +2,21 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Link, Route, Routes, useLocation } from "react-router-dom";
 import AppHeader from "./components/AppHeader";
 import { AnalyticsConsentScreen } from "./components/AnalyticsConsentScreen.tsx";
+import ChessComLibraryAnalysisRunner from "./components/ChessComLibraryAnalysisRunner.tsx";
+import LibraryAnalysisProgress from "./components/LibraryAnalysisProgress.tsx";
 import { Analytics } from "./lib/Analytics.ts";
 import { AnalyticsConsent } from "./lib/AnalyticsConsent.ts";
 import { AboutPage } from "./pages/AboutPage";
 import AnalyzerPage from "./pages/AnalyzerPage";
 import ChessComImportPage from "./pages/ChessComImportPage";
+import ChessComLibraryPage from "./pages/ChessComLibraryPage";
 import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 
 function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <AppHeader />
+      <LibraryAnalysisProgress />
 
       <main>{children}</main>
 
@@ -46,9 +50,11 @@ function App() {
   return (
     <AppShell>
       <AnalyticsRouteTracker />
+      <ChessComLibraryAnalysisRunner />
       <Routes>
         <Route path="/" element={<AnalyzerPage />} />
         <Route path="/import/chess-com" element={<ChessComImportPage />} />
+        <Route path="/library/chess-com" element={<ChessComLibraryPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route
           path="/privacy"

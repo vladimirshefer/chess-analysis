@@ -14,7 +14,6 @@ import { Link, useLocation } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
 import {
   type ChessEngine,
-  type ChessEngineLine,
   EngineEvaluationPriorities,
   type EngineEvaluationPriority,
   type EvaluationRequest,
@@ -22,9 +21,11 @@ import {
   getChessEngine,
 } from "../lib/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
+import { AnalysisPosition } from "../lib/AnalysisPosition.ts";
 import { type GamePlayersInfo, type PlayerInfo } from "../lib/gameInfo";
 import { type AbsoluteNumericEvaluation, START, START_FEN } from "../lib/evaluation";
 import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from "../lib/moveMarks";
+import { GameAnalysisSummary } from "../lib/GameAnalysisSummary.ts";
 import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
 import RenderIcon from "./RenderIcon";
@@ -250,7 +251,7 @@ function ChessReplayImpl({
 
   const moveMarksMap: Record<string, MoveMarkResult> = useMemo(() => {
     if (!openingsReady) return {};
-    return buildMoveMarks(tree, positionAnalysisMap);
+    return GameAnalysisSummary.buildMoveMarks(tree, positionAnalysisMap);
   }, [openingsReady, positionAnalysisMap, tree]);
 
   const lastBookOpeningName = useMemo(
@@ -380,11 +381,16 @@ function ChessReplayImpl({
         priority: EngineEvaluationPriorities.BACKGROUND,
       };
       console.log("Evaluating", task.label, task.fen, task.request.minDepth);
-      const finalEvaluation = await engine.evaluate(task.fen, task.request, task.priority, (update) => {
-        syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, update, update.isFinal));
-        setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
-      });
-      syncSingleNodeAnalysis(task.fen, toNodeAnalysis(task.fen, finalEvaluation, true));
+      try {
+        const finalEvaluation = await engine.evaluate(task.fen, task.request, task.priority, (update) => {
+          syncSingleNodeAnalysis(task.fen, AnalysisPosition.toNodeAnalysis(task.fen, update, update.isFinal));
+          setStatusText(`Analyzing ${task.label} (d${task.request.minDepth})...`);
+        });
+        syncSingleNodeAnalysis(task.fen, AnalysisPosition.toNodeAnalysis(task.fen, finalEvaluation, true));
+      } catch (error) {
+        setStatusText("Engine Error");
+        console.error("Background analysis failed", error);
+      }
     }
     void scheduleAnalysts();
   }, [engine, nextNodeToAnalyze, selectedDepth]);
@@ -451,11 +457,11 @@ function ChessReplayImpl({
 
     void engine
       .evaluate(target.fen, target.request, EngineEvaluationPriorities.IMMEDIATE, (update) => {
-        syncSingleNodeAnalysis(target.fen, toNodeAnalysis(target.fen, update, update.isFinal));
+        syncSingleNodeAnalysis(target.fen, AnalysisPosition.toNodeAnalysis(target.fen, update, update.isFinal));
         setStatusText(`Analyzing ${target.label} (d${deepAnalysisDepth})...`);
       })
       .then((result) => {
-        syncSingleNodeAnalysis(target.fen, toNodeAnalysis(target.fen, result, true));
+        syncSingleNodeAnalysis(target.fen, AnalysisPosition.toNodeAnalysis(target.fen, result, true));
         setStatusText("Analysis Complete");
       })
       .catch((e) => {
@@ -793,105 +799,6 @@ function getSelectedAnalysisTarget(
   };
 }
 
-function uciToSanLine(uciString: string, baseFen: string): string[] {
-  const tempGame = new Chess(baseFen);
-  const uciMoves = uciString.split(" ");
-  const sanMoves: string[] = [];
-
-  for (const uciMove of uciMoves) {
-    try {
-      const move = tempGame.move({
-        from: uciMove.substring(0, 2),
-        to: uciMove.substring(2, 4),
-        promotion: uciMove[4] || "q",
-      });
-      if (!move) break;
-      sanMoves.push(move.san);
-    } catch {
-      break;
-    }
-  }
-
-  return sanMoves;
-}
-
-function toDisplayLines(baseFen: string, lines: ChessEngineLine[]): DisplayEngineLine[] {
-  return lines
-    .map((line) => {
-      const sanMoves = uciToSanLine(line.pv.join(" "), baseFen);
-      if (sanMoves.length === 0) return null;
-
-      const displayEngineLine: DisplayEngineLine = {
-        suggestedMove: sanMoves[0],
-        suggestedMoveUci: line.uci,
-        engineLineUci: line.pv,
-        engineLine: sanMoves.join(" "),
-        evaluation: line.evaluation,
-        depth: line.depth,
-        lineRank: line.multipv,
-      };
-
-      return displayEngineLine;
-    })
-    .filter((line) => line !== null);
-}
-
-function toNodeAnalysis(baseFen: string, evaluation: FullMoveEvaluation, isFinal: boolean): NodeAnalysis {
-  let settledMaterialBalance: number | null = null;
-
-  if (isFinal) {
-    const topLine = evaluation.lines[0];
-    const tempGame = new Chess(baseFen);
-    const pieceValueByType = {
-      p: 100,
-      n: 300,
-      b: 300,
-      r: 500,
-      q: 900,
-      k: 0,
-    } as const;
-
-    function getMaterialBalance(): number {
-      let materialBalance = 0;
-
-      tempGame.board().forEach(function scanRank(rank) {
-        rank.forEach(function scanSquare(piece) {
-          if (!piece) return;
-          const value = pieceValueByType[piece.type];
-          materialBalance += piece.color === "w" ? value : -value;
-        });
-      });
-
-      return materialBalance;
-    }
-
-    if (topLine) {
-      for (const uciMove of topLine.pv) {
-        const move = tempGame.move({
-          from: uciMove.substring(0, 2),
-          to: uciMove.substring(2, 4),
-          promotion: uciMove[4] || "q",
-        });
-        if (!move) break;
-        if (typeof move.captured !== "string") {
-          settledMaterialBalance = getMaterialBalance();
-          break;
-        }
-      }
-    }
-  }
-
-  return {
-    fen: evaluation.fen,
-    evaluation: evaluation.evaluation,
-    settledMaterialBalance,
-    depth: evaluation.depth,
-    lines: toDisplayLines(baseFen, evaluation.lines),
-    isFinal,
-    source: "engine",
-  };
-}
-
 function buildSeededNodeAnalysis(
   childFen: string,
   line: DisplayEngineLine,
@@ -903,7 +810,7 @@ function buildSeededNodeAnalysis(
           lineNextMovesUci,
           line.evaluation,
           line.depth - 1,
-          uciToSanLine(lineNextMovesUci.join(" "), childFen),
+          AnalysisPosition.uciToSanLine(lineNextMovesUci.join(" "), childFen),
         )
       : [];
 
@@ -937,45 +844,6 @@ function toSeededDisplayLines(
       lineRank: 1,
     },
   ];
-}
-
-function buildMoveMarks(tree: GameTree, analysesByFen: Record<string, NodeAnalysis>): Record<string, MoveMarkResult> {
-  const marksByNodeId: Record<string, MoveMarkResult> = {};
-
-  Object.values(tree).forEach(function classifyNode(node) {
-    const movePathKey = GameTreeUtils.getPgnToPosition(node.id, tree);
-    const isKnownByMovePath = movePathKey ? OpeningsBook.isKnownMovePath(movePathKey.split(" ")) : false;
-
-    if (isKnownByMovePath) {
-      marksByNodeId[node.id] = {
-        mark: MoveMarks.BOOK,
-        evalLoss: 0,
-        bestMoveUci: null,
-      };
-      return;
-    }
-
-    const nodeAnalysis = analysesByFen[node.fen];
-    const parentFen = node.parentId ? tree[node.parentId]?.fen : START_FEN;
-    const parentAnalysis = analysesByFen[parentFen];
-    if (!parentFen) return;
-    if (!parentAnalysis?.isFinal || !nodeAnalysis?.isFinal) return;
-    if (parentAnalysis.lines.length === 0) return;
-
-    const mark = classifyMoveMark({
-      parentFen,
-      playedMoveSan: node.san,
-      playedEvaluation: nodeAnalysis.evaluation,
-      parentLines: parentAnalysis.lines.map((line: DisplayEngineLine) => ({
-        uci: line.suggestedMoveUci,
-        evaluation: line.evaluation,
-      })),
-    });
-
-    if (mark) marksByNodeId[node.id] = mark;
-  });
-
-  return marksByNodeId;
 }
 
 function getMoveSquares(baseFen: string, san: string): { from: string; to: string } | null {

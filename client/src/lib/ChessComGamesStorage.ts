@@ -2,6 +2,8 @@ import { ChessComClient } from "./ChessComClient.ts";
 
 export namespace ChessComGamesStorage {
   const STORAGE_KEY = "chess-com-games-library-v1";
+  type Listener = () => void;
+  const listeners = new Set<Listener>();
 
   export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
 
@@ -38,6 +40,7 @@ export namespace ChessComGamesStorage {
       if (!entitiesById[id]) return;
       delete entitiesById[id];
       writeEntitiesById(entitiesById);
+      notifyListeners();
     }
   }
 
@@ -51,6 +54,13 @@ export namespace ChessComGamesStorage {
     sharedRepository.save(game);
   }
 
+  export function subscribe(listener: Listener): () => void {
+    listeners.add(listener);
+    return function unsubscribe() {
+      listeners.delete(listener);
+    };
+  }
+
   function upsertEntity(entity: ChessComGameEntity): ChessComGameEntity {
     const entityId = entity.id;
     if (!entityId) return entity;
@@ -58,6 +68,7 @@ export namespace ChessComGamesStorage {
     const entitiesById = readEntitiesById();
     entitiesById[entityId] = entity;
     writeEntitiesById(entitiesById);
+    notifyListeners();
     return entity;
   }
 
@@ -88,5 +99,11 @@ export namespace ChessComGamesStorage {
 
   function isObjectRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
+  }
+
+  function notifyListeners(): void {
+    listeners.forEach(function notify(listener) {
+      listener();
+    });
   }
 }

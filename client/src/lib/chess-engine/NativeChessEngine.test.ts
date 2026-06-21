@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EngineEvaluationPriorities } from "../ChessEngine.ts";
 import { NativeChessEngine, StockfishRuntime } from "./NativeChessEngine.ts";
 
@@ -124,11 +124,44 @@ describe("NativeChessEngine", function suite() {
     expect(result.depth).toBe(10);
     expect(result.lines).toHaveLength(1);
   });
+
+  it("rejects stalled evaluations and recreates the worker", async function testCase() {
+    vi.useFakeTimers();
+    const workers = [new TestDoubles.FakeWorker(), new TestDoubles.FakeWorker()];
+    let nextWorkerIndex = 0;
+    const engine = new NativeChessEngine(
+      {
+        mode: "lite-single",
+        workerUrl: "/stockfish/stockfish-18-lite-single.js",
+        threads: 1,
+      },
+      function createWorker() {
+        return workers[nextWorkerIndex++] as unknown as Worker;
+      },
+      { stallTimeoutMs: 1000 },
+    );
+
+    const evaluationPromise = engine.evaluate(
+      "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      { minDepth: 12, linesAmount: 1 },
+      EngineEvaluationPriorities.IMMEDIATE,
+    );
+    const rejectionExpectation = expect(evaluationPromise).rejects.toThrow("Engine stalled while analyzing");
+
+    await vi.advanceTimersByTimeAsync(1001);
+
+    await rejectionExpectation;
+    expect(workers[0].terminated).toBe(true);
+    expect(nextWorkerIndex).toBe(2);
+    expect(workers[1].sentCommands).toEqual(["uci"]);
+    vi.useRealTimers();
+  });
 });
 
 namespace TestDoubles {
   export class FakeWorker {
     readonly sentCommands: string[] = [];
+    terminated = false;
     onmessage: ((event: MessageEvent<string>) => void) | null = null;
     onerror: ((event: ErrorEvent) => void) | null = null;
 
@@ -139,6 +172,10 @@ namespace TestDoubles {
     emit(line: string): void {
       if (!this.onmessage) return;
       this.onmessage({ data: line } as MessageEvent<string>);
+    }
+
+    terminate(): void {
+      this.terminated = true;
     }
   }
 }
