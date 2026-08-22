@@ -1,3 +1,5 @@
+import { AnalysisGame } from "./AnalysisGame.ts";
+
 export namespace ChessComGameAnalysisStorage {
   const STORAGE_KEY = "chess-com-game-analysis-v1";
 
@@ -14,8 +16,29 @@ export namespace ChessComGameAnalysisStorage {
     blackAccuracy: number | null;
     histogramValues: number[];
     materialValues: number[];
+    analysisByFen: Record<string, PersistedNodeAnalysisEntity>;
     updatedAt: number;
     errorMessage?: string;
+  }
+
+  export interface PersistedDisplayEngineLineEntity {
+    suggestedMove: string;
+    suggestedMoveUci: string;
+    engineLineUci: string[];
+    engineLine: string;
+    evaluation: number;
+    depth: number;
+    lineRank: number;
+  }
+
+  export interface PersistedNodeAnalysisEntity {
+    fen: string;
+    evaluation: number;
+    settledMaterialBalance: number | null;
+    depth: number;
+    lines: PersistedDisplayEngineLineEntity[];
+    isFinal: boolean;
+    source: "engine" | "pgn";
   }
 
   export interface ChessComGameAnalysisRepository {
@@ -71,6 +94,48 @@ export namespace ChessComGameAnalysisStorage {
 
   export function save(entity: ChessComGameAnalysisEntity): void {
     sharedRepository.save(entity);
+  }
+
+  export function toPositionAnalysisMap(
+    entity: ChessComGameAnalysisEntity | null,
+  ): Record<string, AnalysisGame.NodeAnalysis> {
+    if (!entity) return {};
+
+    return Object.entries(entity.analysisByFen).reduce(
+      function collectAnalysis(result, [fen, analysis]) {
+        result[fen] = {
+          fen: analysis.fen,
+          evaluation: analysis.evaluation,
+          settledMaterialBalance: analysis.settledMaterialBalance,
+          depth: analysis.depth,
+          lines: analysis.lines.map(cloneDisplayEngineLine),
+          isFinal: analysis.isFinal,
+          source: analysis.source,
+        };
+        return result;
+      },
+      {} as Record<string, AnalysisGame.NodeAnalysis>,
+    );
+  }
+
+  export function fromPositionAnalysisMap(
+    analysesByFen: Record<string, AnalysisGame.NodeAnalysis>,
+  ): Record<string, PersistedNodeAnalysisEntity> {
+    return Object.entries(analysesByFen).reduce(
+      function collectAnalysis(result, [fen, analysis]) {
+        result[fen] = {
+          fen: analysis.fen,
+          evaluation: analysis.evaluation,
+          settledMaterialBalance: analysis.settledMaterialBalance,
+          depth: analysis.depth,
+          lines: analysis.lines.map(cloneDisplayEngineLine),
+          isFinal: analysis.isFinal,
+          source: analysis.source,
+        };
+        return result;
+      },
+      {} as Record<string, PersistedNodeAnalysisEntity>,
+    );
   }
 
   export function subscribe(listener: Listener): () => void {
@@ -130,9 +195,14 @@ export namespace ChessComGameAnalysisStorage {
       return null;
     if (!Array.isArray(value.materialValues) || !value.materialValues.every((item) => typeof item === "number"))
       return null;
+    const analysisByFen = value.analysisByFen;
+    if (analysisByFen !== undefined && !isPersistedAnalysisByFen(analysisByFen)) return null;
     if (value.errorMessage !== undefined && typeof value.errorMessage !== "string") return null;
 
-    return cloneEntity(value as unknown as ChessComGameAnalysisEntity);
+    return cloneEntity({
+      ...(value as unknown as ChessComGameAnalysisEntity),
+      analysisByFen: isPersistedAnalysisByFen(analysisByFen) ? analysisByFen : {},
+    });
   }
 
   function cloneEntity(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity {
@@ -147,6 +217,13 @@ export namespace ChessComGameAnalysisStorage {
       blackAccuracy: entity.blackAccuracy,
       histogramValues: [...entity.histogramValues],
       materialValues: [...entity.materialValues],
+      analysisByFen: Object.entries(entity.analysisByFen).reduce(
+        function collectAnalysis(result, [fen, analysis]) {
+          result[fen] = cloneNodeAnalysisEntity(analysis);
+          return result;
+        },
+        {} as Record<string, PersistedNodeAnalysisEntity>,
+      ),
       updatedAt: entity.updatedAt,
       ...(entity.errorMessage ? { errorMessage: entity.errorMessage } : {}),
     };
@@ -164,5 +241,65 @@ export namespace ChessComGameAnalysisStorage {
 
   function isObjectRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
+  }
+
+  function isPersistedAnalysisByFen(value: unknown): value is Record<string, PersistedNodeAnalysisEntity> {
+    if (!isObjectRecord(value)) return false;
+
+    return Object.values(value).every(function isValidAnalysis(analysis) {
+      return isPersistedNodeAnalysisEntity(analysis);
+    });
+  }
+
+  function isPersistedNodeAnalysisEntity(value: unknown): value is PersistedNodeAnalysisEntity {
+    if (!isObjectRecord(value)) return false;
+    if (typeof value.fen !== "string" || !value.fen) return false;
+    if (typeof value.evaluation !== "number") return false;
+    if (value.settledMaterialBalance !== null && typeof value.settledMaterialBalance !== "number") return false;
+    if (typeof value.depth !== "number") return false;
+    if (typeof value.isFinal !== "boolean") return false;
+    if (value.source !== "engine" && value.source !== "pgn") return false;
+    if (!Array.isArray(value.lines) || !value.lines.every((line) => isPersistedDisplayEngineLineEntity(line)))
+      return false;
+    return true;
+  }
+
+  function isPersistedDisplayEngineLineEntity(value: unknown): value is PersistedDisplayEngineLineEntity {
+    if (!isObjectRecord(value)) return false;
+    if (typeof value.suggestedMove !== "string") return false;
+    if (typeof value.suggestedMoveUci !== "string") return false;
+    if (!Array.isArray(value.engineLineUci) || !value.engineLineUci.every((item) => typeof item === "string"))
+      return false;
+    if (typeof value.engineLine !== "string") return false;
+    if (typeof value.evaluation !== "number") return false;
+    if (typeof value.depth !== "number") return false;
+    if (typeof value.lineRank !== "number") return false;
+    return true;
+  }
+
+  function cloneNodeAnalysisEntity(entity: PersistedNodeAnalysisEntity): PersistedNodeAnalysisEntity {
+    return {
+      fen: entity.fen,
+      evaluation: entity.evaluation,
+      settledMaterialBalance: entity.settledMaterialBalance,
+      depth: entity.depth,
+      lines: entity.lines.map(cloneDisplayEngineLine),
+      isFinal: entity.isFinal,
+      source: entity.source,
+    };
+  }
+
+  function cloneDisplayEngineLine(
+    line: PersistedDisplayEngineLineEntity | AnalysisGame.DisplayEngineLine,
+  ): PersistedDisplayEngineLineEntity {
+    return {
+      suggestedMove: line.suggestedMove,
+      suggestedMoveUci: line.suggestedMoveUci,
+      engineLineUci: [...line.engineLineUci],
+      engineLine: line.engineLine,
+      evaluation: line.evaluation,
+      depth: line.depth,
+      lineRank: line.lineRank,
+    };
   }
 }

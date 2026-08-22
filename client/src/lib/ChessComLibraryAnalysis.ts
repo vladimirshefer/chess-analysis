@@ -73,8 +73,10 @@ export namespace ChessComLibraryAnalysis {
     await OpeningsBook.load();
 
     for (const game of games) {
-      const stepState = await buildGameStepState(game, engine);
       const previousEntity = ChessComGameAnalysisStorage.get(game.id);
+      if (isCompletedEntity(previousEntity)) continue;
+
+      const stepState = await buildGameStepState(game, engine, previousEntity);
       if (stepState.nextNodeFen === null) {
         saveIfChanged(previousEntity, stepState.entity);
         continue;
@@ -92,7 +94,7 @@ export namespace ChessComLibraryAnalysis {
           { minDepth: TARGET_DEPTH, linesAmount: LINES_AMOUNT },
           EngineEvaluationPriorities.BACKGROUND,
         );
-        const updatedState = await buildGameStepState(game, engine, {
+        const updatedState = await buildGameStepState(game, engine, previousEntity, {
           [finalEvaluation.fen]: AnalysisPosition.toNodeAnalysis(finalEvaluation.fen, finalEvaluation, true),
         });
         ChessComGameAnalysisStorage.save({
@@ -119,11 +121,14 @@ export namespace ChessComLibraryAnalysis {
   async function buildGameStepState(
     game: ChessComClient.Dto.ChessComGameSummary,
     engine: ChessEngine,
+    previousEntity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null = null,
     seededAnalysesByFen: Record<string, AnalysisGame.NodeAnalysis> = {},
   ): Promise<GameStepState> {
     const preparedGame = prepareGame(game);
+    const persistedAnalysesByFen = ChessComGameAnalysisStorage.toPositionAnalysisMap(previousEntity);
     const analysesByFen = {
       ...preparedGame.positionAnalysisMap,
+      ...persistedAnalysesByFen,
       ...seededAnalysesByFen,
     };
     let nextNodeFen: string | null = null;
@@ -161,6 +166,7 @@ export namespace ChessComLibraryAnalysis {
         blackAccuracy: summary.blackAccuracy,
         histogramValues: summary.histogramValues,
         materialValues: summary.materialValues,
+        analysisByFen: ChessComGameAnalysisStorage.fromPositionAnalysisMap(analysesByFen),
         updatedAt: Date.now(),
       },
       nextNodeFen,
@@ -205,7 +211,19 @@ export namespace ChessComLibraryAnalysis {
       left.blackAccuracy === right.blackAccuracy &&
       left.errorMessage === right.errorMessage &&
       left.histogramValues.join(",") === right.histogramValues.join(",") &&
-      left.materialValues.join(",") === right.materialValues.join(",")
+      left.materialValues.join(",") === right.materialValues.join(",") &&
+      JSON.stringify(left.analysisByFen) === JSON.stringify(right.analysisByFen)
+    );
+  }
+
+  function isCompletedEntity(entity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null): boolean {
+    if (!entity) return false;
+    return (
+      entity.status === "done" &&
+      entity.targetDepth === TARGET_DEPTH &&
+      entity.totalPositions > 0 &&
+      entity.analyzedPositions >= entity.totalPositions &&
+      Object.keys(entity.analysisByFen).length > 0
     );
   }
 
