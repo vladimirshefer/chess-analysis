@@ -1,26 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { FaFileImport } from "react-icons/fa6";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ChessComClient } from "../lib/ChessComClient.ts";
 import { ChessComGamesStorage } from "../lib/ChessComGamesStorage.ts";
 import { ChessComUser } from "../lib/ChessComUser.ts";
-import { AnalysisGame } from "../lib/AnalysisGame.ts";
-import { toGamePlayersInfoFromChessComGame } from "../lib/gameInfo.ts";
 import RenderIcon from "./RenderIcon.tsx";
 
 function ChessComLastGameSuggestionPane() {
-  const navigate = useNavigate();
-  const storedChessComUsername = useMemo(() => ChessComUser.loadUsername(), []);
+  const storedChessComUsername = useMemo(function loadStoredUsername() {
+    return ChessComUser.loadUsername();
+  }, []);
 
   const { data: suggestedChessComGame, isLoading } = useQuery({
     queryKey: ["chess-com-last-game-suggestion", storedChessComUsername],
     enabled: Boolean(storedChessComUsername),
-    initialData: () => {
+    initialData: function getInitialSuggestion() {
       if (!storedChessComUsername) return null;
       return ChessComUser.findLatestGame(ChessComGamesStorage.load(), storedChessComUsername);
     },
-    queryFn: async () => {
+    queryFn: async function fetchLatestGame() {
       const result = await ChessComClient.getRecentGames(storedChessComUsername!, 1);
       const lastGame = result.games[0] ?? null;
       if (lastGame) {
@@ -61,26 +60,13 @@ function ChessComLastGameSuggestionPane() {
             <span className="min-w-0 truncate text-sm font-semibold">
               {suggestedChessComGame.white.username} vs {suggestedChessComGame.black.username}
             </span>
-            <button
-              onClick={() => {
-                navigate("/", {
-                  state: {
-                    importedPgn: AnalysisGame.withPlayers(
-                      suggestedChessComGame.pgn,
-                      toGamePlayersInfoFromChessComGame(suggestedChessComGame),
-                    ),
-                    initialBoardOrientation: ChessComUser.getInitialBoardOrientation(
-                      suggestedChessComGame,
-                      storedChessComUsername,
-                    ),
-                  },
-                });
-              }}
+            <Link
+              to={ChessComUser.toGameAnalysisUrl(suggestedChessComGame, storedChessComUsername)}
               className="ml-auto inline-flex items-center justify-center gap-1.5 border bg-black px-2 py-1 text-xs text-white hover:bg-gray-800"
             >
               <RenderIcon iconType={FaFileImport} className="text-xs" />
               <span>Open</span>
-            </button>
+            </Link>
           </>
         ) : (
           <span className="text-xs text-gray-500">Checking latest game...</span>

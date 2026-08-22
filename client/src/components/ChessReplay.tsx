@@ -124,18 +124,31 @@ function ChessReplay() {
   );
 }
 
-function ChessReplayImpl({
+export function ChessReplayImpl({
   originalPgn,
-  setOriginalPgn,
-  initialBoardOrientation,
-  isSharedLink,
+  setOriginalPgn: propSetOriginalPgn,
+  initialBoardOrientation = null,
+  isSharedLink = false,
 }: {
   originalPgn: string;
-  setOriginalPgn: (pgn: string) => void;
-  initialBoardOrientation: "white" | "black" | null;
-  isSharedLink: boolean;
+  setOriginalPgn?: (pgn: string) => void;
+  initialBoardOrientation?: "white" | "black" | null;
+  isSharedLink?: boolean;
 }) {
+  const [currentOriginalPgn, setCurrentOriginalPgn] = useState(originalPgn);
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
+
+  useEffect(
+    function syncOriginalPgn() {
+      setCurrentOriginalPgn(originalPgn);
+    },
+    [originalPgn],
+  );
+
+  function setOriginalPgn(pgn: string) {
+    setCurrentOriginalPgn(pgn);
+    propSetOriginalPgn?.(pgn);
+  }
   const [tree, setTree] = useState<GameTree>({ ...AnalysisGame.TREE_SEED });
 
   const [currentNodeId, setCurrentNodeId] = useState<string>(ROOT_ANALYSIS_NODE_ID);
@@ -169,16 +182,16 @@ function ChessReplayImpl({
 
   useEffect(
     function syncPgnEditorText() {
-      setPgnInputText(originalPgn);
+      setPgnInputText(currentOriginalPgn);
     },
-    [originalPgn],
+    [currentOriginalPgn],
   );
 
   useEffect(
     function loadPgnIntoTree() {
-      const loadedGame = AnalysisGame.loadPgn(originalPgn);
+      const loadedGame = AnalysisGame.loadPgn(currentOriginalPgn);
       if (loadedGame.isInvalidPgn) {
-        console.error("Invalid PGN", originalPgn);
+        console.error("Invalid PGN", currentOriginalPgn);
       }
 
       setTree(loadedGame.tree);
@@ -192,12 +205,12 @@ function ChessReplayImpl({
           ? "Invalid PGN"
           : isSharedLink
             ? "Shared analysis loaded"
-            : originalPgn
+            : currentOriginalPgn
               ? "Game loaded"
               : "Welcome",
       );
     },
-    [initialBoardOrientation, isSharedLink, originalPgn],
+    [initialBoardOrientation, isSharedLink, currentOriginalPgn],
   );
 
   function goStart() {

@@ -9,7 +9,6 @@ import RenderIcon from "../../components/RenderIcon.tsx";
 import { FaArrowRight, FaMagnifyingGlass } from "react-icons/fa6";
 
 function ChessComImportPage() {
-  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
@@ -62,17 +61,6 @@ function ChessComImportPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await loadGames(username.trim());
-  }
-
-  function openGame(game: ChessComClient.Dto.ChessComGameSummary) {
-    const initialBoardOrientation = ChessComUser.getInitialBoardOrientation(game, ChessComUser.loadUsername());
-
-    navigate("/", {
-      state: {
-        importedPgn: AnalysisGame.withPlayers(game.pgn, toGamePlayersInfoFromChessComGame(game)),
-        initialBoardOrientation,
-      },
-    });
   }
 
   return (
@@ -142,15 +130,13 @@ function ChessComImportPage() {
                         {formatTimestamp(game.endTime)} · {game.timeClass} · {game.timeControl}
                       </div>
                     </div>
-                    <button
-                      onClick={function handleOpen() {
-                        openGame(game);
-                      }}
+                    <Link
+                      to={ChessComUser.toGameAnalysisUrl(game, username)}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700"
                     >
                       <RenderIcon iconType={FaArrowRight} className="text-sm" />
                       <span>Open</span>
-                    </button>
+                    </Link>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">

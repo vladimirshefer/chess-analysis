@@ -122,6 +122,86 @@ export namespace ChessComClient {
     };
   }
 
+  export async function getGameById(username: string, gameId: string): Promise<Dto.ChessComGameSummary> {
+    const normalizedUsername = username.trim().toLowerCase();
+    const archivesResponse = await fetchJson<Dto.ChessComArchivesResponse>(
+      `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}/games/archives`,
+    );
+
+    const archives = archivesResponse.archives ?? [];
+    for (let index = archives.length - 1; index >= 0; index -= 1) {
+      const archiveUrl = archives[index];
+      const archive = await fetchJson<Dto.ChessComArchiveResponse>(archiveUrl);
+      const matched = (archive.games ?? []).find(function match(game) {
+        return matchesGameId(game, gameId);
+      });
+      if (matched) {
+        const summary = normalizeGame(matched);
+        if (summary) return summary;
+      }
+    }
+
+    throw new Error("Game not found on Chess.com");
+  }
+
+  export async function findGameByOpponentAndDate(
+    username: string,
+    opponent: string,
+    date: string,
+  ): Promise<Dto.ChessComGameSummary> {
+    const normalizedUsername = username.trim().toLowerCase();
+    const normalizedOpponent = opponent.trim().toLowerCase();
+    const normalizedDate = date.trim();
+
+    const archivesResponse = await fetchJson<Dto.ChessComArchivesResponse>(
+      `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}/games/archives`,
+    );
+
+    const archives = archivesResponse.archives ?? [];
+    for (let index = archives.length - 1; index >= 0; index -= 1) {
+      const archiveUrl = archives[index];
+      const archive = await fetchJson<Dto.ChessComArchiveResponse>(archiveUrl);
+      const games = archive.games ?? [];
+
+      for (let gameIndex = games.length - 1; gameIndex >= 0; gameIndex -= 1) {
+        const game = games[gameIndex];
+        if (matchesOpponent(game, normalizedOpponent) && matchesDate(game, normalizedDate)) {
+          const summary = normalizeGame(game);
+          if (summary) return summary;
+        }
+      }
+    }
+
+    throw new Error("Game not found matching opponent and date");
+  }
+
+  function matchesGameId(game: Dto.ChessComArchiveGameResponse, gameId: string): boolean {
+    if (!game.url) return false;
+    return game.url.endsWith(`/${gameId}`) || game.url.includes(`/${gameId}`);
+  }
+
+  function matchesOpponent(game: Dto.ChessComArchiveGameResponse, opponent: string): boolean {
+    return game.white?.username?.toLowerCase() === opponent || game.black?.username?.toLowerCase() === opponent;
+  }
+
+  function matchesDate(game: Dto.ChessComArchiveGameResponse, targetDate: string): boolean {
+    if (game.end_time) {
+      const d = new Date(game.end_time * 1000);
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      if (targetDate === `${yyyy}-${mm}-${dd}` || targetDate === `${yyyy}.${mm}.${dd}`) return true;
+    }
+    if (game.pgn) {
+      const dotDate = targetDate.replace(/[-/]/g, ".");
+      const hyphenDate = targetDate.replace(/[./]/g, "-");
+      if (game.pgn.includes(`[Date "${dotDate}"]`) || game.pgn.includes(`[UTCDate "${dotDate}"]`)) return true;
+      if (game.pgn.includes(`[Date "${hyphenDate}"]`) || game.pgn.includes(`[UTCDate "${hyphenDate}"]`)) return true;
+      if (game.pgn.includes(targetDate)) return true;
+    }
+    return false;
+  }
+
   export namespace Dto {
     export interface ChessComPlayerSummary {
       username: string;
@@ -169,6 +249,7 @@ export namespace ChessComClient {
 
     export interface ChessComArchiveGameResponse {
       url?: string;
+      uuid?: string;
       pgn?: string;
       end_time?: number;
       time_class?: string;
@@ -196,6 +277,23 @@ export namespace ChessComClient {
     export interface ChessComRecentGamesResponse {
       player: ChessComPlayerSummary;
       games: ChessComGameSummary[];
+    }
+
+    export interface ChessComCallbackResponse {
+      game?: {
+        id?: number | string;
+        uuid?: string;
+        endTime?: number;
+        pgnHeaders?: {
+          Date?: string;
+          White?: string;
+          Black?: string;
+        };
+      };
+      players?: {
+        top?: { username?: string };
+        bottom?: { username?: string };
+      };
     }
   }
 }

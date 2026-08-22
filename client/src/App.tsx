@@ -8,8 +8,10 @@ import { Analytics } from "./lib/Analytics.ts";
 import { AnalyticsConsent } from "./lib/AnalyticsConsent.ts";
 import { AboutPage } from "./pages/AboutPage";
 import AnalyzerPage from "./pages/AnalyzerPage";
+import ChessComGameAnalysisPage from "./pages/ChessComGameAnalysisPage/index.tsx";
 import ChessComImportPage from "./pages/ChessComImportPage";
 import ChessComLibraryPage from "./pages/ChessComLibraryPage";
+import ChessComUserAnalysisPage from "./pages/ChessComUserAnalysisPage/index.tsx";
 import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 
 function AppShell({ children }: { children: ReactNode }) {
@@ -53,6 +55,8 @@ function App() {
       <ChessComLibraryAnalysisRunner />
       <Routes>
         <Route path="/" element={<AnalyzerPage />} />
+        <Route path="/analysis/chesscom/user/:userId/game/:gameId" element={<ChessComGameAnalysisPage />} />
+        <Route path="/analysis/chesscom/user/:userId" element={<ChessComUserAnalysisPage />} />
         <Route path="/import/chess-com" element={<ChessComImportPage />} />
         <Route path="/library/chess-com" element={<ChessComLibraryPage />} />
         <Route path="/about" element={<AboutPage />} />

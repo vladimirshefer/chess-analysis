@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ValuesHistogram from "../../components/ValuesHistogram.tsx";
-import { AnalysisGame } from "../../lib/AnalysisGame.ts";
 import { ChessComClient } from "../../lib/ChessComClient.ts";
 import { ChessComGameAnalysisStorage } from "../../lib/ChessComGameAnalysisStorage.ts";
 import { ChessComGamesStorage } from "../../lib/ChessComGamesStorage.ts";
 import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
-import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
 
 function ChessComLibraryPage() {
   const [games, setGames] = useState(() => ChessComLibraryAnalysis.loadLibraryGames());
@@ -73,16 +71,11 @@ function LibraryGameCard({
   game: ChessComClient.Dto.ChessComGameSummary;
   analysis: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null;
 }) {
-  const initialBoardOrientation = ChessComUser.getInitialBoardOrientation(game, ChessComUser.loadUsername());
   const progress = analysis?.totalPositions ? analysis.analyzedPositions / analysis.totalPositions : 0;
 
   return (
     <Link
-      to="/"
-      state={{
-        importedPgn: AnalysisGame.withPlayers(game.pgn, toGamePlayersInfoFromChessComGame(game)),
-        initialBoardOrientation,
-      }}
+      to={ChessComUser.toGameAnalysisUrl(game)}
       className="block bg-white p-4 rounded-xl shadow-lg border border-gray-100 hover:border-indigo-200 transition-colors"
     >
       <div className="flex flex-col gap-3">

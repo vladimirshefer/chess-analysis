@@ -43,6 +43,13 @@ export namespace ChessComUser {
     return games.filter((game) => isParticipant(game, username)).sort(compareGameByEndTimeDesc)[0] ?? null;
   }
 
+  export function toGameAnalysisUrl(game: ChessComClient.Dto.ChessComGameSummary, username?: string | null): string {
+    const resolvedUsername =
+      (username && normalizeUsername(username)) || loadUsername() || normalizeUsername(game.white.username);
+    const gameId = game.url.split("/").filter(Boolean).pop() || game.id;
+    return `/analysis/chesscom/user/${encodeURIComponent(resolvedUsername)}/game/${encodeURIComponent(gameId)}`;
+  }
+
   function normalizeUsername(username: string | null | undefined): string {
     return username?.trim().toLowerCase() ?? "";
   }
