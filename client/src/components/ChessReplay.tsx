@@ -36,7 +36,6 @@ import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumeric
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
 import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
 import { useQuery } from "@tanstack/react-query";
-import { SharedAnalysis } from "../lib/SharedAnalysis.ts";
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
 import { type GameTree, GameTreeUtils, type MoveNode } from "../lib/GameTree.ts";
 
@@ -69,32 +68,9 @@ function ChessReplay() {
   const [originalPgn, setOriginalPgnState] = useState("");
   const [initialBoardOrientation, setInitialBoardOrientation] = useState<"white" | "black" | null>(null);
   const lastImportedRouteKeyRef = useRef<string | null>(null);
-  const sharedAnalysisPayload = useMemo(
-    function readSharedAnalysisPayload() {
-      return SharedAnalysis.readPayload(location.search);
-    },
-    [location.search],
-  );
-
-  useEffect(
-    function loadSharedAnalysisFromUrl() {
-      if (!sharedAnalysisPayload) return;
-
-      try {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setInitialBoardOrientation(null);
-        setOriginalPgnState(SharedAnalysis.toPgn(sharedAnalysisPayload));
-      } catch (error) {
-        console.error("Invalid shared analysis payload", error);
-      }
-    },
-    [sharedAnalysisPayload],
-  );
 
   useEffect(
     function loadImportedPgnFromRoute() {
-      if (sharedAnalysisPayload) return;
-
       const locationState = location.state as AnalyzerLocationState | null;
       const importedPgn = locationState?.importedPgn?.trim();
       if (!importedPgn) return;
@@ -106,7 +82,7 @@ function ChessReplay() {
       setInitialBoardOrientation(locationState?.initialBoardOrientation ?? null);
       setOriginalPgnState(importedPgn);
     },
-    [location, location.key, location.pathname, location.search, location.state, sharedAnalysisPayload],
+    [location, location.key, location.pathname, location.search, location.state],
   );
 
   function setOriginalPgn(pgn: string) {
@@ -119,7 +95,6 @@ function ChessReplay() {
       originalPgn={originalPgn}
       setOriginalPgn={setOriginalPgn}
       initialBoardOrientation={initialBoardOrientation}
-      isSharedLink={Boolean(sharedAnalysisPayload)}
     />
   );
 }
@@ -128,12 +103,10 @@ export function ChessReplayImpl({
   originalPgn,
   setOriginalPgn: propSetOriginalPgn,
   initialBoardOrientation = null,
-  isSharedLink = false,
 }: {
   originalPgn: string;
   setOriginalPgn?: (pgn: string) => void;
   initialBoardOrientation?: "white" | "black" | null;
-  isSharedLink?: boolean;
 }) {
   const [currentOriginalPgn, setCurrentOriginalPgn] = useState(originalPgn);
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
@@ -200,17 +173,9 @@ export function ChessReplayImpl({
       setActiveLineId(loadedGame.activeLineId);
       setPlayersInfo(loadedGame.playersInfo);
       setBoardOrientation(initialBoardOrientation ?? "white");
-      setStatusText(
-        loadedGame.isInvalidPgn
-          ? "Invalid PGN"
-          : isSharedLink
-            ? "Shared analysis loaded"
-            : currentOriginalPgn
-              ? "Game loaded"
-              : "Welcome",
-      );
+      setStatusText(loadedGame.isInvalidPgn ? "Invalid PGN" : currentOriginalPgn ? "Game loaded" : "Welcome");
     },
-    [initialBoardOrientation, isSharedLink, currentOriginalPgn],
+    [initialBoardOrientation, currentOriginalPgn],
   );
 
   function goStart() {
@@ -558,15 +523,7 @@ export function ChessReplayImpl({
 
   async function shareAnalysis() {
     try {
-      const shareUrl = SharedAnalysis.buildUrl(
-        {
-          tree,
-          activeLineId,
-          positionAnalysisMap,
-          playersInfo,
-        },
-        window.location.href,
-      );
+      const shareUrl = window.location.href;
 
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
@@ -577,7 +534,7 @@ export function ChessReplayImpl({
       window.prompt("Copy share link", shareUrl);
       setStatusText("Share link ready");
     } catch (error) {
-      console.error("Failed to create share link", error);
+      console.error("Failed to copy share link", error);
       setStatusText("Share failed");
     }
   }
