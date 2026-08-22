@@ -1,14 +1,6 @@
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  FaAnglesLeft,
-  FaChevronLeft,
-  FaChevronRight,
-  FaFileImport,
-  FaLink,
-  FaRotate,
-  FaTrashCan,
-} from "react-icons/fa6";
+import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Link, useLocation } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
@@ -521,24 +513,6 @@ export function ChessReplayImpl({
     setOriginalPgn("");
   }
 
-  async function shareAnalysis() {
-    try {
-      const shareUrl = window.location.href;
-
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-        setStatusText("Share link copied");
-        return;
-      }
-
-      window.prompt("Copy share link", shareUrl);
-      setStatusText("Share link ready");
-    } catch (error) {
-      console.error("Failed to copy share link", error);
-      setStatusText("Share failed");
-    }
-  }
-
   return (
     <div className="flex flex-col lg:flex-row gap-4 p-4 max-w-7xl mx-auto bg-white shadow-lg border border-gray-100 min-h-175">
       <div className="flex-1 flex flex-col items-center gap-2">
@@ -601,16 +575,6 @@ export function ChessReplayImpl({
             className="inline-flex items-center justify-center p-4 bg-gray-800 hover:bg-black text-white rounded font-bold"
           >
             <RenderIcon iconType={FaRotate} className="text-base" />
-          </button>
-          <button
-            disabled={!hasExistingAnalysis}
-            onClick={function handleShareClick() {
-              void shareAnalysis();
-            }}
-            className="inline-flex items-center justify-center gap-2 px-4 py-4 bg-sky-700 hover:bg-sky-800 text-white rounded font-bold disabled:opacity-30"
-          >
-            <RenderIcon iconType={FaLink} className="text-sm" />
-            <span>Share</span>
           </button>
         </div>
 
