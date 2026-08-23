@@ -10,98 +10,140 @@ export namespace OpeningsBook {
     plyCount: number;
   }
 
-  interface KnownOpeningsData {
-    knownMovePathPrefixes: Set<string>;
-    openingByMovePathPrefix: Map<string, Opening>;
-  }
+  const OTHER_PATH = "/openings/openings-other.json";
+  const E4_E5_NF3_PATH = "/openings/openings-e4-e5-nf3.json";
+  const E4_E5_PATH = "/openings/openings-e4-e5.json";
+  const E4_C5_PATH = "/openings/openings-e4-c5.json";
+  const E4_OTHER_PATH = "/openings/openings-e4-other.json";
+  const D4_D5_PATH = "/openings/openings-d4-d5.json";
+  const D4_OTHER_PATH = "/openings/openings-d4-other.json";
 
-  const OPENINGS_FILE_PATHS = [
-    "/openings/openings-other.json",
-    "/openings/openings-e4-e5-nf3.json",
-    "/openings/openings-e4-e5.json",
-    "/openings/openings-e4-c5.json",
-    "/openings/openings-e4-other.json",
-    "/openings/openings-d4-d5.json",
-    "/openings/openings-d4-other.json",
+  const ALL_SHARD_PATHS = [
+    OTHER_PATH,
+    E4_E5_NF3_PATH,
+    E4_E5_PATH,
+    E4_C5_PATH,
+    E4_OTHER_PATH,
+    D4_D5_PATH,
+    D4_OTHER_PATH,
   ] as const;
 
-  let knownOpeningsDataPromise: Promise<KnownOpeningsData> | null = null;
-  let knownOpeningsData: KnownOpeningsData | null = null;
+  const knownMovePathPrefixes = new Set<string>();
+  const openingByMovePathPrefix = new Map<string, Opening>();
+  const loadedShardPaths = new Set<string>();
+  const shardLoadPromises = new Map<string, Promise<void>>();
 
   export function toMovePathKey(sanMoves: readonly string[]): string {
     return sanMoves.join(" ");
   }
 
   export async function load(): Promise<void> {
-    await getKnownOpeningsData();
+    await Promise.all(ALL_SHARD_PATHS.map(loadShard));
+  }
+
+  export async function ensureLoadedForMoves(sanMoves: readonly string[]): Promise<void> {
+    if (sanMoves.length === 0) return;
+
+    const shardPaths = resolveShardPathsForMoves(sanMoves);
+    await Promise.all(shardPaths.map(loadShard));
   }
 
   export function isKnownMovePath(sanMoves: readonly string[]): boolean {
     const movePathKey = toMovePathKey(sanMoves);
-    return knownOpeningsData?.knownMovePathPrefixes.has(movePathKey) ?? false;
+    return knownMovePathPrefixes.has(movePathKey);
   }
 
   export async function getOpeningBySanMoves(sanMoves: readonly string[]): Promise<Opening | null> {
     if (sanMoves.length === 0) return null;
 
-    const knownData = await getKnownOpeningsData();
+    await ensureLoadedForMoves(sanMoves);
+    let opening = findOpeningByMovePath(sanMoves);
+
+    if (!opening) {
+      const fallbackShardPath = resolveFallbackShardPathForMoves(sanMoves);
+      if (fallbackShardPath && !loadedShardPaths.has(fallbackShardPath)) {
+        await loadShard(fallbackShardPath);
+        opening = findOpeningByMovePath(sanMoves);
+      }
+    }
+
+    return cloneOpening(opening);
+  }
+
+  function findOpeningByMovePath(sanMoves: readonly string[]): Opening | null {
     for (let index = sanMoves.length; index >= 1; index -= 1) {
       const movePathKey = toMovePathKey(sanMoves.slice(0, index));
-      const opening = knownData.openingByMovePathPrefix.get(movePathKey);
-      if (opening) return cloneOpening(opening);
+      const opening = openingByMovePathPrefix.get(movePathKey);
+      if (opening) return opening;
     }
 
     return null;
   }
 
-  async function getKnownOpeningsData(): Promise<KnownOpeningsData> {
-    if (knownOpeningsData) {
-      return knownOpeningsData;
+  function resolveShardPathsForMoves(sanMoves: readonly string[]): string[] {
+    const firstMove = sanMoves[0];
+
+    if (firstMove === "e4") {
+      const secondMove = sanMoves[1];
+      if (secondMove === "e5") {
+        const thirdMove = sanMoves[2];
+        return thirdMove === "Nf3" ? [E4_E5_NF3_PATH, E4_E5_PATH] : [E4_E5_PATH];
+      }
+      if (secondMove === "c5") return [E4_C5_PATH];
+      return [E4_OTHER_PATH];
     }
 
-    if (!knownOpeningsDataPromise) {
-      knownOpeningsDataPromise = loadKnownOpeningsData().then(function cacheKnownOpeningsData(data) {
-        knownOpeningsData = data;
-        return data;
-      });
+    if (firstMove === "d4") {
+      const secondMove = sanMoves[1];
+      return secondMove === "d5" ? [D4_D5_PATH] : [D4_OTHER_PATH];
     }
 
-    return knownOpeningsDataPromise;
+    return [OTHER_PATH];
   }
 
-  async function loadKnownOpeningsData(): Promise<KnownOpeningsData> {
-    try {
-      const openingLists = await Promise.all(OPENINGS_FILE_PATHS.map(loadOpeningEntries));
-      const allOpenings = openingLists.flat();
-      const knownMovePathPrefixes = new Set<string>();
-      const openingByMovePathPrefix = new Map<string, Opening>();
+  function resolveFallbackShardPathForMoves(sanMoves: readonly string[]): string | null {
+    const firstMove = sanMoves[0];
 
-      for (const openingEntry of allOpenings) {
-        const sanMoves = openingEntry.sanMoves ?? [];
-        for (let index = 0; index < sanMoves.length; index += 1) {
-          const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
-          knownMovePathPrefixes.add(movePathPrefix);
-        }
+    if (firstMove === "e4") return E4_OTHER_PATH;
+    if (firstMove === "d4") return D4_OTHER_PATH;
+    return null;
+  }
 
-        const opening = toOpening(openingEntry, sanMoves);
-        if (!opening) continue;
+  function loadShard(path: string): Promise<void> {
+    if (loadedShardPaths.has(path)) return Promise.resolve();
 
-        for (let index = 0; index < sanMoves.length; index += 1) {
-          const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
-          upsertOpening(openingByMovePathPrefix, movePathPrefix, opening);
-        }
+    let shardLoadPromise = shardLoadPromises.get(path);
+    if (!shardLoadPromise) {
+      shardLoadPromise = loadOpeningEntries(path)
+        .then(function indexShardEntries(entries) {
+          mergeEntriesIntoIndex(entries);
+          loadedShardPaths.add(path);
+        })
+        .catch(function handleShardLoadError(error) {
+          console.error(`Failed to load openings shard: ${path}`, error);
+          shardLoadPromises.delete(path);
+        });
+      shardLoadPromises.set(path, shardLoadPromise);
+    }
+
+    return shardLoadPromise;
+  }
+
+  function mergeEntriesIntoIndex(openingEntries: OpeningEntry[]): void {
+    for (const openingEntry of openingEntries) {
+      const sanMoves = openingEntry.sanMoves ?? [];
+      for (let index = 0; index < sanMoves.length; index += 1) {
+        const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
+        knownMovePathPrefixes.add(movePathPrefix);
       }
 
-      return {
-        knownMovePathPrefixes,
-        openingByMovePathPrefix,
-      };
-    } catch (error) {
-      console.error("Failed to load openings book", error);
-      return {
-        knownMovePathPrefixes: new Set<string>(),
-        openingByMovePathPrefix: new Map<string, Opening>(),
-      };
+      const opening = toOpening(openingEntry, sanMoves);
+      if (!opening) continue;
+
+      for (let index = 0; index < sanMoves.length; index += 1) {
+        const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
+        upsertOpening(openingByMovePathPrefix, movePathPrefix, opening);
+      }
     }
   }
 
