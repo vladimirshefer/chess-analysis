@@ -18,16 +18,6 @@ export namespace OpeningsBook {
   const D4_D5_PATH = "/openings/openings-d4-d5.json";
   const D4_OTHER_PATH = "/openings/openings-d4-other.json";
 
-  const ALL_SHARD_PATHS = [
-    OTHER_PATH,
-    E4_E5_NF3_PATH,
-    E4_E5_PATH,
-    E4_C5_PATH,
-    E4_OTHER_PATH,
-    D4_D5_PATH,
-    D4_OTHER_PATH,
-  ] as const;
-
   const knownMovePathPrefixes = new Set<string>();
   const openingByMovePathPrefix = new Map<string, Opening>();
   const loadedShardPaths = new Set<string>();
@@ -35,10 +25,6 @@ export namespace OpeningsBook {
 
   export function toMovePathKey(sanMoves: readonly string[]): string {
     return sanMoves.join(" ");
-  }
-
-  export async function load(): Promise<void> {
-    await Promise.all(ALL_SHARD_PATHS.map(loadShard));
   }
 
   export async function ensureLoadedForMoves(sanMoves: readonly string[]): Promise<void> {

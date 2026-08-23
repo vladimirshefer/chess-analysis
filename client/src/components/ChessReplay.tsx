@@ -136,15 +136,23 @@ export function ChessReplayImpl({
 
   const engine = useMemo(() => engineQuery.data as ChessEngine | undefined, [engineQuery.data]);
 
-  const openingsBookQuery = useQuery({
-    queryKey: ["openingsBook"],
-    queryFn: async () => {
-      await OpeningsBook.load();
-      return true;
-    },
-  });
+  const [openingsReady, setOpeningsReady] = useState(false);
 
-  const openingsReady = useMemo(() => !!openingsBookQuery.data, [openingsBookQuery.data]);
+  useEffect(
+    function loadOpeningsForTree() {
+      let isCancelled = false;
+      setOpeningsReady(false);
+      void GameAnalysisSummary.ensureOpeningsLoaded(tree).then(function markOpeningsReady() {
+        if (isCancelled) return;
+        setOpeningsReady(true);
+      });
+
+      return function cleanup() {
+        isCancelled = true;
+      };
+    },
+    [tree],
+  );
 
   useEffect(
     function syncPgnEditorText() {

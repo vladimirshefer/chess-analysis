@@ -5,7 +5,6 @@ import { ChessComGameAnalysisStorage } from "./ChessComGameAnalysisStorage.ts";
 import { ChessComGamesStorage } from "./ChessComGamesStorage.ts";
 import { type ChessEngine, EngineEvaluationPriorities } from "./ChessEngine.ts";
 import { GameAnalysisSummary } from "./GameAnalysisSummary.ts";
-import { OpeningsBook } from "./OpeningsBook.ts";
 
 export namespace ChessComLibraryAnalysis {
   export const TARGET_DEPTH = 12;
@@ -69,8 +68,6 @@ export namespace ChessComLibraryAnalysis {
   export async function processNextStep(engine: ChessEngine): Promise<boolean> {
     const games = loadLibraryGames();
     if (games.length === 0) return false;
-
-    await OpeningsBook.load();
 
     for (const game of games) {
       const previousEntity = ChessComGameAnalysisStorage.get(game.id);
@@ -151,6 +148,7 @@ export namespace ChessComLibraryAnalysis {
       if (!nextNodeFen) nextNodeFen = node.fen;
     }
 
+    await GameAnalysisSummary.ensureOpeningsLoaded(preparedGame.tree);
     const moveMarks = GameAnalysisSummary.buildMoveMarks(preparedGame.tree, analysesByFen);
     const summary = GameAnalysisSummary.buildGameSummary(preparedGame.activeLineNodes, analysesByFen, moveMarks);
 
