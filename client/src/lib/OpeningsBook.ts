@@ -1,14 +1,12 @@
-import { Chess } from "chess.js";
-
 export namespace OpeningsBook {
   interface OpeningEntry {
     name?: string;
-    pgn?: string;
+    sanMoves?: string[];
   }
 
   export interface Opening {
     name: string;
-    pgn: string;
+    sanMoves: string[];
     plyCount: number;
   }
 
@@ -79,7 +77,7 @@ export namespace OpeningsBook {
       const openingByMovePathPrefix = new Map<string, Opening>();
 
       for (const openingEntry of allOpenings) {
-        const sanMoves = toMainlineMoves(openingEntry.pgn ?? "");
+        const sanMoves = openingEntry.sanMoves ?? [];
         for (let index = 0; index < sanMoves.length; index += 1) {
           const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
           knownMovePathPrefixes.add(movePathPrefix);
@@ -117,85 +115,13 @@ export namespace OpeningsBook {
     return Array.isArray(data) ? (data as OpeningEntry[]) : [];
   }
 
-  function stripVariations(pgn: string): string {
-    let depth = 0;
-    let result = "";
-
-    for (let index = 0; index < pgn.length; index += 1) {
-      const char = pgn[index];
-      if (char === "(") {
-        depth += 1;
-        continue;
-      }
-      if (char === ")") {
-        depth = Math.max(0, depth - 1);
-        continue;
-      }
-      if (depth === 0) {
-        result += char;
-      }
-    }
-
-    return result;
-  }
-
-  function toMainlineMoves(pgn: string): string[] {
-    const value = pgn.trim();
-    if (!value) return [];
-
-    const withoutVariations = stripVariations(value);
-    const directMoves = tryParseMovesWithChess(withoutVariations);
-    if (directMoves.length > 0) return directMoves;
-
-    const fallbackTokens = tokenizeSanMoves(withoutVariations);
-    if (fallbackTokens.length === 0) return [];
-
-    const chess = new Chess();
-    const moves: string[] = [];
-    for (const token of fallbackTokens) {
-      try {
-        const move = chess.move(token);
-        if (!move) break;
-        moves.push(move.san);
-      } catch {
-        break;
-      }
-    }
-
-    return moves;
-  }
-
-  function tryParseMovesWithChess(pgn: string): string[] {
-    try {
-      const chess = new Chess();
-      chess.loadPgn(pgn);
-      return chess.history();
-    } catch {
-      return [];
-    }
-  }
-
-  function tokenizeSanMoves(pgn: string): string[] {
-    return pgn
-      .replace(/\{[^}]*\}/g, " ")
-      .replace(/;[^\n\r]*/g, " ")
-      .replace(/\$\d+/g, " ")
-      .replace(/\d+\.(?:\.\.)?/g, " ")
-      .replace(/\b(?:1-0|0-1|1\/2-1\/2|\*)\b/g, " ")
-      .split(/\s+/)
-      .map(function cleanToken(token) {
-        return token.replace(/[!?]+/g, "");
-      })
-      .filter(Boolean);
-  }
-
   function toOpening(openingEntry: OpeningEntry, sanMoves: string[]): Opening | null {
     const openingName = openingEntry.name?.trim();
     if (!openingName) return null;
 
     return {
       name: openingName,
-      pgn: openingEntry.pgn?.trim() ?? "",
+      sanMoves,
       plyCount: sanMoves.length,
     };
   }
@@ -223,7 +149,7 @@ export namespace OpeningsBook {
 
     return {
       name: opening.name,
-      pgn: opening.pgn,
+      sanMoves: [...opening.sanMoves],
       plyCount: opening.plyCount,
     };
   }

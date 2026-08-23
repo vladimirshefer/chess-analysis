@@ -836,7 +836,14 @@ function areOpeningsEqual(left?: OpeningsBook.Opening | null, right?: OpeningsBo
   if (left === right) return true;
   if (!left || !right) return !left && !right;
 
-  return left.name === right.name && left.pgn === right.pgn && left.plyCount === right.plyCount;
+  return (
+    left.name === right.name &&
+    left.plyCount === right.plyCount &&
+    left.sanMoves.length === right.sanMoves.length &&
+    left.sanMoves.every(function isSameMove(move, index) {
+      return move === right.sanMoves[index];
+    })
+  );
 }
 
 function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLine[]): boolean {
