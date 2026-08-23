@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Chess } from "chess.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +52,78 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
 }
 
+function stripVariations(pgn) {
+  let depth = 0;
+  let result = "";
+
+  for (let index = 0; index < pgn.length; index += 1) {
+    const char = pgn[index];
+    if (char === "(") {
+      depth += 1;
+      continue;
+    }
+    if (char === ")") {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth === 0) {
+      result += char;
+    }
+  }
+
+  return result;
+}
+
+function tryParseMovesWithChess(pgn) {
+  try {
+    const chess = new Chess();
+    chess.loadPgn(pgn);
+    return chess.history();
+  } catch {
+    return [];
+  }
+}
+
+function tokenizeSanMoves(pgn) {
+  return pgn
+    .replace(/\{[^}]*\}/g, " ")
+    .replace(/;[^\n\r]*/g, " ")
+    .replace(/\$\d+/g, " ")
+    .replace(/\d+\.(?:\.\.)?/g, " ")
+    .replace(/\b(?:1-0|0-1|1\/2-1\/2|\*)\b/g, " ")
+    .split(/\s+/)
+    .map(function cleanToken(token) {
+      return token.replace(/[!?]+/g, "");
+    })
+    .filter(Boolean);
+}
+
+function toMainlineMoves(pgn) {
+  const value = pgn.trim();
+  if (!value) return [];
+
+  const withoutVariations = stripVariations(value);
+  const directMoves = tryParseMovesWithChess(withoutVariations);
+  if (directMoves.length > 0) return directMoves;
+
+  const fallbackTokens = tokenizeSanMoves(withoutVariations);
+  if (fallbackTokens.length === 0) return [];
+
+  const chess = new Chess();
+  const moves = [];
+  for (const token of fallbackTokens) {
+    try {
+      const move = chess.move(token);
+      if (!move) break;
+      moves.push(move.san);
+    } catch {
+      break;
+    }
+  }
+
+  return moves;
+}
+
 function getE4Bucket(pgn) {
   if (typeof pgn !== "string") {
     return "other";
@@ -85,6 +158,13 @@ function getD4Bucket(pgn) {
   }
 
   return "other";
+}
+
+function toShardEntry(opening) {
+  return {
+    name: opening.name,
+    sanMoves: toMainlineMoves(opening.pgn),
+  };
 }
 
 function main() {
@@ -140,13 +220,13 @@ function main() {
     buckets.other.push(opening);
   }
 
-  writeJson(otherPath, buckets.other);
-  writeJson(e4e5Nf3Path, e4Buckets["e5-nf3"]);
-  writeJson(e4e5Path, e4Buckets.e5);
-  writeJson(e4c5Path, e4Buckets.c5);
-  writeJson(e4OtherPath, e4Buckets.other);
-  writeJson(d4d5Path, d4Buckets.d5);
-  writeJson(d4OtherPath, d4Buckets.other);
+  writeJson(otherPath, buckets.other.map(toShardEntry));
+  writeJson(e4e5Nf3Path, e4Buckets["e5-nf3"].map(toShardEntry));
+  writeJson(e4e5Path, e4Buckets.e5.map(toShardEntry));
+  writeJson(e4c5Path, e4Buckets.c5.map(toShardEntry));
+  writeJson(e4OtherPath, e4Buckets.other.map(toShardEntry));
+  writeJson(d4d5Path, d4Buckets.d5.map(toShardEntry));
+  writeJson(d4OtherPath, d4Buckets.other.map(toShardEntry));
 
   console.log(
     `Wrote e4-e5-nf3=${e4Buckets["e5-nf3"].length}, e4-e5=${e4Buckets.e5.length}, e4-c5=${e4Buckets.c5.length}, e4-other=${e4Buckets.other.length}, d4-d5=${d4Buckets.d5.length}, d4-other=${d4Buckets.other.length}, other=${buckets.other.length}`,

@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "lint": "prettier . --check && eslint . && tsc -b --pretty false",
     "lint:fix": "prettier . --write && eslint . --fix",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:openings": "node public/openings/split-openings-by-first-move.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
