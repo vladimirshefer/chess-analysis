@@ -76,7 +76,7 @@ export namespace ChessComLibraryAnalysis {
       const stepState = await buildGameStepState(game, engine, previousEntity);
       if (stepState.nextNodeFen === null) {
         saveIfChanged(previousEntity, stepState.entity);
-        continue;
+        return true;
       }
 
       saveIfChanged(previousEntity, {
