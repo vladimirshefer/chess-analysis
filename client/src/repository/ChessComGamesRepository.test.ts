@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ChessComGamesStorage } from "./ChessComGamesStorage.ts";
-import { ChessComClient } from "./ChessComClient.ts";
+import { chessComGameRepository } from "./ChessComGamesRepository.ts";
+import { ChessComClient } from "../lib/ChessComClient.ts";
 
-namespace LocalStorageTestMock {
+namespace ChessComGameRepositoryTest {
   const entriesByKey = new Map<string, string>();
   let shouldThrowOnSetItem = false;
 
@@ -50,15 +50,15 @@ namespace LocalStorageTestMock {
 
 describe("ChessComGamesLibrary", function suite() {
   beforeEach(function setup() {
-    LocalStorageTestMock.install();
+    ChessComGameRepositoryTest.install();
   });
 
   it("saves and loads games with dedupe by id", function testCase() {
-    ChessComGamesStorage.save(createGame("game-1", "e4"));
-    ChessComGamesStorage.save(createGame("game-2", "d4"));
-    ChessComGamesStorage.save(createGame("game-1", "c4"));
+    chessComGameRepository.save(createGame("game-1", "e4"));
+    chessComGameRepository.save(createGame("game-2", "d4"));
+    chessComGameRepository.save(createGame("game-1", "c4"));
 
-    const loadedGames = ChessComGamesStorage.load().sort(compareGameIdAsc);
+    const loadedGames = chessComGameRepository.getAll().sort(compareGameIdAsc);
 
     expect(loadedGames).toHaveLength(2);
     expect(loadedGames[0].id).toBe("game-1");
@@ -67,15 +67,16 @@ describe("ChessComGamesLibrary", function suite() {
   });
 
   it("keeps previously cached games when a new one is saved", function testCase() {
-    LocalStorageTestMock.setRawValue(
+    ChessComGameRepositoryTest.setRawValue(
       "chess-com-games-library-v1",
       JSON.stringify({
         "old-game": createGame("old-game", "Nf3"),
       }),
     );
 
-    ChessComGamesStorage.save(createGame("new-game", "e4"));
-    const loadedIds = ChessComGamesStorage.load()
+    chessComGameRepository.save(createGame("new-game", "e4"));
+    const loadedIds = chessComGameRepository
+      .getAll()
       .map(function mapGame(game) {
         return game.id;
       })
@@ -85,16 +86,16 @@ describe("ChessComGamesLibrary", function suite() {
   });
 
   it("returns empty list when localStorage contains invalid json", function testCase() {
-    LocalStorageTestMock.setRawValue("chess-com-games-library-v1", "{");
+    ChessComGameRepositoryTest.setRawValue("chess-com-games-library-v1", "{");
 
-    expect(ChessComGamesStorage.load()).toEqual([]);
+    expect(chessComGameRepository.getAll()).toEqual([]);
   });
 
   it("throws when localStorage write fails", function testCase() {
-    LocalStorageTestMock.failOnSetItem();
+    ChessComGameRepositoryTest.failOnSetItem();
 
     expect(function executeSave() {
-      ChessComGamesStorage.save(createGame("game-1", "e4"));
+      chessComGameRepository.save(createGame("game-1", "e4"));
     }).toThrow("QuotaExceededError");
   });
 });

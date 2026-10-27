@@ -1,10 +1,8 @@
-import { Link, useNavigate } from "react-router-dom";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ChessComClient } from "../../lib/ChessComClient.ts";
-import { ChessComGamesStorage } from "../../lib/ChessComGamesStorage.ts";
-import { ChessComUser } from "../../lib/ChessComUser.ts";
-import { AnalysisGame } from "../../lib/AnalysisGame.ts";
-import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
+import {Link} from "react-router-dom";
+import {type FormEvent, useEffect, useMemo, useRef, useState} from "react";
+import {ChessComClient} from "../../lib/ChessComClient.ts";
+import {chessComGameRepository} from "../../repository/ChessComGamesRepository.ts";
+import {ChessComUser} from "../../lib/ChessComUser.ts";
 import RenderIcon from "../../components/RenderIcon.tsx";
 import { FaArrowRight, FaMagnifyingGlass } from "react-icons/fa6";
 
@@ -44,7 +42,7 @@ function ChessComImportPage() {
       const result = await ChessComClient.getRecentGames(nextUsername, 10);
       try {
         for (const game of result.games) {
-          ChessComGamesStorage.save(game);
+          chessComGameRepository.save(game);
         }
       } catch (error) {
         console.error("Failed to cache Chess.com games library", error);

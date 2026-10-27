@@ -1,4 +1,4 @@
-import { CURRENT_ENGINE_NAME } from "../../lib/ChessEngine.ts";
+import { CURRENT_ENGINE_NAME } from "../../lib/chess-engine/ChessEngine.ts";
 import { EngineDepthSelector } from "./EngineDepthSelector.tsx";
 import { Analytics } from "../../lib/Analytics.ts";
 import RenderIcon from "../../components/RenderIcon.tsx";

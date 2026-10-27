@@ -5,7 +5,7 @@ import {
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
-} from "../ChessEngine.ts";
+} from "./ChessEngine.ts";
 import { getAbsoluteTerminalEvaluation, parseAbsoluteEvaluation } from "../evaluation.ts";
 import { UniversalChessInterface } from "../UniversalChessInterface.ts";
 

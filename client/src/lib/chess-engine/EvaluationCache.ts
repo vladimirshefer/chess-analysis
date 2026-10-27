@@ -1,5 +1,5 @@
 import type { AbsoluteNumericEvaluation } from "../evaluation.ts";
-import type { ChessEngineLine, FullMoveEvaluation } from "../ChessEngine.ts";
+import type { ChessEngineLine, FullMoveEvaluation } from "./ChessEngine.ts";
 
 export interface EvaluationCache {
   getEvaluation(fen: string, minDepth?: number): FullMoveEvaluation | null;

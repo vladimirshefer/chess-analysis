@@ -1,9 +1,9 @@
-import { sharedEvaluationCache } from "./chess-engine/EvaluationCache.ts";
-import { CachedChessEngine } from "./chess-engine/CachedChessEngine.ts";
-import { NativeChessEngine, StockfishRuntime } from "./chess-engine/NativeChessEngine.ts";
-import { PersistentChessEngine } from "./chess-engine/PersistentChessEngine.ts";
-import { QueuedChessEngine } from "./chess-engine/QueuedChessEngine.ts";
-import type { AbsoluteNumericEvaluation } from "./evaluation";
+import { sharedEvaluationCache } from "./EvaluationCache.ts";
+import { CachedChessEngine } from "./CachedChessEngine.ts";
+import { NativeChessEngine, StockfishRuntime } from "./NativeChessEngine.ts";
+import { PersistentChessEngine } from "./PersistentChessEngine.ts";
+import { QueuedChessEngine } from "./QueuedChessEngine.ts";
+import type { AbsoluteNumericEvaluation } from "../evaluation.ts";
 
 export interface ChessEngineLine {
   /** UCI = Universal Chess Interface */

@@ -1,19 +1,17 @@
-import { ChessComClient } from "./ChessComClient.ts";
+import { ChessComClient } from "../lib/ChessComClient.ts";
+
+export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
+
+export interface ChessComGameRepository {
+  get(id: string): ChessComGameEntity | null;
+  save(entity: ChessComGameEntity): ChessComGameEntity;
+  update(entity: ChessComGameEntity): ChessComGameEntity;
+  getAll(): ChessComGameEntity[];
+  delete(id: string): void;
+}
 
 export namespace ChessComGamesStorage {
   const STORAGE_KEY = "chess-com-games-library-v1";
-  type Listener = () => void;
-  const listeners = new Set<Listener>();
-
-  export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
-
-  export interface ChessComGameRepository {
-    get(id: string): ChessComGameEntity | null;
-    save(entity: ChessComGameEntity): ChessComGameEntity;
-    update(entity: ChessComGameEntity): ChessComGameEntity;
-    getAll(): ChessComGameEntity[];
-    delete(id: string): void;
-  }
 
   export class LocalStorageChessComGameRepository implements ChessComGameRepository {
     get(id: string): ChessComGameEntity | null {
@@ -40,25 +38,7 @@ export namespace ChessComGamesStorage {
       if (!entitiesById[id]) return;
       delete entitiesById[id];
       writeEntitiesById(entitiesById);
-      notifyListeners();
     }
-  }
-
-  export const sharedRepository: ChessComGameRepository = new LocalStorageChessComGameRepository();
-
-  export function load(): ChessComClient.Dto.ChessComGameSummary[] {
-    return sharedRepository.getAll();
-  }
-
-  export function save(game: ChessComClient.Dto.ChessComGameSummary): void {
-    sharedRepository.save(game);
-  }
-
-  export function subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return function unsubscribe() {
-      listeners.delete(listener);
-    };
   }
 
   function upsertEntity(entity: ChessComGameEntity): ChessComGameEntity {
@@ -68,7 +48,6 @@ export namespace ChessComGamesStorage {
     const entitiesById = readEntitiesById();
     entitiesById[entityId] = entity;
     writeEntitiesById(entitiesById);
-    notifyListeners();
     return entity;
   }
 
@@ -100,10 +79,7 @@ export namespace ChessComGamesStorage {
   function isObjectRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
   }
-
-  function notifyListeners(): void {
-    listeners.forEach(function notify(listener) {
-      listener();
-    });
-  }
 }
+
+export const chessComGameRepository: ChessComGameRepository =
+  new ChessComGamesStorage.LocalStorageChessComGameRepository();

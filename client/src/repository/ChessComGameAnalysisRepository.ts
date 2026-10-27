@@ -1,59 +1,55 @@
-import { AnalysisGame } from "./AnalysisGame.ts";
+import { AnalysisGame } from "../lib/AnalysisGame.ts";
 
+
+export type ChessComGameAnalysisStatus = "pending" | "running" | "done" | "failed";
+
+export interface ChessComGameAnalysisEntity {
+  gameId: string;
+  status: ChessComGameAnalysisStatus;
+  targetDepth: number;
+  analyzedPositions: number;
+  totalPositions: number;
+  lastAnalyzedFen: string | null;
+  whiteAccuracy: number | null;
+  blackAccuracy: number | null;
+  whiteMarks?: Record<string, number>;
+  blackMarks?: Record<string, number>;
+  histogramValues: number[];
+  materialValues: number[];
+  analysisByFen: Record<string, PersistedNodeAnalysisEntity>;
+  updatedAt: number;
+  errorMessage?: string;
+}
+
+export interface PersistedDisplayEngineLineEntity {
+  suggestedMove: string;
+  suggestedMoveUci: string;
+  engineLineUci: string[];
+  engineLine: string;
+  evaluation: number;
+  depth: number;
+  lineRank: number;
+}
+
+export interface PersistedNodeAnalysisEntity {
+  fen: string;
+  evaluation: number;
+  settledMaterialBalance: number | null;
+  depth: number;
+  lines: PersistedDisplayEngineLineEntity[];
+  isFinal: boolean;
+  source: "engine" | "pgn";
+}
+
+export interface ChessComGameAnalysisRepository {
+  get(id: string): ChessComGameAnalysisEntity | null;
+  save(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity;
+  update(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity;
+  getAll(): ChessComGameAnalysisEntity[];
+  delete(id: string): void;
+}
 export namespace ChessComGameAnalysisStorage {
   const STORAGE_KEY = "chess-com-game-analysis-v1";
-
-  export type ChessComGameAnalysisStatus = "pending" | "running" | "done" | "failed";
-
-  export interface ChessComGameAnalysisEntity {
-    gameId: string;
-    status: ChessComGameAnalysisStatus;
-    targetDepth: number;
-    analyzedPositions: number;
-    totalPositions: number;
-    lastAnalyzedFen: string | null;
-    whiteAccuracy: number | null;
-    blackAccuracy: number | null;
-    whiteMarks?: Record<string, number>;
-    blackMarks?: Record<string, number>;
-    histogramValues: number[];
-    materialValues: number[];
-    analysisByFen: Record<string, PersistedNodeAnalysisEntity>;
-    updatedAt: number;
-    errorMessage?: string;
-  }
-
-  export interface PersistedDisplayEngineLineEntity {
-    suggestedMove: string;
-    suggestedMoveUci: string;
-    engineLineUci: string[];
-    engineLine: string;
-    evaluation: number;
-    depth: number;
-    lineRank: number;
-  }
-
-  export interface PersistedNodeAnalysisEntity {
-    fen: string;
-    evaluation: number;
-    settledMaterialBalance: number | null;
-    depth: number;
-    lines: PersistedDisplayEngineLineEntity[];
-    isFinal: boolean;
-    source: "engine" | "pgn";
-  }
-
-  export interface ChessComGameAnalysisRepository {
-    get(id: string): ChessComGameAnalysisEntity | null;
-    save(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity;
-    update(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity;
-    getAll(): ChessComGameAnalysisEntity[];
-    delete(id: string): void;
-  }
-
-  type Listener = () => void;
-
-  const listeners = new Set<Listener>();
 
   export class LocalStorageChessComGameAnalysisRepository implements ChessComGameAnalysisRepository {
     get(id: string): ChessComGameAnalysisEntity | null {
@@ -80,22 +76,7 @@ export namespace ChessComGameAnalysisStorage {
       if (!entitiesById[id]) return;
       delete entitiesById[id];
       writeEntitiesById(entitiesById);
-      notifyListeners();
     }
-  }
-
-  export const sharedRepository: ChessComGameAnalysisRepository = new LocalStorageChessComGameAnalysisRepository();
-
-  export function load(): ChessComGameAnalysisEntity[] {
-    return sharedRepository.getAll();
-  }
-
-  export function get(gameId: string): ChessComGameAnalysisEntity | null {
-    return sharedRepository.get(gameId);
-  }
-
-  export function save(entity: ChessComGameAnalysisEntity): void {
-    sharedRepository.save(entity);
   }
 
   export function toPositionAnalysisMap(
@@ -140,13 +121,6 @@ export namespace ChessComGameAnalysisStorage {
     );
   }
 
-  export function subscribe(listener: Listener): () => void {
-    listeners.add(listener);
-    return function unsubscribe() {
-      listeners.delete(listener);
-    };
-  }
-
   function upsertEntity(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity {
     const entityId = entity.gameId;
     if (!entityId) return entity;
@@ -154,7 +128,6 @@ export namespace ChessComGameAnalysisStorage {
     const entitiesById = readEntitiesById();
     entitiesById[entityId] = cloneEntity(entity);
     writeEntitiesById(entitiesById);
-    notifyListeners();
     return entity;
   }
 
@@ -233,12 +206,6 @@ export namespace ChessComGameAnalysisStorage {
     };
   }
 
-  function notifyListeners(): void {
-    listeners.forEach(function notify(listener) {
-      listener();
-    });
-  }
-
   function isStatus(value: unknown): value is ChessComGameAnalysisStatus {
     return value === "pending" || value === "running" || value === "done" || value === "failed";
   }
@@ -307,3 +274,6 @@ export namespace ChessComGameAnalysisStorage {
     };
   }
 }
+
+export const chessComGameAnalysisRepository: ChessComGameAnalysisRepository =
+  new ChessComGameAnalysisStorage.LocalStorageChessComGameAnalysisRepository();

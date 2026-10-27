@@ -1,15 +1,22 @@
 import { AnalysisGame } from "./AnalysisGame.ts";
 import { AnalysisPosition } from "./AnalysisPosition.ts";
 import { ChessComClient } from "./ChessComClient.ts";
-import { ChessComGameAnalysisStorage } from "./ChessComGameAnalysisStorage.ts";
-import { ChessComGamesStorage } from "./ChessComGamesStorage.ts";
-import { type ChessEngine, EngineEvaluationPriorities } from "./ChessEngine.ts";
+import {
+  type ChessComGameAnalysisEntity,
+  chessComGameAnalysisRepository,
+  ChessComGameAnalysisStorage,
+} from "../repository/ChessComGameAnalysisRepository.ts";
+import { chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
+import { type ChessEngine, EngineEvaluationPriorities } from "./chess-engine/ChessEngine.ts";
 import { GameAnalysisSummary } from "./GameAnalysisSummary.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
 
 export namespace ChessComLibraryAnalysis {
   export const TARGET_DEPTH = 12;
   const LINES_AMOUNT = 1;
+  export const GAMES_QUERY_KEY = ["chess-com-library-games"];
+  export const ANALYSIS_QUERY_KEY = ["chess-com-library-analysis"];
+  export const REFETCH_INTERVAL_MS = 1_200;
 
   interface PreparedGame {
     activeLineNodes: ReturnType<typeof getActiveLineNodes>;
@@ -18,7 +25,7 @@ export namespace ChessComLibraryAnalysis {
   }
 
   interface GameStepState {
-    entity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity;
+    entity: ChessComGameAnalysisEntity;
     nextNodeFen: string | null;
   }
 
@@ -31,12 +38,12 @@ export namespace ChessComLibraryAnalysis {
   }
 
   export function loadLibraryGames(): ChessComClient.Dto.ChessComGameSummary[] {
-    return ChessComGamesStorage.load().slice().sort(compareGamesByEndTimeDesc);
+    return chessComGameRepository.getAll().slice().sort(compareGamesByEndTimeDesc);
   }
 
   export function getGlobalProgress(
     games: ChessComClient.Dto.ChessComGameSummary[],
-    entities: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity[],
+    entities: ChessComGameAnalysisEntity[],
   ): GlobalProgress {
     const relevantEntities = entities.filter(function keepEntity(entity) {
       return games.some(function matchGame(game) {
@@ -73,7 +80,7 @@ export namespace ChessComLibraryAnalysis {
     await OpeningsBook.load();
 
     for (const game of games) {
-      const previousEntity = ChessComGameAnalysisStorage.get(game.id);
+      const previousEntity = chessComGameAnalysisRepository.get(game.id);
       if (isCompletedEntity(previousEntity)) continue;
 
       const stepState = await buildGameStepState(game, engine, previousEntity);
@@ -97,14 +104,14 @@ export namespace ChessComLibraryAnalysis {
         const updatedState = await buildGameStepState(game, engine, previousEntity, {
           [finalEvaluation.fen]: AnalysisPosition.toNodeAnalysis(finalEvaluation.fen, finalEvaluation, true),
         });
-        ChessComGameAnalysisStorage.save({
+        chessComGameAnalysisRepository.save({
           ...updatedState.entity,
           status: updatedState.nextNodeFen ? "pending" : "done",
           lastAnalyzedFen: finalEvaluation.fen,
           updatedAt: Date.now(),
         });
       } catch (error) {
-        ChessComGameAnalysisStorage.save({
+        chessComGameAnalysisRepository.save({
           ...stepState.entity,
           status: "failed",
           errorMessage: error instanceof Error ? error.message : "Failed to analyze game",
@@ -121,7 +128,7 @@ export namespace ChessComLibraryAnalysis {
   async function buildGameStepState(
     game: ChessComClient.Dto.ChessComGameSummary,
     engine: ChessEngine,
-    previousEntity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null = null,
+    previousEntity: ChessComGameAnalysisEntity | null = null,
     seededAnalysesByFen: Record<string, AnalysisGame.NodeAnalysis> = {},
   ): Promise<GameStepState> {
     const preparedGame = prepareGame(game);
@@ -191,16 +198,16 @@ export namespace ChessComLibraryAnalysis {
   }
 
   function saveIfChanged(
-    currentEntity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null,
-    nextEntity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity,
+    currentEntity: ChessComGameAnalysisEntity | null,
+    nextEntity: ChessComGameAnalysisEntity,
   ): void {
     if (currentEntity && areEntitiesEquivalent(currentEntity, nextEntity)) return;
-    ChessComGameAnalysisStorage.save(nextEntity);
+    chessComGameAnalysisRepository.save(nextEntity);
   }
 
   function areEntitiesEquivalent(
-    left: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity,
-    right: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity,
+    left: ChessComGameAnalysisEntity,
+    right: ChessComGameAnalysisEntity,
   ): boolean {
     return (
       left.gameId === right.gameId &&
@@ -219,7 +226,7 @@ export namespace ChessComLibraryAnalysis {
     );
   }
 
-  function isCompletedEntity(entity: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null): boolean {
+  function isCompletedEntity(entity: ChessComGameAnalysisEntity | null): boolean {
     if (!entity) return false;
     return (
       entity.status === "done" &&

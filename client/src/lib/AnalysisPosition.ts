@@ -1,6 +1,6 @@
 import { Chess } from "chess.js";
 import { AnalysisGame } from "./AnalysisGame.ts";
-import { type ChessEngineLine, type FullMoveEvaluation } from "./ChessEngine.ts";
+import { type ChessEngineLine, type FullMoveEvaluation } from "./chess-engine/ChessEngine.ts";
 
 export namespace AnalysisPosition {
   export type DisplayEngineLine = AnalysisGame.DisplayEngineLine;

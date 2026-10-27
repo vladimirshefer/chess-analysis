@@ -1,28 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import MoveMarksSummary from "../../components/MoveMarksSummary.tsx";
 import ValuesHistogram from "../../components/ValuesHistogram.tsx";
 import { ChessComClient } from "../../lib/ChessComClient.ts";
-import { ChessComGameAnalysisStorage } from "../../lib/ChessComGameAnalysisStorage.ts";
-import { ChessComGamesStorage } from "../../lib/ChessComGamesStorage.ts";
+import {
+  type ChessComGameAnalysisEntity,
+  chessComGameAnalysisRepository,
+} from "../../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
 
 function ChessComLibraryPage() {
-  const [games, setGames] = useState(() => ChessComLibraryAnalysis.loadLibraryGames());
-  const [analysisById, setAnalysisById] = useState(() => toEntityByGameId(ChessComGameAnalysisStorage.load()));
-
-  useEffect(function subscribeToLibraryGames() {
-    return ChessComGamesStorage.subscribe(function handleGamesChange() {
-      setGames(ChessComLibraryAnalysis.loadLibraryGames());
-    });
-  }, []);
-
-  useEffect(function subscribeToLibraryAnalysis() {
-    return ChessComGameAnalysisStorage.subscribe(function handleAnalysisChange() {
-      setAnalysisById(toEntityByGameId(ChessComGameAnalysisStorage.load()));
-    });
-  }, []);
+  const { data: games = [] } = useQuery({
+    queryKey: ChessComLibraryAnalysis.GAMES_QUERY_KEY,
+    queryFn: ChessComLibraryAnalysis.loadLibraryGames,
+    refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
+  });
+  const { data: analysisById = {} } = useQuery({
+    queryKey: ChessComLibraryAnalysis.ANALYSIS_QUERY_KEY,
+    queryFn: function loadAnalyses() {
+      return chessComGameAnalysisRepository.getAll();
+    },
+    select: toEntityByGameId,
+    refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
+  });
 
   const progress = useMemo(
     function buildProgress() {
@@ -70,7 +72,7 @@ function LibraryGameCard({
   analysis,
 }: {
   game: ChessComClient.Dto.ChessComGameSummary;
-  analysis: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null;
+  analysis: ChessComGameAnalysisEntity | null;
 }) {
   const progress = analysis?.totalPositions ? analysis.analyzedPositions / analysis.totalPositions : 0;
   const myColor = ChessComUser.getInitialBoardOrientation(game, ChessComUser.loadUsername());
@@ -164,18 +166,18 @@ function PlayerSummary({
 }
 
 function toEntityByGameId(
-  entities: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity[],
-): Record<string, ChessComGameAnalysisStorage.ChessComGameAnalysisEntity> {
+  entities: ChessComGameAnalysisEntity[],
+): Record<string, ChessComGameAnalysisEntity> {
   return entities.reduce(
     function collectById(result, entity) {
       result[entity.gameId] = entity;
       return result;
     },
-    {} as Record<string, ChessComGameAnalysisStorage.ChessComGameAnalysisEntity>,
+    {} as Record<string, ChessComGameAnalysisEntity>,
   );
 }
 
-function toStatusLabel(analysis: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null): string {
+function toStatusLabel(analysis: ChessComGameAnalysisEntity | null): string {
   if (!analysis) return "Pending";
   if (analysis.status === "done") return "";
   if (analysis.status === "running") return `Analyzing ${analysis.analyzedPositions}/${analysis.totalPositions}`;

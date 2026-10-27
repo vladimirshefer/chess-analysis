@@ -6,7 +6,7 @@ import {
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
-} from "../ChessEngine.ts";
+} from "./ChessEngine.ts";
 import { getAbsoluteTerminalEvaluation } from "../evaluation.ts";
 
 export class CachedChessEngine implements ChessEngine {
