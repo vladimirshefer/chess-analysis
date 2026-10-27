@@ -1,15 +1,16 @@
-import {useQuery} from "@tanstack/react-query";
-import {useMemo} from "react";
-import {FaFileImport} from "react-icons/fa6";
-import {Link} from "react-router-dom";
-import {ChessComClient} from "../lib/ChessComClient.ts";
-import {chessComGameRepository} from "../repository/ChessComGamesRepository.ts";
-import {ChessComUser} from "../lib/ChessComUser.ts";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { FaFileImport } from "react-icons/fa6";
+import { Link } from "react-router-dom";
+import { chessComClientRepository } from "../repository/ChessComClientRepository.ts";
+import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
+import { chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
+import { ChessComUser } from "../lib/ChessComUser.ts";
 import RenderIcon from "./RenderIcon.tsx";
 
 function ChessComLastGameSuggestionPane() {
   const storedChessComUsername = useMemo(function loadStoredUsername() {
-    return ChessComUser.loadUsername();
+    return chessComUserRepository.get()?.username ?? null;
   }, []);
 
   const { data: suggestedChessComGame, isLoading } = useQuery({
@@ -20,7 +21,7 @@ function ChessComLastGameSuggestionPane() {
       return ChessComUser.findLatestGame(chessComGameRepository.getAll(), storedChessComUsername);
     },
     queryFn: async function fetchLatestGame() {
-      const result = await ChessComClient.getRecentGames(storedChessComUsername!, 1);
+      const result = await chessComClientRepository.getRecentGames(storedChessComUsername!, 1);
       const lastGame = result.games[0] ?? null;
       if (lastGame) {
         try {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { chessComGameRepository } from "./ChessComGamesRepository.ts";
-import { ChessComClient } from "../lib/ChessComClient.ts";
+import type { ChessComClient } from "../lib/ChessComClient.ts";
 
 namespace ChessComGameRepositoryTest {
   const entriesByKey = new Map<string, string>();

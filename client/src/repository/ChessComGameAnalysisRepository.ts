@@ -1,6 +1,5 @@
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
 
-
 export type ChessComGameAnalysisStatus = "pending" | "running" | "done" | "failed";
 
 export interface ChessComGameAnalysisEntity {

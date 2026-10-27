@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ChessComClient } from "./ChessComClient.ts";
+import type { ChessComClient } from "../lib/ChessComClient.ts";
+import { chessComClientRepository } from "./ChessComClientRepository.ts";
 
 describe("ChessComClient", function suite() {
   const originalFetch = globalThis.fetch;
@@ -41,7 +42,7 @@ describe("ChessComClient", function suite() {
       return new Response("{}", { status: 404 });
     });
 
-    const game = await ChessComClient.getGameById("hikaru", "123456");
+    const game = await chessComClientRepository.getGameById("hikaru", "123456");
     expect(game.id).toBe("https://www.chess.com/game/live/123456");
     expect(game.white.username).toBe("hikaru");
     expect(game.black.username).toBe("opponent");
@@ -75,7 +76,7 @@ describe("ChessComClient", function suite() {
       return new Response("{}", { status: 404 });
     });
 
-    const game = await ChessComClient.findGameByOpponentAndDate("hikaru", "magnus", "2026-08-22");
+    const game = await chessComClientRepository.findGameByOpponentAndDate("hikaru", "magnus", "2026-08-22");
     expect(game.id).toBe("https://www.chess.com/game/live/999888");
     expect(game.white.username).toBe("magnus");
     expect(game.black.username).toBe("hikaru");

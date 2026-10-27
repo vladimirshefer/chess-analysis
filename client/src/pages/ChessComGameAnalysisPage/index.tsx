@@ -1,10 +1,10 @@
-import {useParams} from "react-router-dom";
-import {useQuery} from "@tanstack/react-query";
-import {ChessComClient} from "../../lib/ChessComClient.ts";
-import {chessComGameRepository} from "../../repository/ChessComGamesRepository.ts";
-import {ChessComUser} from "../../lib/ChessComUser.ts";
-import {AnalysisGame} from "../../lib/AnalysisGame.ts";
-import {toGamePlayersInfoFromChessComGame} from "../../lib/gameInfo.ts";
+import { useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { chessComClientRepository } from "../../repository/ChessComClientRepository.ts";
+import { chessComGameRepository } from "../../repository/ChessComGamesRepository.ts";
+import { ChessComUser } from "../../lib/ChessComUser.ts";
+import { AnalysisGame } from "../../lib/AnalysisGame.ts";
+import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
 import { ChessReplayImpl } from "../../components/ChessReplay.tsx";
 
 function ChessComGameAnalysisPage() {
@@ -18,7 +18,7 @@ function ChessComGameAnalysisPage() {
     queryKey: ["chesscom-direct-game", userId, gameId],
     enabled: Boolean(userId && gameId),
     queryFn: async function fetchGame() {
-      const loaded = await ChessComClient.getGameById(userId!, gameId!);
+      const loaded = await chessComClientRepository.getGameById(userId!, gameId!);
       chessComGameRepository.save(loaded);
       return loaded;
     },

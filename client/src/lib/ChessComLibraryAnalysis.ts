@@ -1,6 +1,6 @@
 import { AnalysisGame } from "./AnalysisGame.ts";
 import { AnalysisPosition } from "./AnalysisPosition.ts";
-import { ChessComClient } from "./ChessComClient.ts";
+import type { ChessComClient } from "./ChessComClient.ts";
 import {
   type ChessComGameAnalysisEntity,
   chessComGameAnalysisRepository,
@@ -205,10 +205,7 @@ export namespace ChessComLibraryAnalysis {
     chessComGameAnalysisRepository.save(nextEntity);
   }
 
-  function areEntitiesEquivalent(
-    left: ChessComGameAnalysisEntity,
-    right: ChessComGameAnalysisEntity,
-  ): boolean {
+  function areEntitiesEquivalent(left: ChessComGameAnalysisEntity, right: ChessComGameAnalysisEntity): boolean {
     return (
       left.gameId === right.gameId &&
       left.status === right.status &&

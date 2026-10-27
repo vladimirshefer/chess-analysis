@@ -3,7 +3,8 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import MoveMarksSummary from "../../components/MoveMarksSummary.tsx";
 import ValuesHistogram from "../../components/ValuesHistogram.tsx";
-import { ChessComClient } from "../../lib/ChessComClient.ts";
+import type { ChessComClient } from "../../lib/ChessComClient.ts";
+import { chessComUserRepository } from "../../repository/ChessComUserRepository.ts";
 import {
   type ChessComGameAnalysisEntity,
   chessComGameAnalysisRepository,
@@ -75,7 +76,7 @@ function LibraryGameCard({
   analysis: ChessComGameAnalysisEntity | null;
 }) {
   const progress = analysis?.totalPositions ? analysis.analyzedPositions / analysis.totalPositions : 0;
-  const myColor = ChessComUser.getInitialBoardOrientation(game, ChessComUser.loadUsername());
+  const myColor = ChessComUser.getInitialBoardOrientation(game, chessComUserRepository.get()?.username ?? null);
   const white = {
     color: "white",
     player: game.white,
@@ -165,9 +166,7 @@ function PlayerSummary({
   );
 }
 
-function toEntityByGameId(
-  entities: ChessComGameAnalysisEntity[],
-): Record<string, ChessComGameAnalysisEntity> {
+function toEntityByGameId(entities: ChessComGameAnalysisEntity[]): Record<string, ChessComGameAnalysisEntity> {
   return entities.reduce(
     function collectById(result, entity) {
       result[entity.gameId] = entity;

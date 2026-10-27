@@ -1,10 +1,10 @@
-import {useParams, useSearchParams} from "react-router-dom";
-import {useQuery} from "@tanstack/react-query";
-import {ChessComClient} from "../../lib/ChessComClient.ts";
-import {chessComGameRepository} from "../../repository/ChessComGamesRepository.ts";
-import {ChessComUser} from "../../lib/ChessComUser.ts";
-import {AnalysisGame} from "../../lib/AnalysisGame.ts";
-import {toGamePlayersInfoFromChessComGame} from "../../lib/gameInfo.ts";
+import { useParams, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { chessComClientRepository } from "../../repository/ChessComClientRepository.ts";
+import { chessComGameRepository } from "../../repository/ChessComGamesRepository.ts";
+import { ChessComUser } from "../../lib/ChessComUser.ts";
+import { AnalysisGame } from "../../lib/AnalysisGame.ts";
+import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
 import { ChessReplayImpl } from "../../components/ChessReplay.tsx";
 
 function ChessComUserAnalysisPage() {
@@ -21,7 +21,7 @@ function ChessComUserAnalysisPage() {
     queryKey: ["chesscom-user-game", userId, opponent, date],
     enabled: Boolean(userId && opponent && date),
     queryFn: async function fetchGame() {
-      const loaded = await ChessComClient.findGameByOpponentAndDate(userId!, opponent!, date!);
+      const loaded = await chessComClientRepository.findGameByOpponentAndDate(userId!, opponent!, date!);
       chessComGameRepository.save(loaded);
       return loaded;
     },

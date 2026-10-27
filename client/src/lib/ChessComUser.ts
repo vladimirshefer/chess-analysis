@@ -1,22 +1,7 @@
-import { ChessComClient } from "./ChessComClient.ts";
+import type { ChessComClient } from "./ChessComClient.ts";
+import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
 
 export namespace ChessComUser {
-  const USERNAME_STORAGE_KEY = "chess-com-username";
-
-  export function loadUsername(): string | null {
-    const username = globalThis.localStorage.getItem(USERNAME_STORAGE_KEY)?.trim();
-    return username ? username : null;
-  }
-
-  export function saveUsername(username: string): void {
-    const normalizedUsername = normalizeUsername(username);
-    if (!normalizedUsername) {
-      globalThis.localStorage.removeItem(USERNAME_STORAGE_KEY);
-      return;
-    }
-    globalThis.localStorage.setItem(USERNAME_STORAGE_KEY, normalizedUsername);
-  }
-
   export function getInitialBoardOrientation(
     game: ChessComClient.Dto.ChessComGameSummary,
     username: string | null,
@@ -45,7 +30,9 @@ export namespace ChessComUser {
 
   export function toGameAnalysisUrl(game: ChessComClient.Dto.ChessComGameSummary, username?: string | null): string {
     const resolvedUsername =
-      (username && normalizeUsername(username)) || loadUsername() || normalizeUsername(game.white.username);
+      (username && normalizeUsername(username)) ||
+      chessComUserRepository.get()?.username ||
+      normalizeUsername(game.white.username);
     const gameId = game.url.split("/").filter(Boolean).pop() || game.id;
     return `/analysis/chesscom/user/${encodeURIComponent(resolvedUsername)}/game/${encodeURIComponent(gameId)}`;
   }

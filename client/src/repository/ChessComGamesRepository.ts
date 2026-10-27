@@ -1,4 +1,4 @@
-import { ChessComClient } from "../lib/ChessComClient.ts";
+import type { ChessComClient } from "../lib/ChessComClient.ts";
 
 export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
 
