@@ -20,6 +20,7 @@ import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from 
 import { GameAnalysisSummary } from "../lib/GameAnalysisSummary.ts";
 import { OpeningsBook } from "../lib/OpeningsBook";
 import EvaluationThermometer from "./EvaluationThermometer";
+import { MoveLine } from "./MoveLine";
 import RenderIcon from "./RenderIcon";
 import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx";
 import GameAnalysisOverview from "./GameAnalysisOverview.tsx";
@@ -540,6 +541,12 @@ export function ChessReplayImpl({
             />
           </div>
         </div>
+        <MoveLine
+          activeLine={activeLineNodes.slice(1)}
+          moveMarks={moveMarksMap}
+          currentNodeId={currentNodeId}
+          selectNode={setCurrentNodeId}
+        />
         <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.bottom} />
         </div>
