@@ -225,21 +225,6 @@ export function ChessReplayImpl({
     return GameAnalysisSummary.buildMoveMarks(tree, positionAnalysisMap);
   }, [openingsReady, positionAnalysisMap, tree]);
 
-  const mainLine = useMemo(() => {
-    const moves: { id: string; san: string; mark: MoveMark | null }[] = [];
-    for (let id = tree[ROOT_ANALYSIS_NODE_ID]?.children[0]; id; id = tree[id]?.children[0]) {
-      moves.push({ id, san: tree[id].san, mark: moveMarksMap[id]?.mark ?? null });
-    }
-    return moves;
-  }, [moveMarksMap, tree]);
-
-  const selectedMainLineId = useMemo(() => {
-    const mainLineIds = new Set(mainLine.map((move) => move.id));
-    let id: string | null = currentNodeId;
-    while (id && !mainLineIds.has(id)) id = tree[id]?.parentId ?? null;
-    return id;
-  }, [currentNodeId, mainLine, tree]);
-
   const lastBookOpeningName = useMemo(
     () => findClosestOpeningName(currentNodeId, tree, positionAnalysisMap),
     [currentNodeId, positionAnalysisMap, tree],
@@ -557,12 +542,10 @@ export function ChessReplayImpl({
           </div>
         </div>
         <MoveLine
-          moves={mainLine}
-          selectedId={selectedMainLineId}
-          onSelect={(id) => {
-            setCurrentNodeId(id);
-            setActiveLineId(id);
-          }}
+          activeLine={activeLineNodes.slice(1)}
+          moveMarks={moveMarksMap}
+          currentNodeId={currentNodeId}
+          selectNode={setCurrentNodeId}
         />
         <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.bottom} />

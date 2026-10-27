@@ -1,16 +1,19 @@
 import { useEffect, useRef } from "react";
-import { type MoveMark, MoveMarks, MoveMarksIconPath, MoveMarksName } from "../lib/moveMarks.ts";
+import type { MoveNode } from "../lib/GameTree.ts";
+import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksIconPath, MoveMarksName } from "../lib/moveMarks.ts";
 
 const QUIET_MARKS: MoveMark[] = [MoveMarks.BOOK, MoveMarks.BEST, MoveMarks.OK];
 
 export function MoveLine({
-  moves,
-  selectedId,
-  onSelect,
+  activeLine,
+  moveMarks,
+  currentNodeId,
+  selectNode,
 }: {
-  moves: { id: string; san: string; mark: MoveMark | null }[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  activeLine: MoveNode[];
+  moveMarks: Record<string, MoveMarkResult>;
+  currentNodeId: string;
+  selectNode: (id: string) => void;
 }) {
   const selectedRef = useRef<HTMLButtonElement | null>(null);
 
@@ -18,21 +21,22 @@ export function MoveLine({
     function keepSelectedMoveVisible() {
       selectedRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     },
-    [selectedId],
+    [currentNodeId],
   );
 
   return (
     <div className="w-full max-w-180 min-h-9 overflow-x-auto rounded-md border border-gray-200 bg-gray-50 px-2 py-1">
       <div className="flex items-center gap-1 min-w-max">
-        {moves.map(function renderMove(move, index) {
-          const isSelected = move.id === selectedId;
-          const mark = move.mark && !QUIET_MARKS.includes(move.mark) ? move.mark : null;
+        {activeLine.map(function renderMove(move, index) {
+          const isSelected = move.id === currentNodeId;
+          const markValue = moveMarks[move.id]?.mark;
+          const mark = markValue && !QUIET_MARKS.includes(markValue) ? markValue : null;
           return (
             <button
               key={move.id}
               ref={isSelected ? selectedRef : null}
               onClick={function handleClick() {
-                onSelect(move.id);
+                selectNode(move.id);
               }}
               className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold whitespace-nowrap transition-colors ${isSelected ? "bg-indigo-600 text-white" : "text-gray-700 hover:bg-gray-200"}`}
             >
