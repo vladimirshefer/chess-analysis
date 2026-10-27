@@ -1,230 +1,86 @@
-import { Chess } from "chess.js";
-
+/**
+ * Book of known chess openings, loaded once from `openings.csv`.
+ *
+ * Usage: `await load()` first. After that `isKnownMovePath` can be used synchronously.
+ * Moves are always SAN, e.g. ["e4", "e5", "Nf3"].
+ */
 export namespace OpeningsBook {
-  interface OpeningEntry {
-    name?: string;
-    pgn?: string;
-  }
-
   export interface Opening {
     name: string;
     pgn: string;
     plyCount: number;
   }
 
-  interface KnownOpeningsData {
-    knownMovePathPrefixes: Set<string>;
-    openingByMovePathPrefix: Map<string, Opening>;
+  const OPENINGS_CSV_PATH = "/openings/openings.csv";
+  // Columns: eco-volume,eco,name,pgn,... The name is quoted when it contains commas.
+  const CSV_ROW = /^[^,]*,[^,]*,(?:"([^"]*)"|([^,]*)),([^,]*)/;
+
+  // Every prefix of every opening's moves ("e4", "e4 e5", ...) -> the shortest opening that starts with it.
+  // Empty until load() is done (or if it failed).
+  let openingByPrefix = new Map<string, Opening>();
+  let loadPromise: Promise<void> | null = null;
+
+  /** Fetches the book. Safe to call many times; never rejects. */
+  export function load(): Promise<void> {
+    loadPromise ??= fetchOpenings().then(indexOpenings, function logFailure(error) {
+      console.error("Failed to load openings book", error);
+    });
+    return loadPromise;
   }
 
-  const OPENINGS_FILE_PATHS = [
-    "/openings/openings-other.json",
-    "/openings/openings-e4-e5-nf3.json",
-    "/openings/openings-e4-e5.json",
-    "/openings/openings-e4-c5.json",
-    "/openings/openings-e4-other.json",
-    "/openings/openings-d4-d5.json",
-    "/openings/openings-d4-other.json",
-  ] as const;
-
-  let knownOpeningsDataPromise: Promise<KnownOpeningsData> | null = null;
-  let knownOpeningsData: KnownOpeningsData | null = null;
-
-  export function toMovePathKey(sanMoves: readonly string[]): string {
-    return sanMoves.join(" ");
-  }
-
-  export async function load(): Promise<void> {
-    await getKnownOpeningsData();
-  }
-
+  /** True if the moves are the beginning of some known opening. Always false before load() is done. */
   export function isKnownMovePath(sanMoves: readonly string[]): boolean {
-    const movePathKey = toMovePathKey(sanMoves);
-    return knownOpeningsData?.knownMovePathPrefixes.has(movePathKey) ?? false;
+    return openingByPrefix.has(sanMoves.join(" "));
   }
 
+  /** The opening matching the longest prefix of the moves, or null if none matches. */
   export async function getOpeningBySanMoves(sanMoves: readonly string[]): Promise<Opening | null> {
-    if (sanMoves.length === 0) return null;
-
-    const knownData = await getKnownOpeningsData();
-    for (let index = sanMoves.length; index >= 1; index -= 1) {
-      const movePathKey = toMovePathKey(sanMoves.slice(0, index));
-      const opening = knownData.openingByMovePathPrefix.get(movePathKey);
-      if (opening) return cloneOpening(opening);
+    await load();
+    for (let length = sanMoves.length; length >= 1; length -= 1) {
+      const opening = openingByPrefix.get(sanMoves.slice(0, length).join(" "));
+      if (opening) return { ...opening };
     }
-
     return null;
   }
 
-  async function getKnownOpeningsData(): Promise<KnownOpeningsData> {
-    if (knownOpeningsData) {
-      return knownOpeningsData;
-    }
+  async function fetchOpenings(): Promise<Opening[]> {
+    const response = await fetch(OPENINGS_CSV_PATH);
+    if (!response.ok) throw new Error(`Failed to fetch ${OPENINGS_CSV_PATH}`);
 
-    if (!knownOpeningsDataPromise) {
-      knownOpeningsDataPromise = loadKnownOpeningsData().then(function cacheKnownOpeningsData(data) {
-        knownOpeningsData = data;
-        return data;
-      });
+    const openings: Opening[] = [];
+    for (const line of (await response.text()).split(/\r?\n/).slice(1)) {
+      const match = CSV_ROW.exec(line);
+      const name = (match?.[1] ?? match?.[2])?.trim();
+      const pgn = match?.[3].trim();
+      if (name && pgn) openings.push({ name, pgn, plyCount: toSanMoves(pgn).length });
     }
-
-    return knownOpeningsDataPromise;
+    return openings;
   }
 
-  async function loadKnownOpeningsData(): Promise<KnownOpeningsData> {
-    try {
-      const openingLists = await Promise.all(OPENINGS_FILE_PATHS.map(loadOpeningEntries));
-      const allOpenings = openingLists.flat();
-      const knownMovePathPrefixes = new Set<string>();
-      const openingByMovePathPrefix = new Map<string, Opening>();
-
-      for (const openingEntry of allOpenings) {
-        const sanMoves = toMainlineMoves(openingEntry.pgn ?? "");
-        for (let index = 0; index < sanMoves.length; index += 1) {
-          const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
-          knownMovePathPrefixes.add(movePathPrefix);
-        }
-
-        const opening = toOpening(openingEntry, sanMoves);
-        if (!opening) continue;
-
-        for (let index = 0; index < sanMoves.length; index += 1) {
-          const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
-          upsertOpening(openingByMovePathPrefix, movePathPrefix, opening);
-        }
-      }
-
-      return {
-        knownMovePathPrefixes,
-        openingByMovePathPrefix,
-      };
-    } catch (error) {
-      console.error("Failed to load openings book", error);
-      return {
-        knownMovePathPrefixes: new Set<string>(),
-        openingByMovePathPrefix: new Map<string, Opening>(),
-      };
-    }
-  }
-
-  async function loadOpeningEntries(path: string): Promise<OpeningEntry[]> {
-    const response = await fetch(path);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch openings file: ${path}`);
-    }
-
-    const data = (await response.json()) as unknown;
-    return Array.isArray(data) ? (data as OpeningEntry[]) : [];
-  }
-
-  function stripVariations(pgn: string): string {
-    let depth = 0;
-    let result = "";
-
-    for (let index = 0; index < pgn.length; index += 1) {
-      const char = pgn[index];
-      if (char === "(") {
-        depth += 1;
-        continue;
-      }
-      if (char === ")") {
-        depth = Math.max(0, depth - 1);
-        continue;
-      }
-      if (depth === 0) {
-        result += char;
-      }
-    }
-
-    return result;
-  }
-
-  function toMainlineMoves(pgn: string): string[] {
-    const value = pgn.trim();
-    if (!value) return [];
-
-    const withoutVariations = stripVariations(value);
-    const directMoves = tryParseMovesWithChess(withoutVariations);
-    if (directMoves.length > 0) return directMoves;
-
-    const fallbackTokens = tokenizeSanMoves(withoutVariations);
-    if (fallbackTokens.length === 0) return [];
-
-    const chess = new Chess();
-    const moves: string[] = [];
-    for (const token of fallbackTokens) {
-      try {
-        const move = chess.move(token);
-        if (!move) break;
-        moves.push(move.san);
-      } catch {
-        break;
-      }
-    }
-
-    return moves;
-  }
-
-  function tryParseMovesWithChess(pgn: string): string[] {
-    try {
-      const chess = new Chess();
-      chess.loadPgn(pgn);
-      return chess.history();
-    } catch {
-      return [];
-    }
-  }
-
-  function tokenizeSanMoves(pgn: string): string[] {
+  // Opening PGNs are plain SAN move text ("1. e4 e5 2. Nf3"), so no chess.js parsing is needed.
+  function toSanMoves(pgn: string): string[] {
     return pgn
-      .replace(/\{[^}]*\}/g, " ")
-      .replace(/;[^\n\r]*/g, " ")
-      .replace(/\$\d+/g, " ")
-      .replace(/\d+\.(?:\.\.)?/g, " ")
-      .replace(/\b(?:1-0|0-1|1\/2-1\/2|\*)\b/g, " ")
+      .replace(/\d+\.+/g, " ")
       .split(/\s+/)
-      .map(function cleanToken(token) {
-        return token.replace(/[!?]+/g, "");
-      })
       .filter(Boolean);
   }
 
-  function toOpening(openingEntry: OpeningEntry, sanMoves: string[]): Opening | null {
-    const openingName = openingEntry.name?.trim();
-    if (!openingName) return null;
-
-    return {
-      name: openingName,
-      pgn: openingEntry.pgn?.trim() ?? "",
-      plyCount: sanMoves.length,
-    };
-  }
-
-  function upsertOpening(openingsByKey: Map<string, Opening>, key: string, opening: Opening): void {
-    const previousOpening = openingsByKey.get(key);
-    if (!previousOpening) {
-      openingsByKey.set(key, opening);
-      return;
+  function indexOpenings(openings: Opening[]): void {
+    const index = new Map<string, Opening>();
+    for (const opening of openings) {
+      const sanMoves = toSanMoves(opening.pgn);
+      for (let length = 1; length <= sanMoves.length; length += 1) {
+        const key = sanMoves.slice(0, length).join(" ");
+        const previous = index.get(key);
+        if (!previous || isPreferred(opening, previous)) index.set(key, opening);
+      }
     }
-
-    if (isPreferredOpening(previousOpening, opening)) {
-      openingsByKey.set(key, opening);
-    }
+    openingByPrefix = index;
   }
 
-  function isPreferredOpening(previousOpening: Opening, nextOpening: Opening): boolean {
-    if (nextOpening.plyCount < previousOpening.plyCount) return true;
-    if (nextOpening.plyCount > previousOpening.plyCount) return false;
-    return nextOpening.name.localeCompare(previousOpening.name) < 0;
-  }
-
-  function cloneOpening(opening: Opening | null): Opening | null {
-    if (!opening) return null;
-
-    return {
-      name: opening.name,
-      pgn: opening.pgn,
-      plyCount: opening.plyCount,
-    };
+  // Shorter openings win, ties are broken by name.
+  function isPreferred(candidate: Opening, current: Opening): boolean {
+    if (candidate.plyCount !== current.plyCount) return candidate.plyCount < current.plyCount;
+    return candidate.name.localeCompare(current.name) < 0;
   }
 }
