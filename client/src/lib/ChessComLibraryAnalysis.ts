@@ -164,6 +164,8 @@ export namespace ChessComLibraryAnalysis {
         lastAnalyzedFen: null,
         whiteAccuracy: summary.whiteAccuracy,
         blackAccuracy: summary.blackAccuracy,
+        whiteMarks: summary.whiteMarks,
+        blackMarks: summary.blackMarks,
         histogramValues: summary.histogramValues,
         materialValues: summary.materialValues,
         analysisByFen: ChessComGameAnalysisStorage.fromPositionAnalysisMap(analysesByFen),
@@ -210,6 +212,7 @@ export namespace ChessComLibraryAnalysis {
       left.whiteAccuracy === right.whiteAccuracy &&
       left.blackAccuracy === right.blackAccuracy &&
       left.errorMessage === right.errorMessage &&
+      JSON.stringify([left.whiteMarks, left.blackMarks]) === JSON.stringify([right.whiteMarks, right.blackMarks]) &&
       left.histogramValues.join(",") === right.histogramValues.join(",") &&
       left.materialValues.join(",") === right.materialValues.join(",") &&
       JSON.stringify(left.analysisByFen) === JSON.stringify(right.analysisByFen)
@@ -221,6 +224,7 @@ export namespace ChessComLibraryAnalysis {
     return (
       entity.status === "done" &&
       entity.targetDepth === TARGET_DEPTH &&
+      !!entity.whiteMarks &&
       entity.totalPositions > 0 &&
       entity.analyzedPositions >= entity.totalPositions &&
       Object.keys(entity.analysisByFen).length > 0

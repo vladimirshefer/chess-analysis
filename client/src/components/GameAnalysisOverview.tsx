@@ -1,25 +1,12 @@
 import { useMemo } from "react";
-import { type MoveMark, type MoveMarkResult, MoveMarks, MoveMarksIconPath, MoveMarksName } from "../lib/moveMarks.ts";
+import type { MoveMarkResult } from "../lib/moveMarks.ts";
 import { GameAnalysisSummary } from "../lib/GameAnalysisSummary.ts";
 import ValuesHistogram from "./ValuesHistogram.tsx";
+import MoveMarksSummary from "./MoveMarksSummary.tsx";
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
 import type { MoveNode } from "../lib/GameTree.ts";
 
 type NodeAnalysis = AnalysisGame.NodeAnalysis;
-
-namespace GameAnalysisOverviewView {
-  export const moveMarksOrder: MoveMark[] = [
-    MoveMarks.BRILLIANT,
-    MoveMarks.ONLY_MOVE,
-    MoveMarks.BEST,
-    MoveMarks.OK,
-    MoveMarks.BOOK,
-    MoveMarks.INACCURACY,
-    MoveMarks.MISTAKE,
-    MoveMarks.MISS,
-    MoveMarks.BLUNDER,
-  ];
-}
 
 function GameAnalysisOverview({
   activeLine,
@@ -92,30 +79,8 @@ function GameAnalysisOverview({
           <div className={"text-[8px]"}>{"Accuracy"}</div>
         </div>
 
-        <div className={"flex gap-3 flex-wrap items-center justify-center"}>
-          {GameAnalysisOverviewView.moveMarksOrder
-            .filter((mark) => (summary.whiteMarks[mark] ?? 0) > 0)
-            .map((mark) => (
-              <div className={"flex gap-1"} key={mark}>
-                <div className="flex items-center">
-                  <img src={MoveMarksIconPath[mark]} alt={MoveMarksName[mark]} className="w-[1em] h-[1em] shrink-0" />
-                </div>
-                <div className="text-right font-semibold text-gray-900">{summary.whiteMarks[mark] ?? 0}</div>
-              </div>
-            ))}
-        </div>
-        <div className={"flex gap-3 flex-wrap items-center justify-center"}>
-          {GameAnalysisOverviewView.moveMarksOrder
-            .filter((mark) => (summary.blackMarks[mark] ?? 0) > 0)
-            .map((mark) => (
-              <div className={"flex gap-1"} key={mark}>
-                <div className="flex items-center">
-                  <img src={MoveMarksIconPath[mark]} alt={MoveMarksName[mark]} className="w-[1em] h-[1em] shrink-0" />
-                </div>
-                <div className="text-right font-medium text-gray-900">{summary.blackMarks[mark] ?? 0}</div>
-              </div>
-            ))}
-        </div>
+        <MoveMarksSummary marks={summary.whiteMarks} />
+        <MoveMarksSummary marks={summary.blackMarks} />
       </div>
     </div>
   );

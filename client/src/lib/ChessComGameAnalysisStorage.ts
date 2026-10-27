@@ -14,6 +14,8 @@ export namespace ChessComGameAnalysisStorage {
     lastAnalyzedFen: string | null;
     whiteAccuracy: number | null;
     blackAccuracy: number | null;
+    whiteMarks?: Record<string, number>;
+    blackMarks?: Record<string, number>;
     histogramValues: number[];
     materialValues: number[];
     analysisByFen: Record<string, PersistedNodeAnalysisEntity>;
@@ -215,6 +217,8 @@ export namespace ChessComGameAnalysisStorage {
       lastAnalyzedFen: entity.lastAnalyzedFen,
       whiteAccuracy: entity.whiteAccuracy,
       blackAccuracy: entity.blackAccuracy,
+      ...(entity.whiteMarks ? { whiteMarks: { ...entity.whiteMarks } } : {}),
+      ...(entity.blackMarks ? { blackMarks: { ...entity.blackMarks } } : {}),
       histogramValues: [...entity.histogramValues],
       materialValues: [...entity.materialValues],
       analysisByFen: Object.entries(entity.analysisByFen).reduce(

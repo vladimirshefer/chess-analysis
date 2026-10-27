@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import MoveMarksSummary from "../../components/MoveMarksSummary.tsx";
 import ValuesHistogram from "../../components/ValuesHistogram.tsx";
 import { ChessComClient } from "../../lib/ChessComClient.ts";
 import { ChessComGameAnalysisStorage } from "../../lib/ChessComGameAnalysisStorage.ts";
@@ -72,6 +73,21 @@ function LibraryGameCard({
   analysis: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null;
 }) {
   const progress = analysis?.totalPositions ? analysis.analyzedPositions / analysis.totalPositions : 0;
+  const myColor = ChessComUser.getInitialBoardOrientation(game, ChessComUser.loadUsername());
+  const white = {
+    color: "white",
+    player: game.white,
+    accuracy: analysis?.whiteAccuracy ?? null,
+    marks: analysis?.whiteMarks ?? {},
+  };
+  const black = {
+    color: "black",
+    player: game.black,
+    accuracy: analysis?.blackAccuracy ?? null,
+    marks: analysis?.blackMarks ?? {},
+  };
+  const [me, opponent] = myColor === "white" ? [white, black] : [black, white];
+  const statusLabel = toStatusLabel(analysis);
 
   return (
     <Link
@@ -82,16 +98,17 @@ function LibraryGameCard({
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
           <div className="min-w-0">
             <div className="font-bold text-gray-900 truncate">
-              {game.white.username} vs {game.black.username}
+              {me.player.username} vs {opponent.player.username}
             </div>
             <div className="text-xs text-gray-500">
-              {formatTimestamp(game.endTime)} · {game.timeClass} · {game.timeControl}
+              {formatTimestamp(game.endTime)} · {game.timeClass}
+              {game.timeControl && game.timeControl !== "-" ? ` · ${game.timeControl}` : ""}
             </div>
           </div>
-          <div className="text-xs font-medium text-gray-500">{toStatusLabel(analysis)}</div>
+          {statusLabel && <div className="text-xs font-medium text-gray-500">{statusLabel}</div>}
         </div>
 
-        {analysis && analysis.totalPositions > 0 && (
+        {analysis && analysis.status !== "done" && analysis.totalPositions > 0 && (
           <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
             <div
               className="h-full rounded-full bg-indigo-500 transition-all"
@@ -100,18 +117,17 @@ function LibraryGameCard({
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_180px] gap-4 items-center">
-          <div className="grid grid-cols-2 gap-3">
-            <PlayerSummary side="White" player={game.white} accuracy={analysis?.whiteAccuracy ?? null} />
-            <PlayerSummary side="Black" player={game.black} accuracy={analysis?.blackAccuracy ?? null} />
-          </div>
+        <div className="rounded-md overflow-hidden border border-gray-200 bg-white">
+          <ValuesHistogram
+            className={myColor === "white" ? "" : "scale-y-[-1]"}
+            values={analysis?.histogramValues ?? []}
+            secondaryValues={analysis?.materialValues ?? []}
+          />
+        </div>
 
-          <div className="rounded-md overflow-hidden border border-gray-200 bg-white">
-            <ValuesHistogram
-              values={analysis?.histogramValues ?? []}
-              secondaryValues={analysis?.materialValues ?? []}
-            />
-          </div>
+        <div className="grid grid-cols-2 gap-3">
+          <PlayerSummary {...me} />
+          <PlayerSummary {...opponent} />
         </div>
       </div>
     </Link>
@@ -119,23 +135,30 @@ function LibraryGameCard({
 }
 
 function PlayerSummary({
-  side,
+  color,
   player,
   accuracy,
+  marks,
 }: {
-  side: string;
+  color: string;
   player: ChessComClient.Dto.ChessComGamePlayer;
   accuracy: number | null;
+  marks: Record<string, number>;
 }) {
   return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-      <div className="font-semibold text-gray-800">{side}</div>
-      <div className="text-sm text-gray-600">
-        {player.username}
-        {typeof player.rating === "number" ? ` (${player.rating})` : ""}
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex flex-col gap-1">
+      <div className="flex items-center gap-2 text-sm text-gray-800 min-w-0">
+        <span
+          className={`w-3 h-3 shrink-0 rounded-sm border border-gray-400 ${color === "white" ? "bg-white" : "bg-black"}`}
+        />
+        <span className="font-semibold truncate">{player.username}</span>
+        {typeof player.rating === "number" && <span className="text-gray-500">({player.rating})</span>}
       </div>
-      <div className="text-xs text-gray-400">Result: {player.result ?? "-"}</div>
-      <div className="text-xs text-gray-400">Accuracy: {formatAccuracy(accuracy)}</div>
+      <div className="flex items-baseline gap-2 text-xs text-gray-500">
+        <span className={player.result === "win" ? "font-semibold text-green-600" : ""}>{player.result ?? "-"}</span>
+        <span className="text-lg font-semibold text-gray-900">{formatAccuracy(accuracy)}</span>
+      </div>
+      <MoveMarksSummary marks={marks} className="justify-start text-sm" />
     </div>
   );
 }
@@ -154,7 +177,7 @@ function toEntityByGameId(
 
 function toStatusLabel(analysis: ChessComGameAnalysisStorage.ChessComGameAnalysisEntity | null): string {
   if (!analysis) return "Pending";
-  if (analysis.status === "done") return "Ready";
+  if (analysis.status === "done") return "";
   if (analysis.status === "running") return `Analyzing ${analysis.analyzedPositions}/${analysis.totalPositions}`;
   if (analysis.status === "failed") return analysis.errorMessage ? `Failed: ${analysis.errorMessage}` : "Failed";
   return `Pending ${analysis.analyzedPositions}/${analysis.totalPositions}`;
@@ -162,12 +185,12 @@ function toStatusLabel(analysis: ChessComGameAnalysisStorage.ChessComGameAnalysi
 
 function formatTimestamp(timestamp: number | null): string {
   if (!timestamp) return "Unknown date";
-  return new Date(timestamp * 1000).toLocaleString();
+  return new Date(timestamp * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatAccuracy(accuracy: number | null): string {
   if (typeof accuracy !== "number") return "-";
-  return `${accuracy.toFixed(1)}%`;
+  return `${Math.round(accuracy)}%`;
 }
 
 export default ChessComLibraryPage;
