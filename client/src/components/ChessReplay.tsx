@@ -136,23 +136,15 @@ export function ChessReplayImpl({
 
   const engine = useMemo(() => engineQuery.data as ChessEngine | undefined, [engineQuery.data]);
 
-  const [openingsReady, setOpeningsReady] = useState(false);
-
-  useEffect(
-    function loadOpeningsForTree() {
-      let isCancelled = false;
-      setOpeningsReady(false);
-      void GameAnalysisSummary.ensureOpeningsLoaded(tree).then(function markOpeningsReady() {
-        if (isCancelled) return;
-        setOpeningsReady(true);
-      });
-
-      return function cleanup() {
-        isCancelled = true;
-      };
+  const openingsBookQuery = useQuery({
+    queryKey: ["openingsBook"],
+    queryFn: async () => {
+      await OpeningsBook.load();
+      return true;
     },
-    [tree],
-  );
+  });
+
+  const openingsReady = useMemo(() => !!openingsBookQuery.data, [openingsBookQuery.data]);
 
   useEffect(
     function syncPgnEditorText() {
@@ -844,14 +836,7 @@ function areOpeningsEqual(left?: OpeningsBook.Opening | null, right?: OpeningsBo
   if (left === right) return true;
   if (!left || !right) return !left && !right;
 
-  return (
-    left.name === right.name &&
-    left.plyCount === right.plyCount &&
-    left.sanMoves.length === right.sanMoves.length &&
-    left.sanMoves.every(function isSameMove(move, index) {
-      return move === right.sanMoves[index];
-    })
-  );
+  return left.name === right.name && left.pgn === right.pgn && left.plyCount === right.plyCount;
 }
 
 function areDisplayLinesEqual(left: DisplayEngineLine[], right: DisplayEngineLine[]): boolean {

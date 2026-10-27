@@ -35,21 +35,6 @@ export namespace GameAnalysisSummary {
    */
   const EVAL_LOSS_CLAMP = 300;
 
-  export async function ensureOpeningsLoaded(tree: GameTree): Promise<void> {
-    const movePathKeys = new Set<string>();
-
-    Object.values(tree).forEach(function collectMovePathKey(node) {
-      const movePathKey = GameTreeUtils.getPgnToPosition(node.id, tree);
-      if (movePathKey) movePathKeys.add(movePathKey);
-    });
-
-    await Promise.all(
-      Array.from(movePathKeys).map(function ensureLoaded(movePathKey) {
-        return OpeningsBook.ensureLoadedForMoves(movePathKey.split(" "));
-      }),
-    );
-  }
-
   export function buildMoveMarks(
     tree: GameTree,
     analysesByFen: Record<string, NodeAnalysis>,

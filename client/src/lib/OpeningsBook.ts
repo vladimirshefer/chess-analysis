@@ -1,146 +1,149 @@
 export namespace OpeningsBook {
   interface OpeningEntry {
     name?: string;
-    sanMoves?: string[];
+    pgn?: string;
   }
 
   export interface Opening {
     name: string;
-    sanMoves: string[];
+    pgn: string;
     plyCount: number;
   }
 
-  const OTHER_PATH = "/openings/openings-other.json";
-  const E4_E5_NF3_PATH = "/openings/openings-e4-e5-nf3.json";
-  const E4_E5_PATH = "/openings/openings-e4-e5.json";
-  const E4_C5_PATH = "/openings/openings-e4-c5.json";
-  const E4_OTHER_PATH = "/openings/openings-e4-other.json";
-  const D4_D5_PATH = "/openings/openings-d4-d5.json";
-  const D4_OTHER_PATH = "/openings/openings-d4-other.json";
+  interface KnownOpeningsData {
+    knownMovePathPrefixes: Set<string>;
+    openingByMovePathPrefix: Map<string, Opening>;
+  }
 
-  const knownMovePathPrefixes = new Set<string>();
-  const openingByMovePathPrefix = new Map<string, Opening>();
-  const loadedShardPaths = new Set<string>();
-  const shardLoadPromises = new Map<string, Promise<void>>();
+  const OPENINGS_CSV_PATH = "/openings/openings.csv";
+
+  let knownOpeningsDataPromise: Promise<KnownOpeningsData> | null = null;
+  let knownOpeningsData: KnownOpeningsData | null = null;
 
   export function toMovePathKey(sanMoves: readonly string[]): string {
     return sanMoves.join(" ");
   }
 
-  export async function ensureLoadedForMoves(sanMoves: readonly string[]): Promise<void> {
-    if (sanMoves.length === 0) return;
-
-    const shardPaths = resolveShardPathsForMoves(sanMoves);
-    await Promise.all(shardPaths.map(loadShard));
+  export async function load(): Promise<void> {
+    await getKnownOpeningsData();
   }
 
   export function isKnownMovePath(sanMoves: readonly string[]): boolean {
     const movePathKey = toMovePathKey(sanMoves);
-    return knownMovePathPrefixes.has(movePathKey);
+    return knownOpeningsData?.knownMovePathPrefixes.has(movePathKey) ?? false;
   }
 
   export async function getOpeningBySanMoves(sanMoves: readonly string[]): Promise<Opening | null> {
     if (sanMoves.length === 0) return null;
 
-    await ensureLoadedForMoves(sanMoves);
-    let opening = findOpeningByMovePath(sanMoves);
-
-    if (!opening) {
-      const fallbackShardPath = resolveFallbackShardPathForMoves(sanMoves);
-      if (fallbackShardPath && !loadedShardPaths.has(fallbackShardPath)) {
-        await loadShard(fallbackShardPath);
-        opening = findOpeningByMovePath(sanMoves);
-      }
-    }
-
-    return cloneOpening(opening);
-  }
-
-  function findOpeningByMovePath(sanMoves: readonly string[]): Opening | null {
+    const knownData = await getKnownOpeningsData();
     for (let index = sanMoves.length; index >= 1; index -= 1) {
       const movePathKey = toMovePathKey(sanMoves.slice(0, index));
-      const opening = openingByMovePathPrefix.get(movePathKey);
-      if (opening) return opening;
+      const opening = knownData.openingByMovePathPrefix.get(movePathKey);
+      if (opening) return cloneOpening(opening);
     }
 
     return null;
   }
 
-  function resolveShardPathsForMoves(sanMoves: readonly string[]): string[] {
-    const firstMove = sanMoves[0];
-
-    if (firstMove === "e4") {
-      const secondMove = sanMoves[1];
-      if (secondMove === "e5") {
-        const thirdMove = sanMoves[2];
-        return thirdMove === "Nf3" ? [E4_E5_NF3_PATH, E4_E5_PATH] : [E4_E5_PATH];
-      }
-      if (secondMove === "c5") return [E4_C5_PATH];
-      return [E4_OTHER_PATH];
+  async function getKnownOpeningsData(): Promise<KnownOpeningsData> {
+    if (knownOpeningsData) {
+      return knownOpeningsData;
     }
 
-    if (firstMove === "d4") {
-      const secondMove = sanMoves[1];
-      return secondMove === "d5" ? [D4_D5_PATH] : [D4_OTHER_PATH];
+    if (!knownOpeningsDataPromise) {
+      knownOpeningsDataPromise = loadKnownOpeningsData().then(function cacheKnownOpeningsData(data) {
+        knownOpeningsData = data;
+        return data;
+      });
     }
 
-    return [OTHER_PATH];
+    return knownOpeningsDataPromise;
   }
 
-  function resolveFallbackShardPathForMoves(sanMoves: readonly string[]): string | null {
-    const firstMove = sanMoves[0];
+  async function loadKnownOpeningsData(): Promise<KnownOpeningsData> {
+    try {
+      const allOpenings = await loadOpeningEntries();
+      const knownMovePathPrefixes = new Set<string>();
+      const openingByMovePathPrefix = new Map<string, Opening>();
 
-    if (firstMove === "e4") return E4_OTHER_PATH;
-    if (firstMove === "d4") return D4_OTHER_PATH;
-    return null;
-  }
+      for (const openingEntry of allOpenings) {
+        const sanMoves = toMainlineMoves(openingEntry.pgn ?? "");
+        for (let index = 0; index < sanMoves.length; index += 1) {
+          const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
+          knownMovePathPrefixes.add(movePathPrefix);
+        }
 
-  function loadShard(path: string): Promise<void> {
-    if (loadedShardPaths.has(path)) return Promise.resolve();
+        const opening = toOpening(openingEntry, sanMoves);
+        if (!opening) continue;
 
-    let shardLoadPromise = shardLoadPromises.get(path);
-    if (!shardLoadPromise) {
-      shardLoadPromise = loadOpeningEntries(path)
-        .then(function indexShardEntries(entries) {
-          mergeEntriesIntoIndex(entries);
-          loadedShardPaths.add(path);
-        })
-        .catch(function handleShardLoadError(error) {
-          console.error(`Failed to load openings shard: ${path}`, error);
-          shardLoadPromises.delete(path);
-        });
-      shardLoadPromises.set(path, shardLoadPromise);
-    }
-
-    return shardLoadPromise;
-  }
-
-  function mergeEntriesIntoIndex(openingEntries: OpeningEntry[]): void {
-    for (const openingEntry of openingEntries) {
-      const sanMoves = openingEntry.sanMoves ?? [];
-      for (let index = 0; index < sanMoves.length; index += 1) {
-        const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
-        knownMovePathPrefixes.add(movePathPrefix);
+        for (let index = 0; index < sanMoves.length; index += 1) {
+          const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
+          upsertOpening(openingByMovePathPrefix, movePathPrefix, opening);
+        }
       }
 
-      const opening = toOpening(openingEntry, sanMoves);
-      if (!opening) continue;
-
-      for (let index = 0; index < sanMoves.length; index += 1) {
-        const movePathPrefix = toMovePathKey(sanMoves.slice(0, index + 1));
-        upsertOpening(openingByMovePathPrefix, movePathPrefix, opening);
-      }
+      return {
+        knownMovePathPrefixes,
+        openingByMovePathPrefix,
+      };
+    } catch (error) {
+      console.error("Failed to load openings book", error);
+      return {
+        knownMovePathPrefixes: new Set<string>(),
+        openingByMovePathPrefix: new Map<string, Opening>(),
+      };
     }
   }
 
-  async function loadOpeningEntries(path: string): Promise<OpeningEntry[]> {
-    const response = await fetch(path);
+  async function loadOpeningEntries(): Promise<OpeningEntry[]> {
+    const response = await fetch(OPENINGS_CSV_PATH);
     if (!response.ok) {
-      throw new Error(`Failed to fetch openings file: ${path}`);
+      throw new Error(`Failed to fetch openings file: ${OPENINGS_CSV_PATH}`);
     }
 
-    const data = (await response.json()) as unknown;
-    return Array.isArray(data) ? (data as OpeningEntry[]) : [];
+    const [header, ...lines] = (await response.text()).split(/\r?\n/).filter(Boolean);
+    const columns = parseCsvLine(header);
+    const nameIndex = columns.indexOf("name");
+    const pgnIndex = columns.indexOf("pgn");
+    return lines.map(function toEntry(line) {
+      const row = parseCsvLine(line);
+      return { name: row[nameIndex], pgn: row[pgnIndex] };
+    });
+  }
+
+  function parseCsvLine(line: string): string[] {
+    const values: string[] = [];
+    let current = "";
+    let insideQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      if (char === '"') {
+        if (insideQuotes && line[index + 1] === '"') {
+          current += '"';
+          index += 1;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === "," && !insideQuotes) {
+        values.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+
+    values.push(current);
+    return values;
+  }
+
+  // Openings PGNs are plain SAN move text ("1. e4 e5 2. Nf3"), so no chess.js parsing is needed.
+  function toMainlineMoves(pgn: string): string[] {
+    return pgn
+      .replace(/\d+\.+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
   }
 
   function toOpening(openingEntry: OpeningEntry, sanMoves: string[]): Opening | null {
@@ -149,7 +152,7 @@ export namespace OpeningsBook {
 
     return {
       name: openingName,
-      sanMoves,
+      pgn: openingEntry.pgn?.trim() ?? "",
       plyCount: sanMoves.length,
     };
   }
@@ -177,7 +180,7 @@ export namespace OpeningsBook {
 
     return {
       name: opening.name,
-      sanMoves: [...opening.sanMoves],
+      pgn: opening.pgn,
       plyCount: opening.plyCount,
     };
   }
