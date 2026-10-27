@@ -19,7 +19,6 @@ import { type AbsoluteNumericEvaluation, START, START_FEN } from "../lib/evaluat
 import { classifyMoveMark, type MoveMark, type MoveMarkResult, MoveMarks } from "../lib/moveMarks";
 import { GameAnalysisSummary } from "../lib/GameAnalysisSummary.ts";
 import { OpeningsBook } from "../lib/OpeningsBook";
-import { PortableGameNotation } from "../lib/PortableGameNotation";
 import EvaluationThermometer from "./EvaluationThermometer";
 import { MoveLine } from "./MoveLine";
 import RenderIcon from "./RenderIcon";
@@ -226,47 +225,20 @@ export function ChessReplayImpl({
     return GameAnalysisSummary.buildMoveMarks(tree, positionAnalysisMap);
   }, [openingsReady, positionAnalysisMap, tree]);
 
-  const mainLineNodeIds = useMemo(
-    function buildMainLineNodeIds() {
-      return getMainLineNodeIds(tree);
-    },
-    [tree],
-  );
+  const mainLine = useMemo(() => {
+    const moves: { id: string; san: string; mark: MoveMark | null }[] = [];
+    for (let id = tree[ROOT_ANALYSIS_NODE_ID]?.children[0]; id; id = tree[id]?.children[0]) {
+      moves.push({ id, san: tree[id].san, mark: moveMarksMap[id]?.mark ?? null });
+    }
+    return moves;
+  }, [moveMarksMap, tree]);
 
-  const mainLinePgn = useMemo(
-    function buildMainLinePgn() {
-      const mainLineMoves = mainLineNodeIds
-        .map(function toMainLineMove(nodeId) {
-          const node = tree[nodeId];
-          if (!node?.san) return null;
-
-          return {
-            san: node.san,
-            mark: toNativeMoveMark(moveMarksMap[nodeId]?.mark),
-          };
-        })
-        .filter((move): move is PortableGameNotation.MoveToken => move !== null);
-      return PortableGameNotation.toPgnFromMoves(mainLineMoves);
-    },
-    [mainLineNodeIds, moveMarksMap, tree],
-  );
-
-  const selectedMainLineIndex = useMemo(
-    function resolveSelectedMainLineIndex() {
-      return getSelectedMainLineIndex(currentNodeId, tree, mainLineNodeIds);
-    },
-    [currentNodeId, mainLineNodeIds, tree],
-  );
-
-  const onMainLineMoveSelected = useCallback(
-    function selectMainLineMove(index: number) {
-      const nodeId = mainLineNodeIds[index];
-      if (!nodeId) return;
-      setCurrentNodeId(nodeId);
-      setActiveLineId(nodeId);
-    },
-    [mainLineNodeIds],
-  );
+  const selectedMainLineId = useMemo(() => {
+    const mainLineIds = new Set(mainLine.map((move) => move.id));
+    let id: string | null = currentNodeId;
+    while (id && !mainLineIds.has(id)) id = tree[id]?.parentId ?? null;
+    return id;
+  }, [currentNodeId, mainLine, tree]);
 
   const lastBookOpeningName = useMemo(
     () => findClosestOpeningName(currentNodeId, tree, positionAnalysisMap),
@@ -585,9 +557,12 @@ export function ChessReplayImpl({
           </div>
         </div>
         <MoveLine
-          mainLinePgn={mainLinePgn}
-          selectedIndex={selectedMainLineIndex}
-          onIndexSelected={onMainLineMoveSelected}
+          moves={mainLine}
+          selectedId={selectedMainLineId}
+          onSelect={(id) => {
+            setCurrentNodeId(id);
+            setActiveLineId(id);
+          }}
         />
         <div className="w-full">
           <PlayerCard info={displayedPlayersInfo.bottom} />
@@ -732,45 +707,6 @@ function PlayerCard({ info }: { info: { side: "white" | "black"; player: PlayerI
       </div>
     </div>
   );
-}
-
-function getMainLineNodeIds(tree: GameTree): string[] {
-  const nodeIds: string[] = [];
-  let currentNodeId = tree[ROOT_ANALYSIS_NODE_ID]?.children?.[0] ?? null;
-
-  while (currentNodeId) {
-    nodeIds.push(currentNodeId);
-    currentNodeId = tree[currentNodeId]?.children?.[0] ?? null;
-  }
-
-  return nodeIds;
-}
-
-function getSelectedMainLineIndex(currentNodeId: string, tree: GameTree, mainLineNodeIds: string[]): number {
-  const indexByNodeId = new Map(
-    mainLineNodeIds.map(function toEntry(nodeId, index) {
-      return [nodeId, index] as const;
-    }),
-  );
-
-  let candidateNodeId: string | null = currentNodeId;
-  while (candidateNodeId && candidateNodeId !== ROOT_ANALYSIS_NODE_ID) {
-    const index = indexByNodeId.get(candidateNodeId);
-    if (index !== undefined) return index;
-    candidateNodeId = tree[candidateNodeId]?.parentId ?? null;
-  }
-
-  return -1;
-}
-
-function toNativeMoveMark(mark: MoveMark | null | undefined): PortableGameNotation.NativeMoveMark | null {
-  if (!mark) return null;
-  if (mark === MoveMarks.ONLY_MOVE) return PortableGameNotation.NativeMoveMarks.GOOD;
-  if (mark === MoveMarks.BRILLIANT) return PortableGameNotation.NativeMoveMarks.BRILLIANT;
-  if (mark === MoveMarks.INACCURACY) return PortableGameNotation.NativeMoveMarks.INACCURACY;
-  if (mark === MoveMarks.MISTAKE) return PortableGameNotation.NativeMoveMarks.MISTAKE;
-  if (mark === MoveMarks.MISS || mark === MoveMarks.BLUNDER) return PortableGameNotation.NativeMoveMarks.BLUNDER;
-  return null;
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
