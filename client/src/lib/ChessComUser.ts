@@ -1,11 +1,9 @@
 import type { ChessComClient } from "./ChessComClient.ts";
 import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
+import type { ChessComGameEntity } from "../repository/ChessComGamesRepository.ts";
 
 export namespace ChessComUser {
-  export function getInitialBoardOrientation(
-    game: ChessComClient.Dto.ChessComGameSummary,
-    username: string | null,
-  ): "white" | "black" {
+  export function getInitialBoardOrientation(game: ChessComGameEntity, username: string | null): "white" | "black" {
     const normalizedUsername = normalizeUsername(username);
     if (!normalizedUsername) return "white";
     if (normalizeUsername(game.black.username) === normalizedUsername) return "black";

@@ -47,6 +47,7 @@ export interface ChessComGameAnalysisRepository {
   getAll(): ChessComGameAnalysisEntity[];
   delete(id: string): void;
 }
+
 export namespace ChessComGameAnalysisStorage {
   const STORAGE_KEY = "chess-com-game-analysis-v1";
 

@@ -6,7 +6,7 @@ import {
   chessComGameAnalysisRepository,
   ChessComGameAnalysisStorage,
 } from "../repository/ChessComGameAnalysisRepository.ts";
-import { chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
 import { type ChessEngine, EngineEvaluationPriorities } from "./chess-engine/ChessEngine.ts";
 import { GameAnalysisSummary } from "./GameAnalysisSummary.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
@@ -37,12 +37,12 @@ export namespace ChessComLibraryAnalysis {
     runningGameId: string | null;
   }
 
-  export function loadLibraryGames(): ChessComClient.Dto.ChessComGameSummary[] {
+  export function loadLibraryGames(): ChessComGameEntity[] {
     return chessComGameRepository.getAll().slice().sort(compareGamesByEndTimeDesc);
   }
 
   export function getGlobalProgress(
-    games: ChessComClient.Dto.ChessComGameSummary[],
+    games: ChessComGameEntity[],
     entities: ChessComGameAnalysisEntity[],
   ): GlobalProgress {
     const relevantEntities = entities.filter(function keepEntity(entity) {
@@ -126,7 +126,7 @@ export namespace ChessComLibraryAnalysis {
   }
 
   async function buildGameStepState(
-    game: ChessComClient.Dto.ChessComGameSummary,
+    game: ChessComGameEntity,
     engine: ChessEngine,
     previousEntity: ChessComGameAnalysisEntity | null = null,
     seededAnalysesByFen: Record<string, AnalysisGame.NodeAnalysis> = {},
@@ -182,7 +182,7 @@ export namespace ChessComLibraryAnalysis {
     };
   }
 
-  function prepareGame(game: ChessComClient.Dto.ChessComGameSummary): PreparedGame {
+  function prepareGame(game: ChessComGameEntity): PreparedGame {
     const loadedGame = AnalysisGame.loadPgn(game.pgn);
     return {
       tree: loadedGame.tree,
@@ -235,10 +235,7 @@ export namespace ChessComLibraryAnalysis {
     );
   }
 
-  function compareGamesByEndTimeDesc(
-    left: ChessComClient.Dto.ChessComGameSummary,
-    right: ChessComClient.Dto.ChessComGameSummary,
-  ): number {
+  function compareGamesByEndTimeDesc(left: ChessComGameEntity, right: ChessComGameEntity): number {
     const leftEndTime = left.endTime ?? 0;
     const rightEndTime = right.endTime ?? 0;
     if (leftEndTime !== rightEndTime) return rightEndTime - leftEndTime;

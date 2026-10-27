@@ -11,6 +11,7 @@ import {
 } from "../../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
+import type { ChessComGameEntity } from "../../repository/ChessComGamesRepository.ts";
 
 function ChessComLibraryPage() {
   const { data: games = [] } = useQuery({
@@ -72,7 +73,7 @@ function LibraryGameCard({
   game,
   analysis,
 }: {
-  game: ChessComClient.Dto.ChessComGameSummary;
+  game: ChessComGameEntity;
   analysis: ChessComGameAnalysisEntity | null;
 }) {
   const progress = analysis?.totalPositions ? analysis.analyzedPositions / analysis.totalPositions : 0;

@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { chessComGameRepository } from "./ChessComGamesRepository.ts";
-import type { ChessComClient } from "../lib/ChessComClient.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "./ChessComGamesRepository.ts";
 
 namespace ChessComGameRepositoryTest {
   const entriesByKey = new Map<string, string>();
@@ -100,7 +99,7 @@ describe("ChessComGamesLibrary", function suite() {
   });
 });
 
-function createGame(gameId: string, firstMoveSan: string): ChessComClient.Dto.ChessComGameSummary {
+function createGame(gameId: string, firstMoveSan: string): ChessComGameEntity {
   return {
     id: gameId,
     url: `https://www.chess.com/game/live/${gameId}`,
@@ -121,9 +120,6 @@ function createGame(gameId: string, firstMoveSan: string): ChessComClient.Dto.Ch
   };
 }
 
-function compareGameIdAsc(
-  left: ChessComClient.Dto.ChessComGameSummary,
-  right: ChessComClient.Dto.ChessComGameSummary,
-): number {
+function compareGameIdAsc(left: ChessComGameEntity, right: ChessComGameEntity): number {
   return left.id.localeCompare(right.id);
 }
