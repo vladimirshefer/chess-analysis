@@ -236,7 +236,6 @@ export class HttpChessComClientRepository implements ChessComClientRepository {
 
 export const chessComClientRepository: ChessComClientRepository = new HttpChessComClientRepository();
 
-
 export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
 
 /**
@@ -361,5 +360,7 @@ export namespace ChessComGamesStorage {
   }
 }
 
-export const cachedChessComClientRepository: ChessComClientRepository = new ChessComGamesStorage.LocalStorageChessComGameRepository();
-export const chessComGameRepository: ChessComGameRepository = new ChessComGamesStorage.LocalStorageChessComGameRepository();
+export const cachedChessComClientRepository: ChessComClientRepository =
+  new ChessComGamesStorage.LocalStorageChessComGameRepository();
+export const chessComGameRepository: ChessComGameRepository =
+  new ChessComGamesStorage.LocalStorageChessComGameRepository();
