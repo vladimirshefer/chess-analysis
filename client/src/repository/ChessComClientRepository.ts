@@ -1,6 +1,5 @@
 import type { ChessComClient } from "../lib/ChessComClient.ts";
 import { ChessComUser } from "../lib/ChessComUser.ts";
-import LocalStorageChessComGameRepository = ChessComGamesStorage.LocalStorageChessComGameRepository;
 
 const DEFAULT_LIMIT = 10;
 
@@ -362,5 +361,5 @@ export namespace ChessComGamesStorage {
   }
 }
 
-export const cachedChessComClientRepository: ChessComClientRepository = new LocalStorageChessComGameRepository();
-export const chessComGameRepository: ChessComGameRepository = new LocalStorageChessComGameRepository();
+export const cachedChessComClientRepository: ChessComClientRepository = new ChessComGamesStorage.LocalStorageChessComGameRepository();
+export const chessComGameRepository: ChessComGameRepository = new ChessComGamesStorage.LocalStorageChessComGameRepository();
