@@ -11,7 +11,7 @@ import {
 } from "../../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
-import { type ChessComGameEntity, chessComGameRepository } from "../../repository/ChessComGamesRepository.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "../../repository/ChessComClientRepository.ts";
 
 function ChessComLibraryPage() {
   const { data: games = [] } = useQuery({

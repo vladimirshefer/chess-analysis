@@ -1,6 +1,6 @@
 import type { ChessComClient } from "./ChessComClient.ts";
 import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
-import type { ChessComGameEntity } from "../repository/ChessComGamesRepository.ts";
+import type { ChessComGameEntity } from "../repository/ChessComClientRepository.ts";
 
 export namespace ChessComUser {
   export function getInitialBoardOrientation(game: ChessComGameEntity, username: string | null): "white" | "black" {

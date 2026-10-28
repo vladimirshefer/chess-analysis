@@ -5,10 +5,10 @@ import {
   chessComGameAnalysisRepository,
   ChessComGameAnalysisStorage,
 } from "../repository/ChessComGameAnalysisRepository.ts";
-import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
 import { type ChessEngine, EngineEvaluationPriorities } from "./chess-engine/ChessEngine.ts";
 import { GameAnalysisSummary } from "./GameAnalysisSummary.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComClientRepository.ts";
 
 export namespace ChessComLibraryAnalysis {
   export const TARGET_DEPTH = 12;

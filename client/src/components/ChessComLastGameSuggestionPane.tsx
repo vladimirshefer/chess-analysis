@@ -4,7 +4,6 @@ import { FaFileImport } from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import { chessComClientRepository } from "../repository/ChessComClientRepository.ts";
 import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
-import { chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
 import { ChessComUser } from "../lib/ChessComUser.ts";
 import RenderIcon from "./RenderIcon.tsx";
 

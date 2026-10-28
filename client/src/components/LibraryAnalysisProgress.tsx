@@ -3,8 +3,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { chessComGameAnalysisRepository } from "../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
-import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
-import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComClientRepository.ts";
 
 export default function LibraryAnalysisProgress() {
   const { data: games = [] } = useQuery({
