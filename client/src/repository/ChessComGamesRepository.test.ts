@@ -84,6 +84,15 @@ describe("ChessComGamesLibrary", function suite() {
     expect(loadedIds).toEqual(["new-game", "old-game"]);
   });
 
+  it("returns all games newest first, ties by id descending", function testCase() {
+    chessComGameRepository.save({ ...createGame("a", "e4"), endTime: 200 });
+    chessComGameRepository.save({ ...createGame("b", "e4"), endTime: 300 });
+    chessComGameRepository.save({ ...createGame("c", "e4"), endTime: 200 });
+    chessComGameRepository.save({ ...createGame("d", "e4"), endTime: null });
+
+    expect(chessComGameRepository.getAll().map((game) => game.id)).toEqual(["b", "c", "a", "d"]);
+  });
+
   it("returns empty list when localStorage contains invalid json", function testCase() {
     ChessComGameRepositoryTest.setRawValue("chess-com-games-library-v1", "{");
 

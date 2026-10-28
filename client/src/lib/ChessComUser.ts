@@ -23,7 +23,7 @@ export namespace ChessComUser {
     games: ChessComClient.Dto.ChessComGameSummary[],
     username: string | null,
   ): ChessComClient.Dto.ChessComGameSummary | null {
-    return games.filter((game) => isParticipant(game, username)).sort(compareGameByEndTimeDesc)[0] ?? null;
+    return games.filter((game) => isParticipant(game, username))[0] ?? null;
   }
 
   export function toGameAnalysisUrl(game: ChessComClient.Dto.ChessComGameSummary, username?: string | null): string {

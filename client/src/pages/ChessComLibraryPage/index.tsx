@@ -12,13 +12,12 @@ import {
 import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
 import { type ChessComGameEntity, chessComGameRepository } from "../../repository/ChessComGamesRepository.ts";
-import compareGamesByEndTimeDesc = ChessComLibraryAnalysis.compareGamesByEndTimeDesc;
 
 function ChessComLibraryPage() {
   const { data: games = [] } = useQuery({
     queryKey: ChessComLibraryAnalysis.GAMES_QUERY_KEY,
     queryFn: function (): ChessComGameEntity[] {
-      return chessComGameRepository.getAll().slice().sort(compareGamesByEndTimeDesc);
+      return chessComGameRepository.getAll();
     },
     refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
   });

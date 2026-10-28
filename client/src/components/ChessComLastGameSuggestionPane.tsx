@@ -16,10 +16,6 @@ function ChessComLastGameSuggestionPane() {
   const { data: suggestedChessComGame, isLoading } = useQuery({
     queryKey: ["chess-com-last-game-suggestion", storedChessComUsername],
     enabled: Boolean(storedChessComUsername),
-    initialData: function getInitialSuggestion() {
-      if (!storedChessComUsername) return null;
-      return ChessComUser.findLatestGame(chessComGameRepository.getAll(), storedChessComUsername);
-    },
     queryFn: async function fetchLatestGame() {
       const result = await chessComClientRepository.getRecentGames(storedChessComUsername!, 1);
       return result.games[0] ?? null;

@@ -10,6 +10,7 @@ export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
 export interface ChessComGameRepository extends ChessComClientRepository {
   get(id: string): ChessComGameEntity | null;
   save(entity: ChessComGameEntity): ChessComGameEntity;
+  /** Returns all stored games, newest first. */
   getAll(): ChessComGameEntity[];
   delete(id: string): void;
 }
@@ -35,7 +36,7 @@ export namespace ChessComGamesStorage {
     }
 
     getAll(): ChessComGameEntity[] {
-      return Object.values(readEntitiesById());
+      return Object.values(readEntitiesById()).sort(compareGamesByEndTimeDesc);
     }
 
     delete(id: string): void {
@@ -49,7 +50,6 @@ export namespace ChessComGamesStorage {
     async getRecentGames(username: string, limit?: number): Promise<ChessComClient.Dto.ChessComRecentGames> {
       const games = this.getAll()
         .filter((game) => ChessComUser.isParticipant(game, username))
-        .sort((a, b) => (b.endTime ?? 0) - (a.endTime ?? 0))
         .slice(0, limit);
       const normalizedUsername = username.trim().toLowerCase();
       const player = games
@@ -83,6 +83,13 @@ export namespace ChessComGamesStorage {
       if (!game) throw new Error("Game not found matching opponent and date");
       return game;
     }
+  }
+
+  function compareGamesByEndTimeDesc(left: ChessComGameEntity, right: ChessComGameEntity): number {
+    const leftEndTime = left.endTime ?? 0;
+    const rightEndTime = right.endTime ?? 0;
+    if (leftEndTime !== rightEndTime) return rightEndTime - leftEndTime;
+    return right.id.localeCompare(left.id);
   }
 
   function toIsoDate(game: ChessComGameEntity): string | null {
@@ -121,5 +128,4 @@ export namespace ChessComGamesStorage {
   }
 }
 
-export const chessComGameRepository: ChessComGameRepository =
-  new ChessComGamesStorage.LocalStorageChessComGameRepository();
+export const chessComGameRepository: ChessComGameRepository = new ChessComGamesStorage.LocalStorageChessComGameRepository();

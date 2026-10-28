@@ -69,7 +69,7 @@ export namespace ChessComLibraryAnalysis {
   }
 
   export async function processNextStep(engine: ChessEngine): Promise<boolean> {
-    const games = chessComGameRepository.getAll().slice().sort(compareGamesByEndTimeDesc);
+    const games = chessComGameRepository.getAll();
     if (games.length === 0) return false;
 
     await OpeningsBook.load();
@@ -228,12 +228,5 @@ export namespace ChessComLibraryAnalysis {
       entity.analyzedPositions >= entity.totalPositions &&
       Object.keys(entity.analysisByFen).length > 0
     );
-  }
-
-  export function compareGamesByEndTimeDesc(left: ChessComGameEntity, right: ChessComGameEntity): number {
-    const leftEndTime = left.endTime ?? 0;
-    const rightEndTime = right.endTime ?? 0;
-    if (leftEndTime !== rightEndTime) return rightEndTime - leftEndTime;
-    return right.id.localeCompare(left.id);
   }
 }
