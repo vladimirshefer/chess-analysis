@@ -13,7 +13,7 @@ describe("ChessComUser", function suite() {
     expect(ChessComUser.getInitialBoardOrientation(game, "black-player")).toBe("black");
   });
 
-  it("finds the newest game for the stored username", function testCase() {
+  it("finds the first game of the stored username in a newest-first list", function testCase() {
     const latestGame = createGame({
       id: "latest",
       endTime: 1_700_000_200,
@@ -25,17 +25,17 @@ describe("ChessComUser", function suite() {
       ChessComUser.findLatestGame(
         [
           createGame({
-            id: "older",
-            endTime: 1_700_000_100,
-            whiteUsername: "opponent-a",
-            blackUsername: "vladimir",
-          }),
-          latestGame,
-          createGame({
             id: "other-user",
             endTime: 1_700_000_300,
             whiteUsername: "someone-else",
             blackUsername: "another-player",
+          }),
+          latestGame,
+          createGame({
+            id: "older",
+            endTime: 1_700_000_100,
+            whiteUsername: "opponent-a",
+            blackUsername: "vladimir",
           }),
         ],
         "vladimir",

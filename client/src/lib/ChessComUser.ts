@@ -38,14 +38,4 @@ export namespace ChessComUser {
   function normalizeUsername(username: string | null | undefined): string {
     return username?.trim().toLowerCase() ?? "";
   }
-
-  function compareGameByEndTimeDesc(
-    left: ChessComClient.Dto.ChessComGameSummary,
-    right: ChessComClient.Dto.ChessComGameSummary,
-  ): number {
-    const leftEndTime = left.endTime ?? 0;
-    const rightEndTime = right.endTime ?? 0;
-    if (leftEndTime !== rightEndTime) return rightEndTime - leftEndTime;
-    return right.id.localeCompare(left.id);
-  }
 }
