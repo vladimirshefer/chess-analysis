@@ -3,7 +3,6 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ChessComClient } from "../../lib/ChessComClient.ts";
 import { chessComClientRepository } from "../../repository/ChessComClientRepository.ts";
 import { type ChessComUserEntity, chessComUserRepository } from "../../repository/ChessComUserRepository.ts";
-import { chessComGameRepository } from "../../repository/ChessComGamesRepository.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
 import RenderIcon from "../../components/RenderIcon.tsx";
 import { FaArrowRight, FaMagnifyingGlass } from "react-icons/fa6";
@@ -42,13 +41,6 @@ function ChessComImportPage() {
 
     try {
       const result = await chessComClientRepository.getRecentGames(nextUsername, 10);
-      try {
-        for (const game of result.games) {
-          chessComGameRepository.save(game);
-        }
-      } catch (error) {
-        console.error("Failed to cache Chess.com games library", error);
-      }
       setGamesResult(result);
     } catch (error) {
       setGamesResult(null);

@@ -1,11 +1,15 @@
 import type { ChessComClient } from "../lib/ChessComClient.ts";
+import { ChessComUser } from "../lib/ChessComUser.ts";
+import type { ChessComClientRepository } from "./ChessComClientRepository.ts";
 
 export type ChessComGameEntity = ChessComClient.Dto.ChessComGameSummary;
 
-export interface ChessComGameRepository {
+/**
+ * Besides CRUD, it serves the {@link ChessComClientRepository} queries from the stored (offline) games only.
+ */
+export interface ChessComGameRepository extends ChessComClientRepository {
   get(id: string): ChessComGameEntity | null;
   save(entity: ChessComGameEntity): ChessComGameEntity;
-  update(entity: ChessComGameEntity): ChessComGameEntity;
   getAll(): ChessComGameEntity[];
   delete(id: string): void;
 }
@@ -21,11 +25,13 @@ export namespace ChessComGamesStorage {
     }
 
     save(entity: ChessComGameEntity): ChessComGameEntity {
-      return upsertEntity(entity);
-    }
+      const entityId = entity.id;
+      if (!entityId) return entity;
 
-    update(entity: ChessComGameEntity): ChessComGameEntity {
-      return upsertEntity(entity);
+      const entitiesById = readEntitiesById();
+      entitiesById[entityId] = entity;
+      writeEntitiesById(entitiesById);
+      return entity;
     }
 
     getAll(): ChessComGameEntity[] {
@@ -39,16 +45,50 @@ export namespace ChessComGamesStorage {
       delete entitiesById[id];
       writeEntitiesById(entitiesById);
     }
+
+    async getRecentGames(username: string, limit?: number): Promise<ChessComClient.Dto.ChessComRecentGames> {
+      const games = this.getAll()
+        .filter((game) => ChessComUser.isParticipant(game, username))
+        .sort((a, b) => (b.endTime ?? 0) - (a.endTime ?? 0))
+        .slice(0, limit);
+      const normalizedUsername = username.trim().toLowerCase();
+      const player = games
+        .flatMap((game) => [game.white, game.black])
+        .find((candidate) => candidate.username.toLowerCase() === normalizedUsername);
+      const displayName = player?.username ?? normalizedUsername;
+      return {
+        player: { username: displayName, url: `https://www.chess.com/member/${displayName}` },
+        games,
+      };
+    }
+
+    async getGameById(username: string, gameId: string): Promise<ChessComGameEntity> {
+      const game = this.getAll().find(
+        (candidate) => ChessComUser.isParticipant(candidate, username) && candidate.url.includes(`/${gameId}`),
+      );
+      if (!game) throw new Error("Game not found in stored games");
+      return game;
+    }
+
+    async findGameByOpponentAndDate(username: string, opponent: string, date: string): Promise<ChessComGameEntity> {
+      const normalizedOpponent = opponent.trim().toLowerCase();
+      const normalizedDate = date.trim().replace(/[./]/g, "-");
+      const { games } = await this.getRecentGames(username);
+      const game = games.find(
+        (candidate) =>
+          [candidate.white.username, candidate.black.username].some(
+            (name) => name.toLowerCase() === normalizedOpponent,
+          ) && toIsoDate(candidate) === normalizedDate,
+      );
+      if (!game) throw new Error("Game not found matching opponent and date");
+      return game;
+    }
   }
 
-  function upsertEntity(entity: ChessComGameEntity): ChessComGameEntity {
-    const entityId = entity.id;
-    if (!entityId) return entity;
-
-    const entitiesById = readEntitiesById();
-    entitiesById[entityId] = entity;
-    writeEntitiesById(entitiesById);
-    return entity;
+  function toIsoDate(game: ChessComGameEntity): string | null {
+    if (game.endTime) return new Date(game.endTime * 1000).toISOString().slice(0, 10);
+    const pgnDate = /\[(?:UTC)?Date "(\d{4})\.(\d{2})\.(\d{2})"\]/.exec(game.pgn);
+    return pgnDate ? `${pgnDate[1]}-${pgnDate[2]}-${pgnDate[3]}` : null;
   }
 
   function readEntitiesById(): Record<string, ChessComGameEntity> {

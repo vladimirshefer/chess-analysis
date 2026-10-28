@@ -1,4 +1,5 @@
 import type { ChessComClient } from "../lib/ChessComClient.ts";
+import { chessComGameRepository } from "./ChessComGamesRepository.ts";
 
 const DEFAULT_LIMIT = 10;
 
@@ -12,16 +13,19 @@ export interface ChessComClientRepository {
   ): Promise<ChessComClient.Dto.ChessComGameSummary>;
 }
 
+/**
+ * Every game loaded from the Chess.com API is also saved to {@link chessComGameRepository}.
+ */
 export class HttpChessComClientRepository implements ChessComClientRepository {
   async getRecentGames(
     username: string,
     limit: number = DEFAULT_LIMIT,
   ): Promise<ChessComClient.Dto.ChessComRecentGames> {
-    if (import.meta.env.DEV) {
-      return this.getRecentGamesDirect(username, limit);
-    }
-
-    return this.getRecentGamesViaProxy(username, limit);
+    const result = import.meta.env.DEV
+      ? await this.getRecentGamesDirect(username, limit)
+      : await this.getRecentGamesViaProxy(username, limit);
+    this.cacheGames(result.games);
+    return result;
   }
 
   async getGameById(username: string, gameId: string): Promise<ChessComClient.Dto.ChessComGameSummary> {
@@ -37,7 +41,10 @@ export class HttpChessComClientRepository implements ChessComClientRepository {
       const matched = (archive.games ?? []).find((game) => this.matchesGameId(game, gameId));
       if (matched) {
         const summary = this.normalizeGame(matched);
-        if (summary) return summary;
+        if (summary) {
+          this.cacheGames([summary]);
+          return summary;
+        }
       }
     }
 
@@ -67,12 +74,25 @@ export class HttpChessComClientRepository implements ChessComClientRepository {
         const game = games[gameIndex];
         if (this.matchesOpponent(game, normalizedOpponent) && this.matchesDate(game, normalizedDate)) {
           const summary = this.normalizeGame(game);
-          if (summary) return summary;
+          if (summary) {
+            this.cacheGames([summary]);
+            return summary;
+          }
         }
       }
     }
 
     throw new Error("Game not found matching opponent and date");
+  }
+
+  private cacheGames(games: ChessComClient.Dto.ChessComGameSummary[]): void {
+    try {
+      for (const game of games) {
+        chessComGameRepository.save(game);
+      }
+    } catch (error) {
+      console.error("Failed to cache Chess.com games", error);
+    }
   }
 
   private async getRecentGamesViaProxy(

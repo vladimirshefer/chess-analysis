@@ -3,11 +3,15 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { chessComGameAnalysisRepository } from "../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComGamesRepository.ts";
+import compareGamesByEndTimeDesc = ChessComLibraryAnalysis.compareGamesByEndTimeDesc;
 
 export default function LibraryAnalysisProgress() {
   const { data: games = [] } = useQuery({
     queryKey: ChessComLibraryAnalysis.GAMES_QUERY_KEY,
-    queryFn: ChessComLibraryAnalysis.loadLibraryGames,
+    queryFn: function (): ChessComGameEntity[] {
+      return chessComGameRepository.getAll().sort(compareGamesByEndTimeDesc);
+    },
     refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
   });
   const { data: entities = [] } = useQuery({

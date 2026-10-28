@@ -90,6 +90,45 @@ describe("ChessComGamesLibrary", function suite() {
     expect(chessComGameRepository.getAll()).toEqual([]);
   });
 
+  it("serves recent games of a user from stored games, newest first, with limit", async function testCase() {
+    chessComGameRepository.save({ ...createGame("old", "e4"), endTime: 100 });
+    chessComGameRepository.save({ ...createGame("new", "d4"), endTime: 300 });
+    chessComGameRepository.save({ ...createGame("mid", "c4"), endTime: 200 });
+    chessComGameRepository.save({
+      ...createGame("other", "e4"),
+      white: { username: "x" },
+      black: { username: "y" },
+    });
+
+    const all = await chessComGameRepository.getRecentGames("White-Player");
+    expect(all.games.map((game) => game.id)).toEqual(["new", "mid", "old"]);
+    expect(all.player.username).toBe("white-player");
+
+    const limited = await chessComGameRepository.getRecentGames("white-player", 2);
+    expect(limited.games.map((game) => game.id)).toEqual(["new", "mid"]);
+  });
+
+  it("finds a stored game by id for a participant only", async function testCase() {
+    chessComGameRepository.save(createGame("game-1", "e4"));
+
+    expect((await chessComGameRepository.getGameById("black-player", "game-1")).id).toBe("game-1");
+    await expect(chessComGameRepository.getGameById("stranger", "game-1")).rejects.toThrow();
+    await expect(chessComGameRepository.getGameById("black-player", "missing")).rejects.toThrow();
+  });
+
+  it("finds a stored game by opponent and date", async function testCase() {
+    chessComGameRepository.save(createGame("game-1", "e4"));
+
+    const found = await chessComGameRepository.findGameByOpponentAndDate("white-player", "Black-Player", "2023.11.14");
+    expect(found.id).toBe("game-1");
+    await expect(
+      chessComGameRepository.findGameByOpponentAndDate("white-player", "black-player", "2023-11-15"),
+    ).rejects.toThrow();
+    await expect(
+      chessComGameRepository.findGameByOpponentAndDate("white-player", "someone", "2023-11-14"),
+    ).rejects.toThrow();
+  });
+
   it("throws when localStorage write fails", function testCase() {
     ChessComGameRepositoryTest.failOnSetItem();
 

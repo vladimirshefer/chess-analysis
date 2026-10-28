@@ -1,6 +1,5 @@
 import { AnalysisGame } from "./AnalysisGame.ts";
 import { AnalysisPosition } from "./AnalysisPosition.ts";
-import type { ChessComClient } from "./ChessComClient.ts";
 import {
   type ChessComGameAnalysisEntity,
   chessComGameAnalysisRepository,
@@ -37,10 +36,6 @@ export namespace ChessComLibraryAnalysis {
     runningGameId: string | null;
   }
 
-  export function loadLibraryGames(): ChessComGameEntity[] {
-    return chessComGameRepository.getAll().slice().sort(compareGamesByEndTimeDesc);
-  }
-
   export function getGlobalProgress(
     games: ChessComGameEntity[],
     entities: ChessComGameAnalysisEntity[],
@@ -74,7 +69,7 @@ export namespace ChessComLibraryAnalysis {
   }
 
   export async function processNextStep(engine: ChessEngine): Promise<boolean> {
-    const games = loadLibraryGames();
+    const games = chessComGameRepository.getAll().slice().sort(compareGamesByEndTimeDesc);
     if (games.length === 0) return false;
 
     await OpeningsBook.load();
@@ -235,7 +230,7 @@ export namespace ChessComLibraryAnalysis {
     );
   }
 
-  function compareGamesByEndTimeDesc(left: ChessComGameEntity, right: ChessComGameEntity): number {
+  export function compareGamesByEndTimeDesc(left: ChessComGameEntity, right: ChessComGameEntity): number {
     const leftEndTime = left.endTime ?? 0;
     const rightEndTime = right.endTime ?? 0;
     if (leftEndTime !== rightEndTime) return rightEndTime - leftEndTime;

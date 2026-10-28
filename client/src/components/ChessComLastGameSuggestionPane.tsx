@@ -22,15 +22,7 @@ function ChessComLastGameSuggestionPane() {
     },
     queryFn: async function fetchLatestGame() {
       const result = await chessComClientRepository.getRecentGames(storedChessComUsername!, 1);
-      const lastGame = result.games[0] ?? null;
-      if (lastGame) {
-        try {
-          chessComGameRepository.save(lastGame);
-        } catch (error) {
-          console.error("Failed to cache last Chess.com game", error);
-        }
-      }
-      return lastGame;
+      return result.games[0] ?? null;
     },
   });
 
