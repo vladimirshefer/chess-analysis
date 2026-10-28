@@ -1,53 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { ChessComClient } from "./ChessComClient.ts";
+import { describe, expect, it } from "vitest";
+import type { ChessComClient } from "./ChessComClient.ts";
 import { ChessComUser } from "./ChessComUser.ts";
 
-namespace LocalStorageTestMock {
-  const entriesByKey = new Map<string, string>();
-
-  export function install(): void {
-    entriesByKey.clear();
-
-    const storage: Storage = {
-      getItem: function getItem(key: string): string | null {
-        return entriesByKey.get(key) ?? null;
-      },
-      setItem: function setItem(key: string, value: string): void {
-        entriesByKey.set(key, String(value));
-      },
-      removeItem: function removeItem(key: string): void {
-        entriesByKey.delete(key);
-      },
-      clear: function clear(): void {
-        entriesByKey.clear();
-      },
-      key: function key(index: number): string | null {
-        return [...entriesByKey.keys()][index] ?? null;
-      },
-      get length(): number {
-        return entriesByKey.size;
-      },
-    };
-
-    Object.defineProperty(globalThis, "localStorage", {
-      value: storage,
-      configurable: true,
-      writable: true,
-    });
-  }
-}
-
 describe("ChessComUser", function suite() {
-  beforeEach(function setup() {
-    LocalStorageTestMock.install();
-  });
-
-  it("loads and saves normalized username", function testCase() {
-    ChessComUser.saveUsername("  Vladimir  ");
-
-    expect(ChessComUser.loadUsername()).toBe("vladimir");
-  });
-
   it("returns board orientation from the player's side", function testCase() {
     const game = createGame({
       whiteUsername: "white-player",
@@ -58,7 +13,7 @@ describe("ChessComUser", function suite() {
     expect(ChessComUser.getInitialBoardOrientation(game, "black-player")).toBe("black");
   });
 
-  it("finds the newest game for the stored username", function testCase() {
+  it("finds the first game of the stored username in a newest-first list", function testCase() {
     const latestGame = createGame({
       id: "latest",
       endTime: 1_700_000_200,
@@ -70,17 +25,17 @@ describe("ChessComUser", function suite() {
       ChessComUser.findLatestGame(
         [
           createGame({
-            id: "older",
-            endTime: 1_700_000_100,
-            whiteUsername: "opponent-a",
-            blackUsername: "vladimir",
-          }),
-          latestGame,
-          createGame({
             id: "other-user",
             endTime: 1_700_000_300,
             whiteUsername: "someone-else",
             blackUsername: "another-player",
+          }),
+          latestGame,
+          createGame({
+            id: "older",
+            endTime: 1_700_000_100,
+            whiteUsername: "opponent-a",
+            blackUsername: "vladimir",
           }),
         ],
         "vladimir",

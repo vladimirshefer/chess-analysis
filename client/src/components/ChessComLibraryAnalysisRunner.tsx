@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getChessEngine } from "../lib/ChessEngine.ts";
+import { getChessEngine } from "../lib/chess-engine/ChessEngine.ts";
 import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
 
 let activeRunId = 0;

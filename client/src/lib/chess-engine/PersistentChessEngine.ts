@@ -5,7 +5,7 @@ import {
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
-} from "../ChessEngine.ts";
+} from "./ChessEngine.ts";
 import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
 
 export const DEFAULT_ENGINE_ID = "stockfish.js-16.1-lite";

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { EngineEvaluationPriorities } from "../ChessEngine.ts";
+import { EngineEvaluationPriorities } from "./ChessEngine.ts";
 import { NativeChessEngine, StockfishRuntime } from "./NativeChessEngine.ts";
 
 describe("StockfishRuntime.resolve", function suite() {

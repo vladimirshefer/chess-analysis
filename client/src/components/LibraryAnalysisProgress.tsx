@@ -1,24 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { ChessComGameAnalysisStorage } from "../lib/ChessComGameAnalysisStorage.ts";
-import { ChessComGamesStorage } from "../lib/ChessComGamesStorage.ts";
+import { chessComGameAnalysisRepository } from "../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
+import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComClientRepository.ts";
 
 export default function LibraryAnalysisProgress() {
-  const [games, setGames] = useState(() => ChessComLibraryAnalysis.loadLibraryGames());
-  const [entities, setEntities] = useState(() => ChessComGameAnalysisStorage.load());
-
-  useEffect(function subscribeToLibrary() {
-    return ChessComGamesStorage.subscribe(function handleGamesChange() {
-      setGames(ChessComLibraryAnalysis.loadLibraryGames());
-    });
-  }, []);
-
-  useEffect(function subscribeToAnalysis() {
-    return ChessComGameAnalysisStorage.subscribe(function handleAnalysisChange() {
-      setEntities(ChessComGameAnalysisStorage.load());
-    });
-  }, []);
+  const { data: games = [] } = useQuery({
+    queryKey: ChessComLibraryAnalysis.GAMES_QUERY_KEY,
+    queryFn: function (): ChessComGameEntity[] {
+      return chessComGameRepository.getAll();
+    },
+    refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
+  });
+  const { data: entities = [] } = useQuery({
+    queryKey: ChessComLibraryAnalysis.ANALYSIS_QUERY_KEY,
+    queryFn: function loadAnalyses() {
+      return chessComGameAnalysisRepository.getAll();
+    },
+    refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
+  });
 
   const progress = useMemo(
     function buildProgress() {

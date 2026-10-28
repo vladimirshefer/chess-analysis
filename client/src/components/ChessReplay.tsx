@@ -11,7 +11,7 @@ import {
   type EvaluationRequest,
   type FullMoveEvaluation,
   getChessEngine,
-} from "../lib/ChessEngine.ts";
+} from "../lib/chess-engine/ChessEngine.ts";
 import { Analytics } from "../lib/Analytics.ts";
 import { AnalysisPosition } from "../lib/AnalysisPosition.ts";
 import { type GamePlayersInfo, type PlayerInfo } from "../lib/gameInfo";

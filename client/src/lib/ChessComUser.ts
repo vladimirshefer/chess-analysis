@@ -1,26 +1,9 @@
-import { ChessComClient } from "./ChessComClient.ts";
+import type { ChessComClient } from "./ChessComClient.ts";
+import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
+import type { ChessComGameEntity } from "../repository/ChessComClientRepository.ts";
 
 export namespace ChessComUser {
-  const USERNAME_STORAGE_KEY = "chess-com-username";
-
-  export function loadUsername(): string | null {
-    const username = globalThis.localStorage.getItem(USERNAME_STORAGE_KEY)?.trim();
-    return username ? username : null;
-  }
-
-  export function saveUsername(username: string): void {
-    const normalizedUsername = normalizeUsername(username);
-    if (!normalizedUsername) {
-      globalThis.localStorage.removeItem(USERNAME_STORAGE_KEY);
-      return;
-    }
-    globalThis.localStorage.setItem(USERNAME_STORAGE_KEY, normalizedUsername);
-  }
-
-  export function getInitialBoardOrientation(
-    game: ChessComClient.Dto.ChessComGameSummary,
-    username: string | null,
-  ): "white" | "black" {
+  export function getInitialBoardOrientation(game: ChessComGameEntity, username: string | null): "white" | "black" {
     const normalizedUsername = normalizeUsername(username);
     if (!normalizedUsername) return "white";
     if (normalizeUsername(game.black.username) === normalizedUsername) return "black";
@@ -40,27 +23,19 @@ export namespace ChessComUser {
     games: ChessComClient.Dto.ChessComGameSummary[],
     username: string | null,
   ): ChessComClient.Dto.ChessComGameSummary | null {
-    return games.filter((game) => isParticipant(game, username)).sort(compareGameByEndTimeDesc)[0] ?? null;
+    return games.filter((game) => isParticipant(game, username))[0] ?? null;
   }
 
   export function toGameAnalysisUrl(game: ChessComClient.Dto.ChessComGameSummary, username?: string | null): string {
     const resolvedUsername =
-      (username && normalizeUsername(username)) || loadUsername() || normalizeUsername(game.white.username);
+      (username && normalizeUsername(username)) ||
+      chessComUserRepository.get()?.username ||
+      normalizeUsername(game.white.username);
     const gameId = game.url.split("/").filter(Boolean).pop() || game.id;
     return `/analysis/chesscom/user/${encodeURIComponent(resolvedUsername)}/game/${encodeURIComponent(gameId)}`;
   }
 
   function normalizeUsername(username: string | null | undefined): string {
     return username?.trim().toLowerCase() ?? "";
-  }
-
-  function compareGameByEndTimeDesc(
-    left: ChessComClient.Dto.ChessComGameSummary,
-    right: ChessComClient.Dto.ChessComGameSummary,
-  ): number {
-    const leftEndTime = left.endTime ?? 0;
-    const rightEndTime = right.endTime ?? 0;
-    if (leftEndTime !== rightEndTime) return rightEndTime - leftEndTime;
-    return right.id.localeCompare(left.id);
   }
 }

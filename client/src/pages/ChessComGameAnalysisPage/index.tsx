@@ -1,7 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChessComClient } from "../../lib/ChessComClient.ts";
-import { ChessComGamesStorage } from "../../lib/ChessComGamesStorage.ts";
+import { chessComClientRepository } from "../../repository/ChessComClientRepository.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
 import { AnalysisGame } from "../../lib/AnalysisGame.ts";
 import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
@@ -18,9 +17,7 @@ function ChessComGameAnalysisPage() {
     queryKey: ["chesscom-direct-game", userId, gameId],
     enabled: Boolean(userId && gameId),
     queryFn: async function fetchGame() {
-      const loaded = await ChessComClient.getGameById(userId!, gameId!);
-      ChessComGamesStorage.save(loaded);
-      return loaded;
+      return chessComClientRepository.getGameById(userId!, gameId!);
     },
   });
 

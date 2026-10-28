@@ -8,7 +8,7 @@ import {
   type EvaluationRequest,
   type EvaluationUpdate,
   type FullMoveEvaluation,
-} from "../ChessEngine.ts";
+} from "./ChessEngine.ts";
 import { ForsythEdwardsNotation } from "../ForsythEdwardsNotation.ts";
 import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
 import { TERMINAL_RESULT_SCORE } from "../evaluation.ts";
