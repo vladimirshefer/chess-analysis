@@ -43,7 +43,13 @@ function ChessComUserAnalysisPage() {
   const pgnWithPlayers = AnalysisGame.withPlayers(game.pgn, toGamePlayersInfoFromChessComGame(game));
   const initialBoardOrientation = ChessComUser.getInitialBoardOrientation(game, userId);
 
-  return <ChessReplayImpl originalPgn={pgnWithPlayers} initialBoardOrientation={initialBoardOrientation} />;
+  return (
+    <ChessReplayImpl
+      originalPgn={pgnWithPlayers}
+      initialBoardOrientation={initialBoardOrientation}
+      shareUrl={window.location.href}
+    />
+  );
 }
 
 export default ChessComUserAnalysisPage;

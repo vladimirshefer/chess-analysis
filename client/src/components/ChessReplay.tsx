@@ -1,6 +1,6 @@
 import { Chess } from "chess.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaRotate, FaTrashCan } from "react-icons/fa6";
+import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Link, useLocation } from "react-router-dom";
 import { AnalyzerPageEnginePlan } from "../pages/AnalyzerPage/EnginePlan";
@@ -27,6 +27,7 @@ import GameAnalysisOverview from "./GameAnalysisOverview.tsx";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
+import { SettingsMenu } from "./SettingsMenu.tsx";
 import { ExtendedChessBoard } from "./ExtendedChessBoard.tsx";
 import { useQuery } from "@tanstack/react-query";
 import { AnalysisGame } from "../lib/AnalysisGame.ts";
@@ -96,10 +97,12 @@ export function ChessReplayImpl({
   originalPgn,
   setOriginalPgn: propSetOriginalPgn,
   initialBoardOrientation = null,
+  shareUrl,
 }: {
   originalPgn: string;
   setOriginalPgn?: (pgn: string) => void;
   initialBoardOrientation?: "white" | "black" | null;
+  shareUrl?: string;
 }) {
   const [currentOriginalPgn, setCurrentOriginalPgn] = useState(originalPgn);
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
@@ -573,16 +576,20 @@ export function ChessReplayImpl({
           >
             <RenderIcon iconType={FaChevronRight} className="text-sm" />
           </button>
-          <button
-            onClick={function () {
-              setBoardOrientation((previous) => (previous === "white" ? "black" : "white"));
+          <SettingsMenu
+            boardOrientation={boardOrientation}
+            onRotate={() => setBoardOrientation((previous) => (previous === "white" ? "black" : "white"))}
+            selectedDepth={selectedDepth}
+            onSelectDepth={(depth) => {
+              Analytics.trackEvent("engine_depth_selected", { depth, previous_depth: selectedDepth });
+              setSelectedDepth(depth);
             }}
-            aria-label={boardOrientation === "white" ? "View board as black" : "View board as white"}
-            title={boardOrientation === "white" ? "View board as Black" : "View board as White"}
-            className="inline-flex items-center justify-center p-4 bg-gray-800 hover:bg-black text-white rounded font-bold"
-          >
-            <RenderIcon iconType={FaRotate} className="text-base" />
-          </button>
+            showPlans={showPlans}
+            onToggleArrows={() => setShowPlans(!showPlans)}
+            deepAnalysisDepth={deepAnalysisDepth}
+            onRunDeepAnalysis={runDeepAnalysis}
+            shareUrl={shareUrl}
+          />
         </div>
 
         {!hasExistingAnalysis ? (
@@ -600,12 +607,7 @@ export function ChessReplayImpl({
 
         <EnginePane
           currentAnalysis={currentAnalysis}
-          showPlans={showPlans}
-          setShowPlans={(it) => setShowPlans(it)}
-          selectedDepth={selectedDepth}
-          setSelectedDepth={(it) => setSelectedDepth(it)}
           statusText={statusText}
-          runDeepAnalysis={() => runDeepAnalysis()}
           applyLine={(line) => applyEngineMove(line)}
         />
 
