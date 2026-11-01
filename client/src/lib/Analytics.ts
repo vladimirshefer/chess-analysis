@@ -1,4 +1,6 @@
 // for typesctipt compiler
+import { AnalyticsConsent } from "./AnalyticsConsent.ts";
+
 declare global {
   interface Window {
     dataLayer: unknown[];
@@ -12,7 +14,7 @@ export namespace Analytics {
 
   const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID?.trim();
   let initialized = false;
-  let hasConsent = false;
+  let hasConsent = AnalyticsConsent.read() == "accepted";
 
   export function isConfigured(): boolean {
     return Boolean(measurementId);
@@ -26,14 +28,11 @@ export namespace Analytics {
   }
 
   export function init(): void {
-    if (!measurementId) {
-      logFallback("init", { configured: false });
+    logFallback("init", { configured: !!measurementId, consent: hasConsent });
+    if (!measurementId || !hasConsent) {
       return;
     }
-    if (!hasConsent) {
-      logFallback("init", { configured: true, consent: false });
-      return;
-    }
+
     if (initialized) return;
     initialized = true;
 
@@ -42,8 +41,10 @@ export namespace Analytics {
     }
 
     if (!window.gtag) {
-      window.gtag = function gtag(...args: unknown[]) {
-        window.dataLayer.push(args);
+      // gtag.js only processes `arguments` objects in dataLayer, not plain arrays
+      window.gtag = function gtag() {
+        // eslint-disable-next-line prefer-rest-params
+        window.dataLayer.push(arguments);
       };
     }
 
@@ -56,10 +57,10 @@ export namespace Analytics {
     const pageViewPayload = {
       page_path: path,
       page_title: document.title,
-      page_location: window.location.href,
+      page_location: window.location.origin + path,
     };
+    logFallback("page_view", pageViewPayload);
     if (!measurementId || !hasConsent) {
-      logFallback("page_view", pageViewPayload);
       return;
     }
 
@@ -68,8 +69,8 @@ export namespace Analytics {
 
   export function trackEvent(eventName: string, params: EventParams = {}): void {
     const payload = sanitizeParams(params);
+    logFallback(eventName, payload);
     if (!measurementId || !hasConsent) {
-      logFallback(eventName, payload);
       return;
     }
     window.gtag?.("event", eventName, payload);

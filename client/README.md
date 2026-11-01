@@ -4,7 +4,7 @@ This template provides a minimal setup to get React working in Vite with HMR and
 
 ## Google Analytics (GA4)
 
-Create `.env.local` with your GA4 measurement id:
+The measurement id is committed in `.env` (it is public). Override it by creating `.env.local`:
 
 ```bash
 VITE_GA_MEASUREMENT_ID=G-XXXXXXXXXX
