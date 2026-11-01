@@ -15,7 +15,13 @@ export namespace ChessComLibraryAnalysis {
   const LINES_AMOUNT = 1;
   export const GAMES_QUERY_KEY = ["chess-com-library-games"];
   export const ANALYSIS_QUERY_KEY = ["chess-com-library-analysis"];
+  export const USERS_QUERY_KEY = ["chess-com-users"];
+  export const CURRENT_USER_QUERY_KEY = ["chess-com-current-user"];
   export const REFETCH_INTERVAL_MS = 1_200;
+
+  export function toEntityByGameId(entities: ChessComGameAnalysisEntity[]): Record<string, ChessComGameAnalysisEntity> {
+    return Object.fromEntries(entities.map((entity) => [entity.gameId, entity]));
+  }
 
   interface PreparedGame {
     activeLineNodes: ReturnType<typeof getActiveLineNodes>;

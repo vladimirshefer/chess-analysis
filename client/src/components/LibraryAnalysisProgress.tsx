@@ -1,25 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 import { chessComGameAnalysisRepository } from "../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
 import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComClientRepository.ts";
 
 export default function LibraryAnalysisProgress() {
-  const { data: games = [] } = useQuery({
+  const gamesQuery = useQuery({
     queryKey: ChessComLibraryAnalysis.GAMES_QUERY_KEY,
     queryFn: function (): ChessComGameEntity[] {
       return chessComGameRepository.getAll();
     },
     refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
   });
-  const { data: entities = [] } = useQuery({
+  const analysesQuery = useQuery({
     queryKey: ChessComLibraryAnalysis.ANALYSIS_QUERY_KEY,
     queryFn: function loadAnalyses() {
       return chessComGameAnalysisRepository.getAll();
     },
     refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
   });
+
+  const games = gamesQuery.data ?? [];
+  const entities = analysesQuery.data ?? [];
 
   const progress = useMemo(
     function buildProgress() {
@@ -52,9 +54,7 @@ export default function LibraryAnalysisProgress() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-1.5">
         <div className="flex items-center justify-between gap-3 text-[11px] text-gray-500">
           <div className="min-w-0 truncate">
-            <Link to="/library/chess-com" className="font-semibold text-gray-600 hover:text-indigo-600">
-              Library
-            </Link>
+            <span className="font-semibold text-gray-600">Library</span>
             <span className="mx-1">·</span>
             <span>
               {progress.doneGames}/{progress.totalGames} games

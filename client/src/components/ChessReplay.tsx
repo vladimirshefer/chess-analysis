@@ -644,9 +644,6 @@ export function ChessReplayImpl({
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold text-gray-800">PGN</h3>
             <div className="flex items-center gap-3">
-              <Link to="/import/chess-com" className="text-[10px] text-olive-600 font-bold hover:underline">
-                Chess.com
-              </Link>
               <button
                 onClick={loadSample}
                 className="inline-flex items-center gap-1.5 text-[10px] text-olive-600 font-bold hover:underline"

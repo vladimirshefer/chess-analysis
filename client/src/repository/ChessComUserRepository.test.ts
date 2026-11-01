@@ -41,28 +41,55 @@ describe("ChessComUserRepository", function suite() {
     LocalStorageTestMock.install();
   });
 
-  it("returns null when nothing is saved", function testCase() {
-    expect(chessComUserRepository.get()).toBeNull();
+  it("returns nothing when no user is saved", function testCase() {
+    expect(chessComUserRepository.getAll()).toEqual([]);
+    expect(chessComUserRepository.get("vladimir")).toBeNull();
   });
 
   it("saves and loads normalized username", function testCase() {
     expect(chessComUserRepository.save({ username: "  Vladimir  " })).toEqual({ username: "vladimir" });
 
-    expect(chessComUserRepository.get()).toEqual({ username: "vladimir" });
+    expect(chessComUserRepository.get("VLADIMIR")).toEqual({ username: "vladimir" });
   });
 
-  it("removes the stored username when saving an empty one", function testCase() {
-    chessComUserRepository.save({ username: "vladimir" });
-
+  it("ignores an empty username", function testCase() {
     expect(chessComUserRepository.save({ username: "   " })).toBeNull();
-    expect(chessComUserRepository.get()).toBeNull();
+    expect(chessComUserRepository.getAll()).toEqual([]);
   });
 
-  it("deletes the stored username", function testCase() {
-    chessComUserRepository.save({ username: "vladimir" });
+  it("keeps the most recently saved user first without duplicates", function testCase() {
+    chessComUserRepository.save({ username: "first" });
+    chessComUserRepository.save({ username: "second" });
+    chessComUserRepository.save({ username: "First" });
+
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "first" }, { username: "second" }]);
+  });
+
+  it("deletes a user", function testCase() {
+    chessComUserRepository.save({ username: "first" });
+    chessComUserRepository.save({ username: "second" });
+
+    chessComUserRepository.delete("second");
+
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "first" }]);
+  });
+
+  it("get() without arguments returns the current user and delete() without arguments removes all", function testCase() {
+    expect(chessComUserRepository.get()).toBeNull();
+    chessComUserRepository.save({ username: "first" });
+    chessComUserRepository.save({ username: "second" });
+
+    expect(chessComUserRepository.get()).toEqual({ username: "second" });
 
     chessComUserRepository.delete();
 
     expect(chessComUserRepository.get()).toBeNull();
+    expect(chessComUserRepository.getAll()).toEqual([]);
+  });
+
+  it("migrates the legacy single username", function testCase() {
+    globalThis.localStorage.setItem("chess-com-username", "vladimir");
+
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "vladimir" }]);
   });
 });
