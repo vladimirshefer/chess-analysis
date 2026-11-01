@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { FaRotate } from "react-icons/fa6";
 import { useParams } from "react-router-dom";
 import LibraryGameCard from "../../components/LibraryGameCard.tsx";
+import RenderIcon from "../../components/RenderIcon.tsx";
 import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
 import { chessComClientRepository, chessComGameRepository } from "../../repository/ChessComClientRepository.ts";
@@ -42,14 +44,14 @@ function ChessComUserPage() {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-black text-gray-900">{recentGames?.player.username ?? username}</h2>
+          <div className="min-w-0">
+            <h2 className="text-2xl font-black text-gray-900 truncate">{recentGames?.player.username ?? username}</h2>
             <p className="text-sm text-gray-500 mt-1">
               {games.length} stored games
               {recentGamesQuery.isFetching && " · loading fresh games..."}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 shrink-0">
             {recentGames && (
               <a
                 href={recentGames.player.url}
@@ -57,16 +59,18 @@ function ChessComUserPage() {
                 rel="noreferrer"
                 className="text-sm font-bold text-indigo-600 hover:underline"
               >
-                Chess.com profile
+                chess.com
               </a>
             )}
             <button
               type="button"
               disabled={recentGamesQuery.isFetching}
               onClick={() => void recentGamesQuery.refetch()}
-              className="px-4 py-2 bg-gray-800 text-white text-sm font-bold rounded-lg hover:bg-black disabled:opacity-40"
+              aria-label="Refresh"
+              title="Refresh"
+              className="h-9 w-9 flex items-center justify-center bg-gray-800 text-white rounded-lg hover:bg-black disabled:opacity-40"
             >
-              {recentGamesQuery.isFetching ? "Refreshing..." : "Refresh"}
+              <RenderIcon iconType={FaRotate} className={recentGamesQuery.isFetching ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
