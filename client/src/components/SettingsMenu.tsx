@@ -22,6 +22,7 @@ export function SettingsMenu({
   deepAnalysisDepth,
   onRunDeepAnalysis,
   shareUrl,
+  fen,
 }: {
   boardOrientation: "white" | "black";
   onRotate: () => void;
@@ -32,9 +33,11 @@ export function SettingsMenu({
   deepAnalysisDepth: number;
   onRunDeepAnalysis: () => void;
   shareUrl?: string;
+  fen: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [shareStatus, setShareStatus] = useState<"Copied" | "Copy failed" | null>(null);
+  const [fenStatus, setFenStatus] = useState<"Copied" | "Copy failed" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(
@@ -61,14 +64,14 @@ export function SettingsMenu({
     setIsOpen(false);
   }
 
-  async function share() {
+  async function copyToClipboard(text: string, setStatus: (status: "Copied" | "Copy failed" | null) => void) {
     try {
-      await navigator.clipboard.writeText(shareUrl!);
-      setShareStatus("Copied");
+      await navigator.clipboard.writeText(text);
+      setStatus("Copied");
     } catch {
-      setShareStatus("Copy failed");
+      setStatus("Copy failed");
     }
-    setTimeout(() => setShareStatus(null), 1500);
+    setTimeout(() => setStatus(null), 1500);
   }
 
   return (
@@ -98,10 +101,13 @@ export function SettingsMenu({
             Ultra-depth analysis ({deepAnalysisDepth})
           </button>
           {shareUrl && (
-            <button className={itemClass(false)} onClick={share}>
+            <button className={itemClass(false)} onClick={() => copyToClipboard(shareUrl, setShareStatus)}>
               {shareStatus ?? "Share game (copy link)"}
             </button>
           )}
+          <button className={itemClass(false)} onClick={() => copyToClipboard(fen, setFenStatus)}>
+            {fenStatus ?? "Share position (copy FEN)"}
+          </button>
         </div>
       )}
     </div>

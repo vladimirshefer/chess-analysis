@@ -589,6 +589,7 @@ export function ChessReplayImpl({
             deepAnalysisDepth={deepAnalysisDepth}
             onRunDeepAnalysis={runDeepAnalysis}
             shareUrl={shareUrl}
+            fen={currentFen}
           />
         </div>
 
