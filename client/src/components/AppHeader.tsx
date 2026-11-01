@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import UserProfileMenu from "./UserProfileMenu.tsx";
 
 namespace AppHeaderView {
   export type NavigationItem = {
@@ -9,8 +10,6 @@ namespace AppHeaderView {
 
   export const navigationItems: NavigationItem[] = [
     { to: "/", label: "Analyzer" },
-    { to: "/import/chess-com", label: "Chess.com" },
-    { to: "/library/chess-com", label: "Library" },
     { to: "/about", label: "About" },
   ];
 
@@ -31,31 +30,33 @@ export default function AppHeader() {
             </h1>
           </Link>
 
-          <button
-            type="button"
-            className="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-md border border-gray-200 text-gray-700 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
-            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={isMobileMenuOpen}
-            aria-controls="mobile-navigation"
-            onClick={() => setIsMobileMenuOpen((value) => !value)}
-          >
-            <span className="sr-only">{isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}</span>
-            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-              {isMobileMenuOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" />
-              ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
-              )}
-            </svg>
-          </button>
-
-          <nav className="hidden md:flex items-center gap-4">
-            {AppHeaderView.navigationItems.map((item) => (
-              <Link key={item.to} to={item.to} className={AppHeaderView.navigationLinkClassName}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <div className="flex items-center gap-3">
+            <nav className="hidden md:flex items-center gap-4">
+              {AppHeaderView.navigationItems.map((item) => (
+                <Link key={item.to} to={item.to} className={AppHeaderView.navigationLinkClassName}>
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+            <UserProfileMenu />
+            <button
+              type="button"
+              className="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-md border border-gray-200 text-gray-700 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
+              onClick={() => setIsMobileMenuOpen((value) => !value)}
+            >
+              <span className="sr-only">{isMobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}</span>
+              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
+                {isMobileMenuOpen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M6 18L18 6" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
+                )}
+              </svg>
+            </button>
+          </div>
         </div>
 
         {isMobileMenuOpen && (

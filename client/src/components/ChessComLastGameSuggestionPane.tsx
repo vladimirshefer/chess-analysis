@@ -1,18 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { FaFileImport } from "react-icons/fa6";
 import { Link } from "react-router-dom";
 import { chessComClientRepository } from "../repository/ChessComClientRepository.ts";
-import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
+import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
 import { ChessComUser } from "../lib/ChessComUser.ts";
+import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
 import RenderIcon from "./RenderIcon.tsx";
 
 function ChessComLastGameSuggestionPane() {
-  const storedChessComUsername = useMemo(function loadStoredUsername() {
-    return chessComUserRepository.get()?.username ?? null;
-  }, []);
+  const currentUserQuery = useQuery({
+    queryKey: ChessComLibraryAnalysis.CURRENT_USER_QUERY_KEY,
+    queryFn: function loadCurrentUser() {
+      return chessComUserRepository.get();
+    },
+  });
+  const storedChessComUsername = currentUserQuery.data?.username ?? null;
 
-  const { data: suggestedChessComGame, isLoading } = useQuery({
+  const suggestedGameQuery = useQuery({
     queryKey: ["chess-com-last-game-suggestion", storedChessComUsername],
     enabled: Boolean(storedChessComUsername),
     queryFn: async function fetchLatestGame() {
@@ -21,23 +25,19 @@ function ChessComLastGameSuggestionPane() {
     },
   });
 
+  const suggestedChessComGame = suggestedGameQuery.data;
+
+  if (currentUserQuery.isPending) return null;
   if (!storedChessComUsername) {
     return (
       <div className="px-3 py-2 shadow">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs">Import from Chess.com</span>
-          <Link
-            to="/import/chess-com"
-            className="ml-auto inline-flex items-center justify-center gap-1.5 border bg-black px-2 py-1 text-xs text-white hover:bg-gray-800"
-          >
-            <RenderIcon iconType={FaFileImport} className="text-xs" />
-            <span>Import</span>
-          </Link>
+          <span className="text-xs">Add your Chess.com profile from the menu at the top right</span>
         </div>
       </div>
     );
   }
-  if (!suggestedChessComGame && !isLoading) return null;
+  if (!suggestedChessComGame && !suggestedGameQuery.isLoading) return null;
 
   return (
     <div className="px-3 py-2 shadow">
@@ -59,7 +59,7 @@ function ChessComLastGameSuggestionPane() {
         ) : (
           <span className="text-xs text-gray-500">Checking latest game...</span>
         )}
-        <Link to="/import/chess-com" className="text-xs hover:underline">
+        <Link to={`/user/${encodeURIComponent(storedChessComUsername)}`} className="text-xs hover:underline">
           More
         </Link>
       </div>

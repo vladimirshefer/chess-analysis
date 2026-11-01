@@ -1,5 +1,4 @@
 import type { ChessComClient } from "./ChessComClient.ts";
-import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
 import type { ChessComGameEntity } from "../repository/ChessComClientRepository.ts";
 
 export namespace ChessComUser {
@@ -27,10 +26,7 @@ export namespace ChessComUser {
   }
 
   export function toGameAnalysisUrl(game: ChessComClient.Dto.ChessComGameSummary, username?: string | null): string {
-    const resolvedUsername =
-      (username && normalizeUsername(username)) ||
-      chessComUserRepository.get()?.username ||
-      normalizeUsername(game.white.username);
+    const resolvedUsername = (username && normalizeUsername(username)) || normalizeUsername(game.white.username);
     const gameId = game.url.split("/").filter(Boolean).pop() || game.id;
     return `/analysis/chesscom/user/${encodeURIComponent(resolvedUsername)}/game/${encodeURIComponent(gameId)}`;
   }

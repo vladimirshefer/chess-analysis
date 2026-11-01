@@ -1,85 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import MoveMarksSummary from "../../components/MoveMarksSummary.tsx";
-import ValuesHistogram from "../../components/ValuesHistogram.tsx";
-import type { ChessComClient } from "../../lib/ChessComClient.ts";
-import { chessComUserRepository } from "../../repository/ChessComUserRepository.ts";
-import {
-  type ChessComGameAnalysisEntity,
-  chessComGameAnalysisRepository,
-} from "../../repository/ChessComGameAnalysisRepository.ts";
-import { ChessComLibraryAnalysis } from "../../lib/ChessComLibraryAnalysis.ts";
-import { ChessComUser } from "../../lib/ChessComUser.ts";
-import { type ChessComGameEntity, chessComGameRepository } from "../../repository/ChessComClientRepository.ts";
+import MoveMarksSummary from "./MoveMarksSummary.tsx";
+import ValuesHistogram from "./ValuesHistogram.tsx";
+import type { ChessComClient } from "../lib/ChessComClient.ts";
+import { ChessComUser } from "../lib/ChessComUser.ts";
+import type { ChessComGameAnalysisEntity } from "../repository/ChessComGameAnalysisRepository.ts";
+import type { ChessComGameEntity } from "../repository/ChessComClientRepository.ts";
 
-function ChessComLibraryPage() {
-  const { data: games = [] } = useQuery({
-    queryKey: ChessComLibraryAnalysis.GAMES_QUERY_KEY,
-    queryFn: function (): ChessComGameEntity[] {
-      return chessComGameRepository.getAll();
-    },
-    refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
-  });
-  const { data: analysisById = {} } = useQuery({
-    queryKey: ChessComLibraryAnalysis.ANALYSIS_QUERY_KEY,
-    queryFn: function loadAnalyses() {
-      return chessComGameAnalysisRepository.getAll();
-    },
-    select: toEntityByGameId,
-    refetchInterval: ChessComLibraryAnalysis.REFETCH_INTERVAL_MS,
-  });
-
-  const progress = useMemo(
-    function buildProgress() {
-      return ChessComLibraryAnalysis.getGlobalProgress(games, Object.values(analysisById));
-    },
-    [analysisById, games],
-  );
-
-  return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
-      <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <div>
-            <h2 className="text-2xl font-black text-gray-900">Chess.com Library</h2>
-            <p className="text-sm text-gray-500 mt-1">Stored games with depth-12 background analysis.</p>
-          </div>
-          <Link to="/import/chess-com" className="text-sm font-bold text-indigo-600 hover:underline">
-            Import games
-          </Link>
-        </div>
-
-        <div className="text-sm text-gray-600">
-          {progress.doneGames}/{progress.totalGames} games complete
-          {progress.totalPositions > 0 && ` · ${progress.analyzedPositions}/${progress.totalPositions} positions`}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {games.length === 0 && (
-          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 text-sm text-gray-500">
-            No stored games yet.
-          </div>
-        )}
-
-        {games.map(function renderGame(game) {
-          return <LibraryGameCard key={game.id} game={game} analysis={analysisById[game.id] ?? null} />;
-        })}
-      </div>
-    </div>
-  );
-}
-
-function LibraryGameCard({
+export default function LibraryGameCard({
   game,
   analysis,
+  username,
 }: {
   game: ChessComGameEntity;
   analysis: ChessComGameAnalysisEntity | null;
+  username: string | null;
 }) {
   const progress = analysis?.totalPositions ? analysis.analyzedPositions / analysis.totalPositions : 0;
-  const myColor = ChessComUser.getInitialBoardOrientation(game, chessComUserRepository.get()?.username ?? null);
+  const myColor = ChessComUser.getInitialBoardOrientation(game, username);
   const white = {
     color: "white",
     player: game.white,
@@ -97,7 +34,7 @@ function LibraryGameCard({
 
   return (
     <Link
-      to={ChessComUser.toGameAnalysisUrl(game)}
+      to={ChessComUser.toGameAnalysisUrl(game, username)}
       className="block bg-white p-4 rounded-xl shadow-lg border border-gray-100 hover:border-indigo-200 transition-colors"
     >
       <div className="flex flex-col gap-3">
@@ -169,16 +106,6 @@ function PlayerSummary({
   );
 }
 
-function toEntityByGameId(entities: ChessComGameAnalysisEntity[]): Record<string, ChessComGameAnalysisEntity> {
-  return entities.reduce(
-    function collectById(result, entity) {
-      result[entity.gameId] = entity;
-      return result;
-    },
-    {} as Record<string, ChessComGameAnalysisEntity>,
-  );
-}
-
 function toStatusLabel(analysis: ChessComGameAnalysisEntity | null): string {
   if (!analysis) return "Pending";
   if (analysis.status === "done") return "";
@@ -196,5 +123,3 @@ function formatAccuracy(accuracy: number | null): string {
   if (typeof accuracy !== "number") return "-";
   return `${Math.round(accuracy)}%`;
 }
-
-export default ChessComLibraryPage;

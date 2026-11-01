@@ -12,17 +12,15 @@ function ChessComUserAnalysisPage() {
   const opponent = searchParams.get("opponent");
   const date = searchParams.get("date");
 
-  const {
-    data: game,
-    isLoading,
-    error,
-  } = useQuery({
+  const gameQuery = useQuery({
     queryKey: ["chesscom-user-game", userId, opponent, date],
     enabled: Boolean(userId && opponent && date),
     queryFn: async function fetchGame() {
       return chessComClientRepository.findGameByOpponentAndDate(userId!, opponent!, date!);
     },
   });
+
+  const game = gameQuery.data;
 
   if (!userId) {
     return <div className="p-6 text-red-600">Missing user ID</div>;
@@ -32,12 +30,16 @@ function ChessComUserAnalysisPage() {
     return <div className="p-6 text-red-600">Missing required query parameters: opponent and date</div>;
   }
 
-  if (isLoading) {
+  if (gameQuery.isLoading) {
     return <div className="p-6 text-gray-500">Loading game...</div>;
   }
 
-  if (error || !game) {
-    return <div className="p-6 text-red-600">{error instanceof Error ? error.message : "Game not found"}</div>;
+  if (gameQuery.error || !game) {
+    return (
+      <div className="p-6 text-red-600">
+        {gameQuery.error instanceof Error ? gameQuery.error.message : "Game not found"}
+      </div>
+    );
   }
 
   const pgnWithPlayers = AnalysisGame.withPlayers(game.pgn, toGamePlayersInfoFromChessComGame(game));

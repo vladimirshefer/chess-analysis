@@ -9,11 +9,7 @@ import { ChessReplayImpl } from "../../components/ChessReplay.tsx";
 function ChessComGameAnalysisPage() {
   const { userId, gameId } = useParams();
 
-  const {
-    data: game,
-    isLoading,
-    error,
-  } = useQuery({
+  const gameQuery = useQuery({
     queryKey: ["chesscom-direct-game", userId, gameId],
     enabled: Boolean(userId && gameId),
     queryFn: async function fetchGame() {
@@ -21,16 +17,22 @@ function ChessComGameAnalysisPage() {
     },
   });
 
+  const game = gameQuery.data;
+
   if (!userId || !gameId) {
     return <div className="p-6 text-red-600">Missing user ID or game ID</div>;
   }
 
-  if (isLoading) {
+  if (gameQuery.isLoading) {
     return <div className="p-6 text-gray-500">Loading game...</div>;
   }
 
-  if (error || !game) {
-    return <div className="p-6 text-red-600">{error instanceof Error ? error.message : "Game not found"}</div>;
+  if (gameQuery.error || !game) {
+    return (
+      <div className="p-6 text-red-600">
+        {gameQuery.error instanceof Error ? gameQuery.error.message : "Game not found"}
+      </div>
+    );
   }
 
   const pgnWithPlayers = AnalysisGame.withPlayers(game.pgn, toGamePlayersInfoFromChessComGame(game));
