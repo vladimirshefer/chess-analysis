@@ -125,6 +125,36 @@ describe("NativeChessEngine", function suite() {
     expect(result.lines).toHaveLength(1);
   });
 
+  it("resolves a stalemate position that Stockfish answers with 'bestmove (none)'", async function testCase() {
+    const worker = new TestDoubles.FakeWorker();
+    const engine = new NativeChessEngine(
+      {
+        mode: "lite-single",
+        workerUrl: "/stockfish/stockfish-18-lite-single.js",
+        threads: 1,
+      },
+      function createWorker() {
+        return worker as unknown as Worker;
+      },
+    );
+    const fen = "5k2/2R5/5N2/8/1P6/7P/1P5P/6K1 b - - 0 52";
+
+    const evaluationPromise = engine.evaluate(
+      fen,
+      { minDepth: 12, linesAmount: 1 },
+      EngineEvaluationPriorities.IMMEDIATE,
+    );
+    worker.emit("info depth 0 score cp 0");
+    worker.emit("bestmove (none)");
+
+    const result = await evaluationPromise;
+
+    expect(result.fen).toBe(fen);
+    expect(result.evaluation).toBe(0);
+    expect(result.depth).toBe(0);
+    expect(result.lines).toEqual([]);
+  });
+
   it("rejects stalled evaluations and recreates the worker", async function testCase() {
     vi.useFakeTimers();
     const workers = [new TestDoubles.FakeWorker(), new TestDoubles.FakeWorker()];

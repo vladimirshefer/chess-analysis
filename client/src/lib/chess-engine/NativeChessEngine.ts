@@ -326,7 +326,7 @@ function buildFinalEvaluation(activeEvaluation: RunningEvaluation): FullMoveEval
 
 function buildTerminalEvaluation(fen: string): FullMoveEvaluation | null {
   const evaluation = getAbsoluteTerminalEvaluation(fen);
-  if (!evaluation) return null;
+  if (evaluation === null) return null;
 
   return {
     fen,

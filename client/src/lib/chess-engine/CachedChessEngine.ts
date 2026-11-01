@@ -25,7 +25,7 @@ export class CachedChessEngine implements ChessEngine {
     onUpdate?: (update: EvaluationUpdate) => void,
   ): Promise<FullMoveEvaluation> {
     const terminalEvaluation = getAbsoluteTerminalEvaluation(fen);
-    if (terminalEvaluation) {
+    if (terminalEvaluation !== null) {
       const terminalResult: EvaluationUpdate = {
         fen,
         evaluation: terminalEvaluation,
