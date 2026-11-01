@@ -23,13 +23,12 @@ function AppShell({ children }: { children: ReactNode }) {
       <main>{children}</main>
 
       <footer className="grid py-2 border-t border-gray-200 bg-white text-center text-gray-400 text-sm">
-        <span>Built with React, Chess.js, and Tailwind CSS</span>
+        <span>Copyright (2026-2027) Vladimir Shefer</span>
         <span>
           <Link to="/privacy" className="text-gray-500 hover:text-indigo-600">
             Privacy Policy
           </Link>
         </span>
-        <span>Copyright (2026) Vladimir Shefer</span>
       </footer>
     </div>
   );
