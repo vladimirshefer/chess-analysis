@@ -10,6 +10,7 @@ namespace AppHeaderView {
 
   export const navigationItems: NavigationItem[] = [
     { to: "/", label: "Analyzer" },
+    { to: "/play", label: "Play" },
     { to: "/about", label: "About" },
   ];
 

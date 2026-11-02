@@ -11,6 +11,7 @@ import AnalyzerPage from "./pages/AnalyzerPage";
 import ChessComGameAnalysisPage from "./pages/ChessComGameAnalysisPage/index.tsx";
 import ChessComUserAnalysisPage from "./pages/ChessComUserAnalysisPage/index.tsx";
 import ChessComUserPage from "./pages/ChessComUserPage";
+import PlayBotPage from "./pages/PlayBotPage";
 import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 import { useRoutePattern } from "./lib/hooks/useRoutePattern.ts";
 
@@ -57,6 +58,7 @@ function App() {
           <Route path="/analysis/chesscom/user/:userId/game/:gameId" element={<ChessComGameAnalysisPage />} />
           <Route path="/analysis/chesscom/user/:userId" element={<ChessComUserAnalysisPage />} />
           <Route path="/user/:username" element={<ChessComUserPage />} />
+          <Route path="/play" element={<PlayBotPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route
             path="/privacy"

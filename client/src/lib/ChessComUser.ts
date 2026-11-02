@@ -2,6 +2,13 @@ import type { ChessComClient } from "./ChessComClient.ts";
 import type { ChessComGameEntity } from "../repository/ChessComClientRepository.ts";
 
 export namespace ChessComUser {
+  /** Special profile that owns the games played against the bot. Its games live only in the local library. */
+  export const LOCAL_USERNAME = "local";
+
+  export function isLocal(username: string | null | undefined): boolean {
+    return normalizeUsername(username) === LOCAL_USERNAME;
+  }
+
   export function getInitialBoardOrientation(game: ChessComGameEntity, username: string | null): "white" | "black" {
     const normalizedUsername = normalizeUsername(username);
     if (!normalizedUsername) return "white";

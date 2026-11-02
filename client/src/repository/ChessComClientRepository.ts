@@ -18,6 +18,7 @@ export class HttpChessComClientRepository implements ChessComClientRepository {
     username: string,
     limit: number = DEFAULT_LIMIT,
   ): Promise<ChessComClient.Dto.ChessComRecentGames> {
+    if (ChessComUser.isLocal(username)) return cachedChessComClientRepository.getRecentGames(username, limit);
     const result = import.meta.env.DEV
       ? await this.getRecentGamesDirect(username, limit)
       : await this.getRecentGamesViaProxy(username, limit);
@@ -26,6 +27,7 @@ export class HttpChessComClientRepository implements ChessComClientRepository {
   }
 
   async getGameById(username: string, gameId: string): Promise<ChessComClient.Dto.ChessComGameSummary> {
+    if (ChessComUser.isLocal(username)) return cachedChessComClientRepository.getGameById(username, gameId);
     const normalizedUsername = username.trim().toLowerCase();
     const archivesResponse = await this.fetchJson<ChessComClient.Dto.ChessComArchivesResponse>(
       `https://api.chess.com/pub/player/${encodeURIComponent(normalizedUsername)}/games/archives`,
@@ -53,6 +55,9 @@ export class HttpChessComClientRepository implements ChessComClientRepository {
     opponent: string,
     date: string,
   ): Promise<ChessComClient.Dto.ChessComGameSummary> {
+    if (ChessComUser.isLocal(username)) {
+      return cachedChessComClientRepository.findGameByOpponentAndDate(username, opponent, date);
+    }
     const normalizedUsername = username.trim().toLowerCase();
     const normalizedOpponent = opponent.trim().toLowerCase();
     const normalizedDate = date.trim();

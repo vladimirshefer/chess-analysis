@@ -41,8 +41,9 @@ describe("ChessComUserRepository", function suite() {
     LocalStorageTestMock.install();
   });
 
-  it("returns nothing when no user is saved", function testCase() {
-    expect(chessComUserRepository.getAll()).toEqual([]);
+  it("lists only the local profile when no user is saved", function testCase() {
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "local" }]);
+    expect(chessComUserRepository.get()).toEqual({ username: "local" });
     expect(chessComUserRepository.get("vladimir")).toBeNull();
   });
 
@@ -54,7 +55,7 @@ describe("ChessComUserRepository", function suite() {
 
   it("ignores an empty username", function testCase() {
     expect(chessComUserRepository.save({ username: "   " })).toBeNull();
-    expect(chessComUserRepository.getAll()).toEqual([]);
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "local" }]);
   });
 
   it("keeps the most recently saved user first without duplicates", function testCase() {
@@ -62,7 +63,11 @@ describe("ChessComUserRepository", function suite() {
     chessComUserRepository.save({ username: "second" });
     chessComUserRepository.save({ username: "First" });
 
-    expect(chessComUserRepository.getAll()).toEqual([{ username: "first" }, { username: "second" }]);
+    expect(chessComUserRepository.getAll()).toEqual([
+      { username: "first" },
+      { username: "second" },
+      { username: "local" },
+    ]);
   });
 
   it("deletes a user", function testCase() {
@@ -71,11 +76,11 @@ describe("ChessComUserRepository", function suite() {
 
     chessComUserRepository.delete("second");
 
-    expect(chessComUserRepository.getAll()).toEqual([{ username: "first" }]);
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "first" }, { username: "local" }]);
   });
 
   it("get() without arguments returns the current user and delete() without arguments removes all", function testCase() {
-    expect(chessComUserRepository.get()).toBeNull();
+    expect(chessComUserRepository.get()).toEqual({ username: "local" });
     chessComUserRepository.save({ username: "first" });
     chessComUserRepository.save({ username: "second" });
 
@@ -83,13 +88,20 @@ describe("ChessComUserRepository", function suite() {
 
     chessComUserRepository.delete();
 
-    expect(chessComUserRepository.get()).toBeNull();
-    expect(chessComUserRepository.getAll()).toEqual([]);
+    expect(chessComUserRepository.get()).toEqual({ username: "local" });
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "local" }]);
   });
 
   it("migrates the legacy single username", function testCase() {
     globalThis.localStorage.setItem("chess-com-username", "vladimir");
 
-    expect(chessComUserRepository.getAll()).toEqual([{ username: "vladimir" }]);
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "vladimir" }, { username: "local" }]);
+  });
+
+  it("keeps the local profile where it was saved", function testCase() {
+    chessComUserRepository.save({ username: "local" });
+    chessComUserRepository.save({ username: "first" });
+
+    expect(chessComUserRepository.getAll()).toEqual([{ username: "first" }, { username: "local" }]);
   });
 });

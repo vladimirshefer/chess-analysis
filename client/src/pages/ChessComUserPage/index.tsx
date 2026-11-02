@@ -52,7 +52,7 @@ function ChessComUserPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {recentGames && (
+            {recentGames && !ChessComUser.isLocal(username) && (
               <a
                 href={recentGames.player.url}
                 target="_blank"
