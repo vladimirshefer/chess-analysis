@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaAnglesLeft, FaChevronLeft, FaChevronRight, FaFileImport, FaTrashCan } from "react-icons/fa6";
 import { GiPerspectiveDiceSixFacesRandom } from "react-icons/gi";
 import { Link, useLocation } from "react-router-dom";
@@ -24,6 +24,7 @@ import { MoveLine } from "./MoveLine";
 import RenderIcon from "./RenderIcon";
 import ChessComLastGameSuggestionPane from "./ChessComLastGameSuggestionPane.tsx";
 import GameAnalysisOverview from "./GameAnalysisOverview.tsx";
+import GameHistogramPane from "./GameHistogramPane.tsx";
 import { MoveList } from "../pages/AnalyzerPage/MoveList.tsx";
 import { useLocalStorageNumericState } from "../lib/hooks/useLocalStorageNumericState.ts";
 import { EnginePane } from "../pages/AnalyzerPage/EnginePane.tsx";
@@ -106,6 +107,7 @@ export function ChessReplayImpl({
 }) {
   const [currentOriginalPgn, setCurrentOriginalPgn] = useState(originalPgn);
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
+  const [sidePaneTab, setSidePaneTab] = useState<"overview" | "moveTree" | "pgn">("overview");
 
   useEffect(
     function syncOriginalPgn() {
@@ -593,10 +595,8 @@ export function ChessReplayImpl({
           />
         </div>
 
-        {!hasExistingAnalysis ? (
-          <ChessComLastGameSuggestionPane />
-        ) : (
-          <GameAnalysisOverview
+        {hasExistingAnalysis && (
+          <GameHistogramPane
             activeLine={activeLineNodes.slice(1)}
             positionEvaluations={positionAnalysisMap}
             moveMarks={moveMarksMap}
@@ -612,7 +612,30 @@ export function ChessReplayImpl({
           applyLine={(line) => applyEngineMove(line)}
         />
 
-        {activeLineNodeIds.length > 1 && (
+        <div className="flex border-b border-gray-200">
+          <SidePaneTabButton active={sidePaneTab === "overview"} onClick={() => setSidePaneTab("overview")}>
+            Overview
+          </SidePaneTabButton>
+          <SidePaneTabButton active={sidePaneTab === "moveTree"} onClick={() => setSidePaneTab("moveTree")}>
+            Move Tree
+          </SidePaneTabButton>
+          <SidePaneTabButton active={sidePaneTab === "pgn"} onClick={() => setSidePaneTab("pgn")}>
+            PGN
+          </SidePaneTabButton>
+        </div>
+
+        {sidePaneTab === "overview" &&
+          (!hasExistingAnalysis ? (
+            <ChessComLastGameSuggestionPane />
+          ) : (
+            <GameAnalysisOverview
+              activeLine={activeLineNodes.slice(1)}
+              positionEvaluations={positionAnalysisMap}
+              moveMarks={moveMarksMap}
+            />
+          ))}
+
+        {sidePaneTab === "moveTree" && (
           <div className="flex-1 bg-gray-50 p-4 rounded-md border border-gray-200 flex flex-col overflow-hidden">
             <h3 className="font-bold text-gray-800 mb-4 flex justify-between items-center">
               <span className="flex items-center gap-2 min-w-0">
@@ -641,39 +664,41 @@ export function ChessReplayImpl({
             />
           </div>
         )}
-        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold text-gray-800">PGN</h3>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={loadSample}
-                className="inline-flex items-center gap-1.5 text-[10px] text-olive-600 font-bold hover:underline"
-              >
-                <RenderIcon iconType={GiPerspectiveDiceSixFacesRandom} className="text-xs" />
-                <span>Sample</span>
-              </button>
+        {sidePaneTab === "pgn" && (
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-bold text-gray-800">PGN</h3>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={loadSample}
+                  className="inline-flex items-center gap-1.5 text-[10px] text-olive-600 font-bold hover:underline"
+                >
+                  <RenderIcon iconType={GiPerspectiveDiceSixFacesRandom} className="text-xs" />
+                  <span>Sample</span>
+                </button>
+              </div>
             </div>
-          </div>
-          <form
-            onSubmit={function submitPgn(event) {
-              event.preventDefault();
-              setOriginalPgn(pgnInputText.trim());
-            }}
-            className="flex flex-col gap-2"
-          >
-            <textarea
-              className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white"
-              value={pgnInputText}
-              onChange={(event) => {
-                setPgnInputText(event.target.value);
+            <form
+              onSubmit={function submitPgn(event) {
+                event.preventDefault();
+                setOriginalPgn(pgnInputText.trim());
               }}
-            />
-            <button className="inline-flex items-center justify-center gap-2 py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">
-              <RenderIcon iconType={FaFileImport} className="text-sm" />
-              <span>Import PGN</span>
-            </button>
-          </form>
-        </div>
+              className="flex flex-col gap-2"
+            >
+              <textarea
+                className="w-full h-32 p-2 text-xs font-mono border rounded outline-none bg-white"
+                value={pgnInputText}
+                onChange={(event) => {
+                  setPgnInputText(event.target.value);
+                }}
+              />
+              <button className="inline-flex items-center justify-center gap-2 py-2 bg-gray-800 text-white font-bold rounded text-sm hover:bg-black">
+                <RenderIcon iconType={FaFileImport} className="text-sm" />
+                <span>Import PGN</span>
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -689,6 +714,27 @@ function PlayerCard({ info }: { info: { side: "white" | "black"; player: PlayerI
         )}
       </div>
     </div>
+  );
+}
+
+function SidePaneTabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-sm font-bold border-b-2 -mb-px ${
+        active ? "border-gray-800 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-800"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
