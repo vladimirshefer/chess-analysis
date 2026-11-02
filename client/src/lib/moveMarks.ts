@@ -5,6 +5,7 @@ const INACCURACY_LOSS = 0.07;
 const MISTAKE_LOSS = 0.15;
 const BLUNDER_LOSS = 0.25;
 const ONLY_MOVE_LOSS = 0.15;
+const BRILLIANT_MIN_EVALUATION = -200;
 
 interface MoveMarkLine {
   uci: string;
@@ -86,8 +87,10 @@ export function classifyMoveMark(input: ClassifyMoveMarkInput): MoveMarkResult |
   const evalLoss = Math.max(0, normalizeEvalLoss(mover, bestEvaluation, input.playedEvaluation));
   const playedBestMove = lineMatchesSan(input.playedMoveSan, input.parentFen, bestLine);
   const baseMark = classifyBaseMark(input, playedBestMove, playedExpectedScore, expectedScoreLoss);
+  const moverEvaluation = mover === "w" ? input.playedEvaluation : -input.playedEvaluation;
   const mark =
     isBrilliantEligibleMark(baseMark) &&
+    moverEvaluation >= BRILLIANT_MIN_EVALUATION &&
     isMaterialSacrificeWithoutImmediateRecapture(input.parentFen, input.playedMoveSan)
       ? MoveMarks.BRILLIANT
       : baseMark;

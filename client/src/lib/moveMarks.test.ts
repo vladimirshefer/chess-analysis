@@ -102,6 +102,22 @@ describe("classifyMoveMark", function suite() {
     expect(result.mark).toBe(MoveMarks.BRILLIANT);
   });
 
+  it("does not mark BRILLIANT when the mover is losing by more than 2 pawns", function testCase() {
+    const parentFen = "6kn/8/8/8/8/8/8/6KR w - - 0 1";
+    const bestUci = "h1h8";
+    const result = classifyOrThrow({
+      parentFen,
+      playedMoveSan: sanFromUci(parentFen, bestUci),
+      playedEvaluation: -250,
+      parentLines: [
+        { uci: bestUci, evaluation: -250 },
+        { uci: "g1f2", evaluation: -400 },
+      ],
+    });
+
+    expect(result.mark).toBe(MoveMarks.BEST);
+  });
+
   it("returns evalLoss in centipawns", function testCase() {
     const result = classifyOrThrow({
       parentFen: START,
