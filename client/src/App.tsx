@@ -26,6 +26,16 @@ function AppShell({ children }: { children: ReactNode }) {
       <footer className="grid py-2 border-t border-gray-200 bg-white text-center text-gray-400 text-sm">
         <span>Copyright (2026-2027) Vladimir Shefer</span>
         <span>
+          <a
+            href="https://chessgrinder.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-500 hover:text-indigo-600"
+          >
+            Chess Grinder - Club In Your City <span aria-hidden="true">↗</span>
+          </a>
+        </span>
+        <span>
           <Link to="/privacy" className="text-gray-500 hover:text-indigo-600">
             Privacy Policy
           </Link>
