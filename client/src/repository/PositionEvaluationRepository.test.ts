@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { Evaluations } from "./evaluation.ts";
+import { Evaluations } from "../lib/evaluation.ts";
 
 namespace IndexedDbTestMock {
   interface ObjectStoreDefinition {
@@ -211,14 +211,14 @@ namespace IndexedDbTestMock {
   }
 }
 
-describe("PositionEvaluations.IndexedDbRepository", function suite() {
+describe("IndexedDbPositionEvaluationRepository", function suite() {
   beforeEach(function setup() {
     IndexedDbTestMock.install();
   });
 
   it("saves and reads records by position", async function testCase() {
-    const { PositionEvaluations } = await import("./PositionEvaluationRepository.ts");
-    const repository = new PositionEvaluations.IndexedDbRepository();
+    const { IndexedDbPositionEvaluationRepository } = await import("./PositionEvaluationRepository.ts");
+    const repository = new IndexedDbPositionEvaluationRepository();
 
     await repository.saveEvaluation({
       positionFen: "fen-a",
@@ -251,8 +251,8 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
   });
 
   it("keeps only deepest record per position and engine", async function testCase() {
-    const { PositionEvaluations } = await import("./PositionEvaluationRepository.ts");
-    const repository = new PositionEvaluations.IndexedDbRepository();
+    const { IndexedDbPositionEvaluationRepository } = await import("./PositionEvaluationRepository.ts");
+    const repository = new IndexedDbPositionEvaluationRepository();
 
     await repository.saveEvaluation({
       positionFen: "fen-b",
@@ -310,8 +310,8 @@ describe("PositionEvaluations.IndexedDbRepository", function suite() {
   });
 
   it("deletes all records for one position only", async function testCase() {
-    const { PositionEvaluations } = await import("./PositionEvaluationRepository.ts");
-    const repository = new PositionEvaluations.IndexedDbRepository();
+    const { IndexedDbPositionEvaluationRepository } = await import("./PositionEvaluationRepository.ts");
+    const repository = new IndexedDbPositionEvaluationRepository();
 
     await repository.saveEvaluation({
       positionFen: "fen-c",

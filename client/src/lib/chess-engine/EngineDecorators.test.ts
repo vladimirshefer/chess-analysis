@@ -10,7 +10,10 @@ import {
   type FullMoveEvaluation,
 } from "./ChessEngine.ts";
 import { ForsythEdwardsNotation } from "../ForsythEdwardsNotation.ts";
-import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
+import type {
+  PositionEvaluationEntity,
+  PositionEvaluationRepository,
+} from "../../repository/PositionEvaluationRepository.ts";
 import { TERMINAL_RESULT_SCORE } from "../evaluation.ts";
 import { CachedChessEngine } from "./CachedChessEngine.ts";
 import { DEFAULT_ENGINE_ID, PersistentChessEngine } from "./PersistentChessEngine.ts";
@@ -399,15 +402,15 @@ namespace TestDoubles {
     }
   }
 
-  export class FakeRepository implements PositionEvaluations.Repository {
-    private records: PositionEvaluations.PositionEvaluationRecord[];
-    readonly saveCalls: PositionEvaluations.PositionEvaluationRecord[] = [];
+  export class FakeRepository implements PositionEvaluationRepository {
+    private records: PositionEvaluationEntity[];
+    readonly saveCalls: PositionEvaluationEntity[] = [];
 
-    constructor(records: PositionEvaluations.PositionEvaluationRecord[]) {
+    constructor(records: PositionEvaluationEntity[]) {
       this.records = [...records];
     }
 
-    async getAllByPosition(positionFen: string): Promise<PositionEvaluations.PositionEvaluationRecord[]> {
+    async getAllByPosition(positionFen: string): Promise<PositionEvaluationEntity[]> {
       return Promise.resolve(
         this.records
           .filter(function byFen(record) {
@@ -421,7 +424,7 @@ namespace TestDoubles {
       positionFen: string,
       minimumDepth: number,
       minimumLineCount: number,
-    ): Promise<PositionEvaluations.PositionEvaluationRecord | null> {
+    ): Promise<PositionEvaluationEntity | null> {
       const candidates = this.records.filter(function byConstraints(record) {
         return (
           record.positionFen === positionFen &&
@@ -442,7 +445,7 @@ namespace TestDoubles {
       return Promise.resolve(cloneRecord(candidates[0]));
     }
 
-    async saveEvaluation(record: PositionEvaluations.PositionEvaluationRecord): Promise<void> {
+    async saveEvaluation(record: PositionEvaluationEntity): Promise<void> {
       const cloned = cloneRecord(record);
       this.saveCalls.push(cloned);
       this.records.push(cloned);
@@ -456,9 +459,7 @@ namespace TestDoubles {
   }
 }
 
-function cloneRecord(
-  record: PositionEvaluations.PositionEvaluationRecord,
-): PositionEvaluations.PositionEvaluationRecord {
+function cloneRecord(record: PositionEvaluationEntity): PositionEvaluationEntity {
   return {
     positionFen: record.positionFen,
     engineId: record.engineId,

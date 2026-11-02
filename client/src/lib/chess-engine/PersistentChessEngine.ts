@@ -6,18 +6,22 @@ import {
   type EvaluationUpdate,
   type FullMoveEvaluation,
 } from "./ChessEngine.ts";
-import { PositionEvaluations } from "../PositionEvaluationRepository.ts";
+import {
+  positionEvaluationsRepository,
+  type PositionEvaluationEntity,
+  type PositionEvaluationRepository,
+} from "../../repository/PositionEvaluationRepository.ts";
 
 export const DEFAULT_ENGINE_ID = "stockfish.js-16.1-lite";
 
 export class PersistentChessEngine implements ChessEngine {
   private readonly delegate: ChessEngine;
-  private readonly repository: PositionEvaluations.Repository;
+  private readonly repository: PositionEvaluationRepository;
   private readonly engineId: string;
 
   constructor(
     delegate: ChessEngine,
-    repository: PositionEvaluations.Repository = PositionEvaluations.sharedRepository,
+    repository: PositionEvaluationRepository = positionEvaluationsRepository,
     engineId: string = DEFAULT_ENGINE_ID,
   ) {
     this.delegate = delegate;
@@ -65,7 +69,7 @@ export class PersistentChessEngine implements ChessEngine {
   }
 
   private async persistFinalEvaluation(result: FullMoveEvaluation): Promise<void> {
-    const record: PositionEvaluations.PositionEvaluationRecord = {
+    const entity: PositionEvaluationEntity = {
       positionFen: result.fen,
       engineId: this.engineId,
       searchDepth: result.depth,
@@ -79,29 +83,29 @@ export class PersistentChessEngine implements ChessEngine {
     };
 
     try {
-      await this.repository.saveEvaluation(record);
+      await this.repository.saveEvaluation(entity);
     } catch (error) {
       console.error("Failed to save persistent engine evaluation", error);
     }
   }
 }
 
-function toFullMoveEvaluation(fen: string, record: PositionEvaluations.PositionEvaluationRecord): FullMoveEvaluation {
-  const lines: ChessEngineLine[] = record.variationLines.map(function toLine(line, index) {
+function toFullMoveEvaluation(fen: string, entity: PositionEvaluationEntity): FullMoveEvaluation {
+  const lines: ChessEngineLine[] = entity.variationLines.map(function toLine(line, index) {
     const pv = [...line.principalVariationMoves];
     return {
       uci: pv[0] ?? "",
       pv,
       evaluation: line.evaluation,
-      depth: record.searchDepth,
+      depth: entity.searchDepth,
       multipv: index + 1,
     };
   });
 
   return {
     fen,
-    evaluation: record.evaluation,
-    depth: record.searchDepth,
+    evaluation: entity.evaluation,
+    depth: entity.searchDepth,
     lines,
   };
 }
