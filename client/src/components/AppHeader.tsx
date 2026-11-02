@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
 import UserProfileMenu from "./UserProfileMenu.tsx";
 
 namespace AppHeaderView {
@@ -8,17 +10,27 @@ namespace AppHeaderView {
     label: string;
   };
 
-  export const navigationItems: NavigationItem[] = [
-    { to: "/", label: "Analyzer" },
-    { to: "/play", label: "Play" },
-    { to: "/about", label: "About" },
-  ];
+  export function getNavigationItems(currentUsername: string | undefined): NavigationItem[] {
+    return [
+      { to: "/", label: "Analysis" },
+      ...(currentUsername ? [{ to: `/user/${encodeURIComponent(currentUsername)}`, label: "Library" }] : []),
+      { to: "/play", label: "Play" },
+      { to: "/about", label: "About" },
+    ];
+  }
 
   export const navigationLinkClassName = "text-gray-600 hover:text-indigo-600 font-medium transition-colors";
 }
 
 export default function AppHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const currentUserQuery = useQuery({
+    queryKey: ["chess-com-current-user"],
+    queryFn: function loadCurrentUser() {
+      return chessComUserRepository.get();
+    },
+  });
+  const navigationItems = AppHeaderView.getNavigationItems(currentUserQuery.data?.username);
 
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm">
@@ -33,7 +45,7 @@ export default function AppHeader() {
 
           <div className="flex items-center gap-3">
             <nav className="hidden md:flex items-center gap-4">
-              {AppHeaderView.navigationItems.map((item) => (
+              {navigationItems.map((item) => (
                 <Link key={item.to} to={item.to} className={AppHeaderView.navigationLinkClassName}>
                   {item.label}
                 </Link>
@@ -62,7 +74,7 @@ export default function AppHeader() {
 
         {isMobileMenuOpen && (
           <nav id="mobile-navigation" className="md:hidden pb-3 flex flex-col gap-2 border-t border-gray-100 pt-3">
-            {AppHeaderView.navigationItems.map((item) => (
+            {navigationItems.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
