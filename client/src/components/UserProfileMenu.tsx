@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Analytics } from "../lib/Analytics.ts";
 import { ChessComLibraryAnalysis } from "../lib/ChessComLibraryAnalysis.ts";
 import { chessComUserRepository } from "../repository/ChessComUserRepository.ts";
 
@@ -54,6 +55,7 @@ export default function UserProfileMenu() {
     event.preventDefault();
     const username = newUsername.trim();
     if (!username) return;
+    Analytics.trackEvent("chesscom_account_added");
     setNewUsername("");
     setIsOpen(false);
     navigate(`/user/${encodeURIComponent(username)}`);

@@ -1,3 +1,4 @@
+import { AnalyticsTrackingChessEngine } from "./AnalyticsTrackingChessEngine.ts";
 import { sharedEvaluationCache } from "./EvaluationCache.ts";
 import { CachedChessEngine } from "./CachedChessEngine.ts";
 import { NativeChessEngine, StockfishRuntime } from "./NativeChessEngine.ts";
@@ -61,7 +62,7 @@ export const CURRENT_ENGINE_NAME = StockfishRuntime.toEngineName(STOCKFISH_RUNTI
 export function createChessEngine(): ChessEngine {
   const nativeEngine = new NativeChessEngine(STOCKFISH_RUNTIME);
 
-  return new CachedChessEngine(new PersistentChessEngine(new QueuedChessEngine(nativeEngine)), sharedEvaluationCache);
+  return new AnalyticsTrackingChessEngine(new CachedChessEngine(new PersistentChessEngine(new QueuedChessEngine(nativeEngine)), sharedEvaluationCache));
 }
 
 let singleton: ChessEngine | null = null;

@@ -446,10 +446,7 @@ export function ChessReplayImpl({
       });
   }
 
-  function makeMove(
-    move: { from: string; to: string; promotion?: string },
-    source: "board_click" | "engine_suggestion",
-  ): { nodeId: string; fen: string } | null {
+  function makeMove(move: { from: string; to: string; promotion?: string }): { nodeId: string; fen: string } | null {
     const tempGame = new Chess(currentFen);
 
     try {
@@ -462,11 +459,7 @@ export function ChessReplayImpl({
       const nextFen = tempGame.fen();
       const nextNodeId = currentNodeId !== ROOT_ANALYSIS_NODE_ID ? `${currentNodeId}|${result.san}` : result.san;
 
-      Analytics.trackEvent("move", {
-        source,
-        from: move.from,
-        to: move.to,
-      });
+      Analytics.trackEvent("move");
 
       if (!tree[nextNodeId]) {
         setTree((previous) =>
@@ -493,14 +486,11 @@ export function ChessReplayImpl({
 
   async function applyEngineMove(line: DisplayEngineLine): Promise<void> {
     const suggestedMoveUci = line.suggestedMoveUci;
-    const moveResult = makeMove(
-      {
-        from: suggestedMoveUci.substring(0, 2),
-        to: suggestedMoveUci.substring(2, 4),
-        promotion: suggestedMoveUci[4] || "q",
-      },
-      "engine_suggestion",
-    );
+    const moveResult = makeMove({
+      from: suggestedMoveUci.substring(0, 2),
+      to: suggestedMoveUci.substring(2, 4),
+      promotion: suggestedMoveUci[4] || "q",
+    });
     if (!moveResult) return;
 
     const seededAnalysis = buildSeededNodeAnalysis(moveResult.fen, line, line.engineLineUci.slice(1));
@@ -540,7 +530,7 @@ export function ChessReplayImpl({
               animationDuration={300}
               customArrows={planView.arrows}
               customSquareStyles={boardSquareStyles}
-              makeMove={(move) => makeMove(move, "board_click")}
+              makeMove={makeMove}
               currentPositionGame={currentPositionGame}
               moveMarksBySquare={moveMarksBySquare}
             />
@@ -583,7 +573,7 @@ export function ChessReplayImpl({
             onRotate={() => setBoardOrientation((previous) => (previous === "white" ? "black" : "white"))}
             selectedDepth={selectedDepth}
             onSelectDepth={(depth) => {
-              Analytics.trackEvent("engine_depth_selected", { depth, previous_depth: selectedDepth });
+              Analytics.trackEvent("engine_depth_selected");
               setSelectedDepth(depth);
             }}
             showPlans={showPlans}
