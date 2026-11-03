@@ -250,6 +250,7 @@ export interface ChessComGameRepository extends ChessComClientRepository {
   save(entity: ChessComGameEntity): ChessComGameEntity;
   /** Returns all stored games, newest first. */
   getAll(): ChessComGameEntity[];
+  deleteAll(): Promise<void>;
 }
 
 export namespace ChessComGamesStorage {
@@ -282,6 +283,10 @@ export namespace ChessComGamesStorage {
       if (!entitiesById[id]) return;
       delete entitiesById[id];
       writeEntitiesById(entitiesById);
+    }
+
+    async deleteAll(): Promise<void> {
+      globalThis.localStorage.removeItem(STORAGE_KEY);
     }
 
     async getRecentGames(username: string, limit?: number): Promise<ChessComClient.Dto.ChessComRecentGames> {

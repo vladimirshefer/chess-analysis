@@ -46,6 +46,7 @@ export interface ChessComGameAnalysisRepository {
   update(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity;
   getAll(): ChessComGameAnalysisEntity[];
   delete(id: string): void;
+  deleteAll(): Promise<void>;
 }
 
 export namespace ChessComGameAnalysisStorage {
@@ -76,6 +77,10 @@ export namespace ChessComGameAnalysisStorage {
       if (!entitiesById[id]) return;
       delete entitiesById[id];
       writeEntitiesById(entitiesById);
+    }
+
+    async deleteAll(): Promise<void> {
+      globalThis.localStorage.removeItem(STORAGE_KEY);
     }
   }
 

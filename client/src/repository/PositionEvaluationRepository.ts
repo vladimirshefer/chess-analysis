@@ -10,6 +10,7 @@ export interface PositionEvaluationRepository {
   ): Promise<PositionEvaluationEntity | null>;
   saveEvaluation(entity: PositionEvaluationEntity): Promise<void>;
   deleteAllForPosition(positionFen: string): Promise<void>;
+  deleteAll(): Promise<void>;
 }
 
 export interface PositionEvaluationEntity {
@@ -96,6 +97,13 @@ export class IndexedDbPositionEvaluationRepository implements PositionEvaluation
       await requestToPromise(store.delete(key));
     }
 
+    await transactionToPromise(transaction);
+  }
+
+  async deleteAll(): Promise<void> {
+    const database = await this.getDatabase();
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).clear();
     await transactionToPromise(transaction);
   }
 

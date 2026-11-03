@@ -451,6 +451,10 @@ namespace TestDoubles {
       this.records.push(cloned);
     }
 
+    async deleteAll(): Promise<void> {
+      this.records = [];
+    }
+
     async deleteAllForPosition(positionFen: string): Promise<void> {
       this.records = this.records.filter(function keep(record) {
         return record.positionFen !== positionFen;
