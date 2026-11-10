@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { type ChessComGameAnalysisEntity, chessComGameAnalysisRepository } from "./ChessComGameAnalysisRepository.ts";
+import {
+  type ChessComGameAnalysisEntity,
+  ChessComGameAnalysisStorage,
+  chessComGameAnalysisRepository,
+} from "./ChessComGameAnalysisRepository.ts";
 
 namespace LocalStorageTestMock {
   const entriesByKey = new Map<string, string>();
@@ -95,14 +99,15 @@ describe("ChessComGameAnalysisRepository", function suite() {
     expect(globalThis.localStorage.length).toBe(0);
   });
 
-  it("migrates the legacy single entry into one key per game", async function testCase() {
-    globalThis.localStorage.setItem(
-      "chess-com-game-analysis-v1",
-      JSON.stringify({ a: createEntity("a"), b: createEntity("b") }),
-    );
+  it("drops data stored under outdated keys", function testCase() {
+    globalThis.localStorage.setItem("chess-com-game-analysis-v1", JSON.stringify({ a: createEntity("a") }));
+    globalThis.localStorage.setItem("chess-com-game-analysis-v1:a", JSON.stringify(createEntity("a")));
+    globalThis.localStorage.setItem("other-key", "keep");
 
-    expect(chessComGameAnalysisRepository.get("a")).toEqual(createEntity("a"));
-    expect(globalThis.localStorage.getItem("chess-com-game-analysis-v1")).toBeNull();
-    expect(chessComGameAnalysisRepository.getAll().map((entity) => entity.gameId)).toEqual(["a", "b"]);
+    const repository = new ChessComGameAnalysisStorage.LocalStorageChessComGameAnalysisRepository();
+
+    expect(repository.getAll()).toEqual([]);
+    expect(globalThis.localStorage.length).toBe(1);
+    expect(globalThis.localStorage.getItem("other-key")).toBe("keep");
   });
 });

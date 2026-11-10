@@ -50,27 +50,30 @@ export interface ChessComGameAnalysisRepository {
 }
 
 export namespace ChessComGameAnalysisStorage {
-  /** The legacy key held all games in one entry. It is split into one `STORAGE_KEY:<gameId>` key per game on first access. */
-  const STORAGE_KEY = "chess-com-game-analysis-v1";
-  const KEY_PREFIX = `${STORAGE_KEY}:`;
+  /** Bump the version to invalidate stored analysis. Keys of older versions are dropped on first access. */
+  const STORAGE_KEY_BASE = "chess-com-game-analysis";
+  const KEY_PREFIX = `${STORAGE_KEY_BASE}-v2:`;
 
   export class LocalStorageChessComGameAnalysisRepository implements ChessComGameAnalysisRepository {
+    private outdatedDropped = false;
+
     get(id: string): ChessComGameAnalysisEntity | null {
       if (!id) return null;
-      migrateLegacyStorage();
+      this.dropOutdatedOnce();
       return readEntity(id);
     }
 
     save(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity {
+      this.dropOutdatedOnce();
       return upsertEntity(entity);
     }
 
     update(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity {
-      return upsertEntity(entity);
+      return this.save(entity);
     }
 
     getAll(): ChessComGameAnalysisEntity[] {
-      migrateLegacyStorage();
+      this.dropOutdatedOnce();
       return listStorageKeys().flatMap(function readByKey(key) {
         return readEntity(key.slice(KEY_PREFIX.length)) ?? [];
       });
@@ -82,10 +85,16 @@ export namespace ChessComGameAnalysisStorage {
     }
 
     async deleteAll(): Promise<void> {
+      dropOutdatedStorage();
       listStorageKeys().forEach(function removeKey(key) {
         globalThis.localStorage.removeItem(key);
       });
-      globalThis.localStorage.removeItem(STORAGE_KEY);
+    }
+
+    private dropOutdatedOnce(): void {
+      if (this.outdatedDropped) return;
+      this.outdatedDropped = true;
+      dropOutdatedStorage();
     }
   }
 
@@ -135,7 +144,6 @@ export namespace ChessComGameAnalysisStorage {
     const entityId = entity.gameId;
     if (!entityId) return entity;
 
-    migrateLegacyStorage();
     writeEntity(entity);
     return entity;
   }
@@ -164,22 +172,15 @@ export namespace ChessComGameAnalysisStorage {
     globalThis.localStorage.setItem(KEY_PREFIX + entity.gameId, JSON.stringify(cloneEntity(entity)));
   }
 
-  /** Removes the legacy entry first to free its space. Analysis that doesn't fit is dropped and recomputed. */
-  function migrateLegacyStorage(): void {
-    const rawValue = globalThis.localStorage.getItem(STORAGE_KEY);
-    if (rawValue === null) return;
-    globalThis.localStorage.removeItem(STORAGE_KEY);
-
-    try {
-      const parsed = JSON.parse(rawValue) as unknown;
-      if (!isObjectRecord(parsed)) return;
-      Object.values(parsed).forEach(function migrateEntry(value) {
-        const entity = parseEntity(value);
-        if (entity) writeEntity(entity);
-      });
-    } catch (error) {
-      console.error("Failed to migrate legacy game analysis storage", error);
+  function dropOutdatedStorage(): void {
+    const outdatedKeys: string[] = [];
+    for (let index = 0; index < globalThis.localStorage.length; index += 1) {
+      const key = globalThis.localStorage.key(index);
+      if (key?.startsWith(STORAGE_KEY_BASE) && !key.startsWith(KEY_PREFIX)) outdatedKeys.push(key);
     }
+    outdatedKeys.forEach(function removeKey(key) {
+      globalThis.localStorage.removeItem(key);
+    });
   }
 
   function parseEntity(value: unknown): ChessComGameAnalysisEntity | null {
