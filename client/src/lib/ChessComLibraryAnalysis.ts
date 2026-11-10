@@ -9,6 +9,7 @@ import { type ChessEngine, EngineEvaluationPriorities } from "./chess-engine/Che
 import { GameAnalysisSummary } from "./GameAnalysisSummary.ts";
 import { OpeningsBook } from "./OpeningsBook.ts";
 import { type ChessComGameEntity, chessComGameRepository } from "../repository/ChessComClientRepository.ts";
+import type { GameTree, MoveNode } from "./GameTree.ts";
 
 export namespace ChessComLibraryAnalysis {
   export const TARGET_DEPTH = 12;
@@ -24,9 +25,9 @@ export namespace ChessComLibraryAnalysis {
   }
 
   interface PreparedGame {
-    activeLineNodes: ReturnType<typeof getActiveLineNodes>;
+    activeLineNodes: MoveNode[];
     positionAnalysisMap: Record<string, AnalysisGame.NodeAnalysis>;
-    tree: ReturnType<typeof AnalysisGame.loadPgn>["tree"];
+    tree: GameTree;
   }
 
   interface GameStepState {
@@ -192,7 +193,7 @@ export namespace ChessComLibraryAnalysis {
     };
   }
 
-  function getActiveLineNodes(loadedGame: AnalysisGame.LoadedPgn) {
+  function getActiveLineNodes(loadedGame: AnalysisGame.LoadedPgn): MoveNode[] {
     return AnalysisGame.getLineNodeIds(loadedGame.activeLineId, loadedGame.tree).map(function toNode(nodeId) {
       return loadedGame.tree[nodeId];
     });
