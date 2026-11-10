@@ -80,10 +80,14 @@ export namespace GameAnalysisSummary {
   }
 
   export function buildGameSummary(
-    activeLine: MoveNode[],
+    line: MoveNode[],
     positionEvaluations: Record<string, NodeAnalysis>,
     moveMarks: Record<string, MoveMarkResult>,
   ): GameAnalysisSummaryResult {
+    // A node without SAN is the start position: no move led to it.
+    const activeLine = line.filter(function isMove(node) {
+      return node.san !== "";
+    });
     const summary = {
       analyzedMoves: activeLine.filter(function keepAnalyzedMove(node) {
         return !!positionEvaluations[node.fen]?.isFinal;
@@ -92,8 +96,11 @@ export namespace GameAnalysisSummary {
       black: createSideSummary(),
     };
 
+    const firstMoverSide = activeLine.length > 0 && isWhiteMove(activeLine[0]) ? summary.white : summary.black;
+    const secondMoverSide = firstMoverSide === summary.white ? summary.black : summary.white;
+
     activeLine.forEach(function collectMove(node, index) {
-      const side = index % 2 === 0 ? summary.white : summary.black;
+      const side = index % 2 === 0 ? firstMoverSide : secondMoverSide;
       const moveMark = moveMarks[node.id];
       if (!moveMark) return;
       side.movesWithMark += 1;
@@ -129,6 +136,11 @@ export namespace GameAnalysisSummary {
       materialValues: histogram.materialValues,
       histogramNodeIds: histogram.histogramNodeIds,
     };
+  }
+
+  /** The side to move in the resulting position is the opponent of the side that made the move. */
+  function isWhiteMove(node: MoveNode): boolean {
+    return node.fen.split(" ")[1] === "b";
   }
 
   function createSideSummary(): SideSummary {
