@@ -62,7 +62,11 @@ export const CURRENT_ENGINE_NAME = StockfishRuntime.toEngineName(STOCKFISH_RUNTI
 export function createChessEngine(): ChessEngine {
   const nativeEngine = new NativeChessEngine(STOCKFISH_RUNTIME);
 
-  return new AnalyticsTrackingChessEngine(new CachedChessEngine(new PersistentChessEngine(new QueuedChessEngine(nativeEngine)), sharedEvaluationCache));
+  const queuedChessEngine = new QueuedChessEngine(nativeEngine);
+  const persistentChessEngine = new PersistentChessEngine(queuedChessEngine);
+  const cachedChessEngine = new CachedChessEngine(persistentChessEngine, sharedEvaluationCache);
+  const analyticsTrackingChessEngine = new AnalyticsTrackingChessEngine(cachedChessEngine);
+  return analyticsTrackingChessEngine;
 }
 
 let singleton: ChessEngine | null = null;
