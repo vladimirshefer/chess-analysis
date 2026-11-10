@@ -99,11 +99,14 @@ export function ChessReplayImpl({
   setOriginalPgn: propSetOriginalPgn,
   initialBoardOrientation = null,
   shareUrl,
+  savedAnalysis,
 }: {
   originalPgn: string;
   setOriginalPgn?: (pgn: string) => void;
   initialBoardOrientation?: "white" | "black" | null;
   shareUrl?: string;
+  /** Previously stored analysis by fen. Must be referentially stable, a change reloads the game. */
+  savedAnalysis?: Record<string, NodeAnalysis>;
 }) {
   const [currentOriginalPgn, setCurrentOriginalPgn] = useState(originalPgn);
   const [pgnInputText, setPgnInputText] = useState(originalPgn);
@@ -166,14 +169,14 @@ export function ChessReplayImpl({
       }
 
       setTree(loadedGame.tree);
-      setPositionAnalysisMap(loadedGame.positionAnalysisMap);
+      setPositionAnalysisMap({ ...loadedGame.positionAnalysisMap, ...savedAnalysis });
       setCurrentNodeId(loadedGame.currentNodeId);
       setActiveLineId(loadedGame.activeLineId);
       setPlayersInfo(loadedGame.playersInfo);
       setBoardOrientation(initialBoardOrientation ?? "white");
       setStatusText(loadedGame.isInvalidPgn ? "Invalid PGN" : currentOriginalPgn ? "Game loaded" : "Welcome");
     },
-    [initialBoardOrientation, currentOriginalPgn],
+    [initialBoardOrientation, currentOriginalPgn, savedAnalysis],
   );
 
   function goStart() {

@@ -1,6 +1,10 @@
 import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { chessComClientRepository } from "../../repository/ChessComClientRepository.ts";
+import {
+  chessComGameAnalysisRepository,
+  ChessComGameAnalysisStorage,
+} from "../../repository/ChessComGameAnalysisRepository.ts";
 import { ChessComUser } from "../../lib/ChessComUser.ts";
 import { AnalysisGame } from "../../lib/AnalysisGame.ts";
 import { toGamePlayersInfoFromChessComGame } from "../../lib/gameInfo.ts";
@@ -22,6 +26,15 @@ function ChessComUserAnalysisPage() {
 
   const game = gameQuery.data;
 
+  const analysisQuery = useQuery({
+    queryKey: ["chesscom-game-analysis", game?.id],
+    enabled: Boolean(game),
+    staleTime: Infinity,
+    queryFn: function loadSavedAnalysis() {
+      return ChessComGameAnalysisStorage.toPositionAnalysisMap(chessComGameAnalysisRepository.get(game!.id));
+    },
+  });
+
   if (!userId) {
     return <div className="p-6 text-red-600">Missing user ID</div>;
   }
@@ -30,7 +43,7 @@ function ChessComUserAnalysisPage() {
     return <div className="p-6 text-red-600">Missing required query parameters: opponent and date</div>;
   }
 
-  if (gameQuery.isLoading) {
+  if (gameQuery.isLoading || (game && analysisQuery.isPending)) {
     return <div className="p-6 text-gray-500">Loading game...</div>;
   }
 
@@ -50,6 +63,7 @@ function ChessComUserAnalysisPage() {
       originalPgn={pgnWithPlayers}
       initialBoardOrientation={initialBoardOrientation}
       shareUrl={window.location.href}
+      savedAnalysis={analysisQuery.data}
     />
   );
 }

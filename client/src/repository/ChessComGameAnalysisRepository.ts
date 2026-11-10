@@ -50,13 +50,15 @@ export interface ChessComGameAnalysisRepository {
 }
 
 export namespace ChessComGameAnalysisStorage {
+  /** The legacy key held all games in one entry. It is split into one `STORAGE_KEY:<gameId>` key per game on first access. */
   const STORAGE_KEY = "chess-com-game-analysis-v1";
+  const KEY_PREFIX = `${STORAGE_KEY}:`;
 
   export class LocalStorageChessComGameAnalysisRepository implements ChessComGameAnalysisRepository {
     get(id: string): ChessComGameAnalysisEntity | null {
       if (!id) return null;
-      const entitiesById = readEntitiesById();
-      return entitiesById[id] ?? null;
+      migrateLegacyStorage();
+      return readEntity(id);
     }
 
     save(entity: ChessComGameAnalysisEntity): ChessComGameAnalysisEntity {
@@ -68,18 +70,21 @@ export namespace ChessComGameAnalysisStorage {
     }
 
     getAll(): ChessComGameAnalysisEntity[] {
-      return Object.values(readEntitiesById());
+      migrateLegacyStorage();
+      return listStorageKeys().flatMap(function readByKey(key) {
+        return readEntity(key.slice(KEY_PREFIX.length)) ?? [];
+      });
     }
 
     delete(id: string): void {
       if (!id) return;
-      const entitiesById = readEntitiesById();
-      if (!entitiesById[id]) return;
-      delete entitiesById[id];
-      writeEntitiesById(entitiesById);
+      globalThis.localStorage.removeItem(KEY_PREFIX + id);
     }
 
     async deleteAll(): Promise<void> {
+      listStorageKeys().forEach(function removeKey(key) {
+        globalThis.localStorage.removeItem(key);
+      });
       globalThis.localStorage.removeItem(STORAGE_KEY);
     }
   }
@@ -130,34 +135,51 @@ export namespace ChessComGameAnalysisStorage {
     const entityId = entity.gameId;
     if (!entityId) return entity;
 
-    const entitiesById = readEntitiesById();
-    entitiesById[entityId] = cloneEntity(entity);
-    writeEntitiesById(entitiesById);
+    migrateLegacyStorage();
+    writeEntity(entity);
     return entity;
   }
 
-  function readEntitiesById(): Record<string, ChessComGameAnalysisEntity> {
-    const rawValue = globalThis.localStorage.getItem(STORAGE_KEY);
-    if (!rawValue) return {};
+  function listStorageKeys(): string[] {
+    const keys: string[] = [];
+    for (let index = 0; index < globalThis.localStorage.length; index += 1) {
+      const key = globalThis.localStorage.key(index);
+      if (key?.startsWith(KEY_PREFIX)) keys.push(key);
+    }
+    return keys;
+  }
+
+  function readEntity(id: string): ChessComGameAnalysisEntity | null {
+    const rawValue = globalThis.localStorage.getItem(KEY_PREFIX + id);
+    if (!rawValue) return null;
 
     try {
-      const parsed = JSON.parse(rawValue) as unknown;
-      if (!isObjectRecord(parsed)) return {};
-
-      const entitiesById: Record<string, ChessComGameAnalysisEntity> = {};
-      Object.entries(parsed).forEach(function collectEntry([key, value]) {
-        const entity = parseEntity(value);
-        if (!key || !entity) return;
-        entitiesById[key] = entity;
-      });
-      return entitiesById;
+      return parseEntity(JSON.parse(rawValue) as unknown);
     } catch {
-      return {};
+      return null;
     }
   }
 
-  function writeEntitiesById(entitiesById: Record<string, ChessComGameAnalysisEntity>): void {
-    globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(entitiesById));
+  function writeEntity(entity: ChessComGameAnalysisEntity): void {
+    globalThis.localStorage.setItem(KEY_PREFIX + entity.gameId, JSON.stringify(cloneEntity(entity)));
+  }
+
+  /** Removes the legacy entry first to free its space. Analysis that doesn't fit is dropped and recomputed. */
+  function migrateLegacyStorage(): void {
+    const rawValue = globalThis.localStorage.getItem(STORAGE_KEY);
+    if (rawValue === null) return;
+    globalThis.localStorage.removeItem(STORAGE_KEY);
+
+    try {
+      const parsed = JSON.parse(rawValue) as unknown;
+      if (!isObjectRecord(parsed)) return;
+      Object.values(parsed).forEach(function migrateEntry(value) {
+        const entity = parseEntity(value);
+        if (entity) writeEntity(entity);
+      });
+    } catch (error) {
+      console.error("Failed to migrate legacy game analysis storage", error);
+    }
   }
 
   function parseEntity(value: unknown): ChessComGameAnalysisEntity | null {
